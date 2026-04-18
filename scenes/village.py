@@ -134,11 +134,11 @@ class VillageScene(BaseScene):
         self._elapsed: float = 0.0
 
         # Økonomi – Market lastes fra JSON, deretter applieres lagrede
-        # current_price per vare hvis tilgjengelig.
+        # current_price per vare hvis tilgjengelig. Dag-telleren eies av
+        # state.clock (GameClock), ikke Market.
         self._market = Market.from_json(
             os.path.join(constants.DATA_DIR, "commodities.json")
         )
-        self._market.day = state.day
         for cid, saved in state.commodities_state.items():
             try:
                 cp = float(saved.get("current_price"))
@@ -152,7 +152,7 @@ class VillageScene(BaseScene):
 
         # HUD (oeverst venstre: sted / gull / dag)
         self._hud = Hud(
-            font, place="Tortuga", gold=state.gold, day=state.day
+            font, place="Tortuga", gold=state.gold, day=state.clock.day
         )
 
         # Partikler: taake paa gata + ildfluer rundt tavernaen.
@@ -231,7 +231,7 @@ class VillageScene(BaseScene):
 
         # HUD – settere er no-ops hvis verdien ikke har endret seg
         self._hud.set_gold(self._state.gold)
-        self._hud.set_day(self._market.day)
+        self._hud.set_day(self._state.clock.day)
 
         if self._overlay is not None:
             self._overlay.update(dt)
@@ -282,13 +282,13 @@ class VillageScene(BaseScene):
             float(self._player.x),
             float(self._player.y),
         )
-        self._state.day = self._market.day
         self._state.commodities_state = {
             c.id: {"current_price": float(c.current_price)}
             for c in self._market.commodities
         }
         # gold og inventory er allerede lagret i self._state – direkte mutert
-        # av ExchangeOverlay, saa ingen ekstra sync der.
+        # av ExchangeOverlay, saa ingen ekstra sync der. state.clock oppdateres
+        # kontinuerlig av main.run() via clock.update(dt), saa ingen sync her.
 
     def autosave(self) -> None:
         """Synk tilstand og skriv save-fil. Kalles fra main ved QUIT og

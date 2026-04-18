@@ -82,6 +82,7 @@ COLOR_FOG = (58, 58, 74)
 # --- Gameplay ---
 STARTING_GOLD = 500
 MARKET_TICK_INTERVAL_SEC = 10.0
+SECONDS_PER_DAY = 60.0  # Fase 2A: 60 sek/dag. Justeres i Commit 8-polish.
 PLAYER_WALK_SPEED = 80  # px/sek
 INTERACTION_DISTANCE = 40
 

@@ -169,7 +169,7 @@ class ExchangeOverlay:
     # --- Cache-invalidering ---
 
     def _ensure_title(self) -> None:
-        day = self._market.day
+        day = self._state.clock.day
         if self._title_day != day:
             self._title_day = day
             self._title_surf = self._font.render(

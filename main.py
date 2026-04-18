@@ -199,6 +199,11 @@ def run() -> int:
     while running:
         dt = clock.tick(constants.TARGET_FPS) / 1000.0
 
+        # Sentral spill-klokke – inkrementerer dag hvert SECONDS_PER_DAY.
+        # Retur-lista (new_day-hendelser) konsumeres av systemer i senere
+        # commits (RegimeManager i Commit 5, PitchLake i Commit 6).
+        game_state.clock.update(dt)
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False

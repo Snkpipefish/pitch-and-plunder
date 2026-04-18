@@ -37,7 +37,6 @@ class Market:
         self._order: list[str] = [c.id for c in commodities]
         self._spread = spread
         self._rng = rng or random.Random()
-        self.day: int = 1
         self._tick_id: int = 0
 
     @classmethod
