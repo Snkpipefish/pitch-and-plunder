@@ -21,6 +21,8 @@ import pygame
 from scenes.base_scene import BaseScene
 from scenes.parallax_test import ParallaxTestScene
 from scenes.village import VillageScene
+from systems import save as save_module
+from systems.save import GameState
 
 
 log = logging.getLogger("pitch_and_plunder")
@@ -162,11 +164,29 @@ def run() -> int:
 
     font_small = _load_font(8)
 
+    # Last spilltilstand fra disk, eller fall tilbake til startverdier
+    loaded = save_module.load()
+    if loaded is None:
+        game_state = GameState()
+        is_fresh = True
+    else:
+        game_state = loaded
+        is_fresh = False
+
+    # Ved scene-re-entry (Fase 2+) maa `is_fresh` oppdateres til False etter
+    # forste instansiering saa vi ikke nullstiller posisjon igjen.
+    fresh_flags = {"village": is_fresh}
+
+    def make_village() -> VillageScene:
+        scene = VillageScene(font_small, game_state, fresh=fresh_flags["village"])
+        fresh_flags["village"] = False
+        return scene
+
     manager = SceneManager(
         factories={
             "placeholder": lambda: PlaceholderScene(font_small),
             "parallax_test": lambda: ParallaxTestScene(font_small),
-            "village": lambda: VillageScene(font_small),
+            "village": make_village,
         },
         initial="village",
     )
@@ -200,6 +220,14 @@ def run() -> int:
         pygame.display.flip()
 
         manager.maybe_switch()
+
+    # Autosave paa QUIT: lar scenen sync-e sin tilstand inn i GameState
+    # og skrive til disk. BaseScene.autosave() er no-op i default-klassen,
+    # saa ukjente scener faller gjennom trygt.
+    try:
+        manager.current.autosave()
+    except Exception:  # Logg og fortsett avslutning uansett
+        log.exception("Autosave paa QUIT feilet")
 
     pygame.display.quit()
     pygame.font.quit()

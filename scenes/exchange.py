@@ -22,12 +22,11 @@ Tastatur:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 import pygame
 
 import constants
 from systems.economy import Market
+from systems.save import GameState
 
 
 # Panel-geometri (i intern 640x360-oppløsning)
@@ -45,14 +44,6 @@ QTY_X = PANEL_X + 380
 HEADER_Y = PANEL_Y + 40
 ROW_Y_START = PANEL_Y + 64
 ROW_HEIGHT = 22
-
-
-@dataclass
-class PlayerFinance:
-    """Spillerens pengetilstand. Overlay muterer feltene direkte."""
-
-    gold: int = 0
-    inventory: dict[str, int] = field(default_factory=dict)
 
 
 def _build_panel_surface() -> pygame.Surface:
@@ -77,7 +68,7 @@ class ExchangeOverlay:
         self,
         font: pygame.font.Font,
         market: Market,
-        state: PlayerFinance,
+        state: GameState,
     ) -> None:
         self._font = font
         self._market = market

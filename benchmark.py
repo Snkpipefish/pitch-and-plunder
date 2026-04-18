@@ -26,6 +26,7 @@ import pygame
 from main import PlaceholderScene, _load_font
 from scenes.parallax_test import ParallaxTestScene
 from scenes.village import VillageScene
+from systems.save import GameState
 
 
 log = logging.getLogger("benchmark")
@@ -38,7 +39,8 @@ def _build_scene(name: str, font: pygame.font.Font):
     if name == "parallax_test":
         return ParallaxTestScene(font)
     if name == "village":
-        return VillageScene(font)
+        # Benchmark bruker alltid fersk GameState (ingen save-file-avhengighet)
+        return VillageScene(font, GameState(), fresh=True)
     raise ValueError(f"Ukjent scene: {name}")
 
 

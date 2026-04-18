@@ -324,3 +324,80 @@ varm COLOR_LANTERN_BRIGHT-farge; ellers kald COLOR_STONE_LIT.
 Overlayet er innenfor ytelsesbudsjett. Kjøp/salg, pristick, og
 cache-invalidering fungerer. Klar for Commit 7 (HUD + save).
 
+---
+
+## Commit 7 – HUD og save-system
+
+Kjørt: 2026-04-18
+Kommandoer:
+- `python benchmark.py --scene village --duration 10`
+- `python benchmark.py --scene village --duration 10 --open-exchange`
+
+Miljø: målmaskin (T4200 / GM45 / Linux Mint 21.3), pygame-ce 2.5.7
+
+HUD med 3 tekstlinjer (sted/gull/dag) oeverst venstre. `GameState` lastes
+fra `saves/savegame.json` hvis finnes; ellers startverdier. Autosave ved
+QUIT, scene-bytte, aapning og lukking av bors-overlay.
+
+| Metrikk | Lukket | Aapen | Δ fra Commit 6 lukket | Δ fra Commit 6 aapen |
+|---------|--------|-------|------------------------|-----------------------|
+| FPS avg (compute) | 398.06 | 283.09 | −16 | −10 |
+| FPS min (compute) | 105.48 | 75.03 | −19 | +6 |
+| FPS 1% lav (compute) | 118.49 | 78.68 | −23 | −13 |
+| Frame time avg | 2.648 ms | 3.726 ms | +0.12 ms | +0.14 ms |
+| Peak RSS | 103.34 MB | 103.10 MB | +0.01 MB | −1.3 MB |
+
+### Vurdering
+
+- **+120–140 μs frame time**: Forklares fullstendig av HUD-ens 3 ekstra
+  tekst-blits per frame (~35 μs hver). Setterne `set_gold`/`set_day` er
+  no-ops hvis verdien er uendret, så re-rendering skjer bare ved faktiske
+  endringer.
+- **Fortsatt langt innenfor 33.3 ms frame-budsjett**: 2.65 ms lukket /
+  3.73 ms åpen ≈ 8 / 11%.
+- **Ingen nye hotspots** i cProfile.
+- **Autosave-kostnad (filskriving)**: skjer kun ved overlay-aapning/-
+  lukking og ved QUIT. Fra manuell test: < 1 ms pr save (0.5 KB JSON).
+  Ikke i frame-budsjettet.
+
+### Manuell verifisering (utenom benchmark)
+
+Alle scenarier bestaatt:
+
+1. **Handel + quit + restart**: Fresh start (ingen save) → kjøp 5 sukker
+   (gull 300, inventar {sugar: 5}), autosave på overlay-åpning. Quit.
+   Neste kjøring: load returnerer GameState med gull 300, 5 sukker,
+   spillerposisjon ved Børshuset, samme markedspriser (Sukker 38.73,
+   Rom 60.34). Scenen re-hydreres korrekt.
+
+2. **Slett savegame.json, restart**: load returnerer None (med info-
+   logging), fallback til GameState() gir startverdier 500 gull, tomt
+   inventar, player_x = PLAYER_START_X = 1340.
+
+3. **Eksempel savegame.json** etter en handels-økt (3 ticks, kjøp 5
+   sukker + 2 rom, selg 3 sukker):
+
+```json
+{
+  "version": 1,
+  "gold": 286,
+  "inventory": {"sugar": 2, "rum": 2, "tobacco": 0, "pitch": 0},
+  "current_scene": "village",
+  "player_position": [1465.0, 320.0],
+  "day": 1,
+  "commodities_state": {
+    "sugar": {"current_price": 40.18},
+    "rum": {"current_price": 61.57},
+    "tobacco": {"current_price": 81.4},
+    "pitch": {"current_price": 47.13}
+  }
+}
+```
+
+Verdiene rekonstruerer eksakt samme markedstilstand ved neste start.
+
+### Konklusjon
+
+HUD-ens fargekoding (varm gull, kald dag) er lesbar og tematisk. Save-
+systemet runder av Fase 1-infrastrukturen. Klar for Commit 8 (partikler).
+

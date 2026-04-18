@@ -41,3 +41,10 @@ class BaseScene:
 
     def draw(self, surface: pygame.Surface) -> None:
         """Tegn scenen til intern render-surface (640x360)."""
+
+    def autosave(self) -> None:
+        """Lagre gjeldende tilstand hvis scenen eier slik. Default: no-op.
+
+        Kalles fra main ved pygame.QUIT og fra scene manager ved bytte.
+        Scener som holder GameState-referanse overskriver dette.
+        """

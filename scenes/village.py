@@ -27,14 +27,17 @@ import constants
 from entities.npc import NPC
 from entities.player import Player
 from scenes.base_scene import BaseScene
-from scenes.exchange import ExchangeOverlay, PlayerFinance
+from scenes.exchange import ExchangeOverlay
 from scenes.parallax_test import (
     _build_background_layer,
     _build_empty_layer,
 )
+from systems import save as save_module
 from systems.economy import Market
 from systems.lighting import Light, LightingSystem
 from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
+from systems.save import GameState
+from ui.hud import Hud
 
 
 # Gateplan-tall (i intern render-oppløsning)
@@ -244,11 +247,22 @@ def _load_npcs(path: str = os.path.join(constants.DATA_DIR, "npcs.json")) -> dic
 
 
 class VillageScene(BaseScene):
-    """Tortuga-gate med taverna til venstre og børshus til høyre."""
+    """Tortuga-gate med taverna til venstre og børshus til høyre.
 
-    def __init__(self, font: pygame.font.Font) -> None:
+    Eier `GameState` via referanse. All pris/inventar/gull-endring muterer
+    tilstanden direkte. Autosave skjer ved QUIT, scene-bytte og ved
+    aapning/lukking av bors-overlay.
+    """
+
+    def __init__(
+        self,
+        font: pygame.font.Font,
+        state: GameState,
+        fresh: bool = True,
+    ) -> None:
         super().__init__()
         self._font = font
+        self._state = state
 
         # Parallax-lag (bakgrunn og forgrunn gjenbrukes fra parallax_test)
         bg_layer = ParallaxLayer(_build_background_layer(), speed=0.2)
@@ -258,11 +272,24 @@ class VillageScene(BaseScene):
 
         self._camera = Camera(constants.WORLD_WIDTH, constants.RENDER_WIDTH)
 
-        # Spilleren: føttene hviler på GROUND_TOP_Y
+        # Spilleren: føttene hviler på GROUND_TOP_Y.
+        # Ved fresh start bruker vi spec-verdien "midt paa gaten foran
+        # Borshuset" (ignorerer GameState-defaultet 320/280 som er for en
+        # generisk scene); ved lastet save bruker vi lagret x, men snapper
+        # y til gatenivaa for robusthet.
         player_y = GROUND_TOP_Y - 20  # sprite-høyde 20
-        self._player = Player(PLAYER_START_X, float(player_y))
+        if fresh:
+            player_x = PLAYER_START_X
+        else:
+            player_x = float(state.player_position[0])
+        self._player = Player(player_x, float(player_y))
         self._player_min_x = 8.0
         self._player_max_x = float(constants.WORLD_WIDTH - self._player.width - 8)
+        # Klamp lastet x til lovlig intervall
+        if self._player.x < self._player_min_x:
+            self._player.x = self._player_min_x
+        elif self._player.x > self._player_max_x:
+            self._player.x = self._player_max_x
 
         # Kamera skal følge spilleren fra start
         self._center_camera_on_player()
@@ -311,15 +338,27 @@ class VillageScene(BaseScene):
         )
         self._elapsed: float = 0.0
 
-        # Økonomi og spiller-finans
+        # Økonomi – Market lastes fra JSON, deretter applieres lagrede
+        # current_price per vare hvis tilgjengelig.
         self._market = Market.from_json(
             os.path.join(constants.DATA_DIR, "commodities.json")
         )
-        self._finance = PlayerFinance(
-            gold=constants.STARTING_GOLD,
-            inventory={c.id: 0 for c in self._market.commodities},
-        )
+        self._market.day = state.day
+        for cid, saved in state.commodities_state.items():
+            try:
+                cp = float(saved.get("current_price"))
+            except (TypeError, ValueError, AttributeError):
+                continue
+            try:
+                self._market.get(cid).current_price = cp
+            except KeyError:
+                continue
         self._market_tick_timer: float = 0.0
+
+        # HUD (oeverst venstre: sted / gull / dag)
+        self._hud = Hud(
+            font, place="Tortuga", gold=state.gold, day=state.day
+        )
 
         # Overlay (børs) — None naar lukket
         self._overlay: ExchangeOverlay | None = None
@@ -370,7 +409,9 @@ class VillageScene(BaseScene):
         # Slipp eventuelle holdte tastetrykk slik at spilleren ikke fortsetter
         # aa gaa naar overlayet lukkes.
         self._player.press(0)
-        self._overlay = ExchangeOverlay(self._font, self._market, self._finance)
+        self._overlay = ExchangeOverlay(self._font, self._market, self._state)
+        # Autosave ved aapning slik at overgang til bors alltid kan trygges
+        self.autosave()
 
     # --- Logikk ---
 
@@ -385,10 +426,17 @@ class VillageScene(BaseScene):
         # Lanterne-swing og andre tidsavhengige effekter gaar videre ogsaa.
         self._elapsed += dt
 
+        # HUD – settere er no-ops hvis verdien ikke har endret seg
+        self._hud.set_gold(self._state.gold)
+        self._hud.set_day(self._market.day)
+
         if self._overlay is not None:
             self._overlay.update(dt)
             if self._overlay.want_close:
                 self._overlay = None
+                # Autosave ogsaa ved lukking slik at brukeren kan quit-e
+                # umiddelbart etter handel uten risiko for tap.
+                self.autosave()
             return
         # Kun naar overlayet er lukket kan spilleren bevege seg.
         self._player.update(dt, self._player_min_x, self._player_max_x)
@@ -428,6 +476,35 @@ class VillageScene(BaseScene):
         surface.blit(hint_surf, self._hint_pos)
         # 5) Forgrunnslag
         self._renderer.draw(surface, cam_x, start=2, stop=3)
-        # 6) Overlay (borsen) — over alt, inkludert forgrunnen
+        # 6) HUD (oeverst venstre) – under overlayet, men utenfor panelets
+        # omraade saa de ikke overlapper visuelt.
+        self._hud.draw(surface)
+        # 7) Overlay (borsen) — over alt
         if self._overlay is not None:
             self._overlay.draw(surface)
+
+    # --- Lifecycle / save ---
+
+    def _sync_state(self) -> None:
+        """Kopier gjeldende scene-tilstand inn i GameState for lagring."""
+        self._state.current_scene = "village"
+        self._state.player_position = (
+            float(self._player.x),
+            float(self._player.y),
+        )
+        self._state.day = self._market.day
+        self._state.commodities_state = {
+            c.id: {"current_price": float(c.current_price)}
+            for c in self._market.commodities
+        }
+        # gold og inventory er allerede lagret i self._state – direkte mutert
+        # av ExchangeOverlay, saa ingen ekstra sync der.
+
+    def autosave(self) -> None:
+        """Synk tilstand og skriv save-fil. Kalles fra main ved QUIT og
+        fra scene selv ved overlay-aapning/lukking og scene-bytte."""
+        self._sync_state()
+        save_module.save(self._state)
+
+    def on_exit(self) -> None:
+        self.autosave()
