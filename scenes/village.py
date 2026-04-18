@@ -162,7 +162,6 @@ class VillageScene(BaseScene):
                     commodity.price_history = [float(p) for p in raw_history]
                 except (TypeError, ValueError):
                     pass
-        self._market_tick_timer: float = 0.0
 
         # Regime-system. Initialiser manglende regimer for kjente varer
         # (first boot, eller save uten regime-dict).
@@ -254,22 +253,18 @@ class VillageScene(BaseScene):
     # --- Logikk ---
 
     def update(self, dt: float) -> None:
-        # Dag-skift: varsle RegimeManager for hver dag som har passert siden
-        # forrige frame. main.run() oppdaterer state.clock separat; vi
-        # trenger bare aa plukke opp endringen her.
+        # Dag-skift: ved daggry settes nye priser (Market.on_dawn bruker
+        # dagens regime-retning) og deretter tikker regime-klokken (kan
+        # skifte til et annet regime fra neste dag). Rekkefølgen er viktig:
+        # on_dawn først slik at "siste dag" av et regime fortsatt har sin
+        # retnings-effekt; regime_manager.on_new_day etterpå for overgang.
         curr_day = self._state.clock.day
         if curr_day != self._last_seen_day:
-            days_passed = curr_day - self._last_seen_day
-            for _ in range(max(0, days_passed)):
+            days_passed = max(0, curr_day - self._last_seen_day)
+            for _ in range(days_passed):
+                self._market.on_dawn(self._state.regimes)
                 self._regime_manager.on_new_day(self._state.regimes)
             self._last_seen_day = curr_day
-
-        # Markedet ticker uansett — fremdeles drift i prisene mens overlayet
-        # er aapent. Dette gjor det mulig aa se "markedet beveger seg" live.
-        self._market_tick_timer += dt
-        if self._market_tick_timer >= constants.MARKET_TICK_INTERVAL_SEC:
-            self._market.tick(regimes=self._state.regimes)
-            self._market_tick_timer -= constants.MARKET_TICK_INTERVAL_SEC
 
         # Lanterne-swing og andre tidsavhengige effekter gaar videre ogsaa.
         self._elapsed += dt

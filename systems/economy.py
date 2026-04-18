@@ -1,15 +1,14 @@
 """Markedsimulering: pris-drift og kjop/salg.
 
-Model (Fase 1, enkel):
-- Hver `tick()` trekker en ny current_price per vare som
-  `base_price * (1 + uniform(-volatility, volatility))`.
-- Kjops- og salgspriser er current_price +/- `spread` (default 2%).
-- Salg krever at inventaret har minst ønsket mengde; kjøp krever at
-  gullet rekker.
-
-Markedet eier tilstand for priser og for dag/tick-teller. Spillerens
-gull og inventar ligger på et eget objekt (GameState i Commit 7); for
-nå holdes de på VillageScene og refereres av ExchangeOverlay.
+Model (Fase 2A Commit 5C):
+- Priser er **statiske innen en dag** og endres kun ved daggry via
+  `Market.on_dawn(regimes)`. Ingen per-tick-drift.
+- Daglig endring = `regime_direction * magnitude + noise`, hvor
+  magnitude ∈ [0.02, 0.04] (2–4%) og noise ∈ [-0.01, 0.01] (±1%).
+- Pris klampes til `[base * 0.5, base * 2.0]` – strammere enn Fase 1
+  (0.3–3.0) for at spread på 2% skal være meningsfullt friksjonsledd.
+- `price_history` holdes til 14 dager (2 uker) per `PRICE_HISTORY_WINDOW`.
+- Kjops-/salgspriser er `current_price ± spread` (default 2%).
 """
 
 from __future__ import annotations
@@ -18,7 +17,7 @@ import json
 import random
 from typing import TYPE_CHECKING
 
-from entities.commodity import Commodity, InventoryItem
+from entities.commodity import PRICE_HISTORY_WINDOW, Commodity, InventoryItem
 
 if TYPE_CHECKING:
     from systems.regime_manager import RegimeState
@@ -26,6 +25,27 @@ if TYPE_CHECKING:
 
 #: Kjop/salg-margin begge veier (0.02 = 2% spread per PROSJEKT.md §6).
 DEFAULT_SPREAD = 0.02
+
+#: Daglig endring fra regime-retning (±2–4% per dag).
+DAILY_MAGNITUDE_MIN = 0.02
+DAILY_MAGNITUDE_MAX = 0.04
+
+#: Uavhengig markedsstøy per dag (±1% ≤ DAILY_MAGNITUDE_MIN slik at ren
+#: støy ikke trigger trend-indikator-terskel på 3%).
+DAILY_NOISE = 0.01
+
+#: Klamp-grenser for current_price i forhold til base_price. Strammet
+#: fra Fase 1 (0.3, 3.0) til Fase 2A (0.5, 2.0) slik at spread + gebyr
+#: blir reell friksjon uansett hvor prisen står.
+PRICE_MIN_MULT = 0.5
+PRICE_MAX_MULT = 2.0
+
+#: Regime-retning som multiplier på `magnitude`.
+_REGIME_DIRECTION: dict[str, float] = {
+    "rising": 1.0,
+    "stable": 0.0,
+    "falling": -1.0,
+}
 
 
 class Market:
@@ -49,26 +69,52 @@ class Market:
             data = json.load(fh)
         return cls([Commodity.from_data(entry) for entry in data["commodities"]])
 
-    # --- Tick / pris-drift ---
+    # --- Daglig pris-drift (ved daggry) ---
 
-    def tick(
+    def on_dawn(
         self,
         regimes: "dict[str, RegimeState] | None" = None,
     ) -> None:
-        """Trekk nye priser for alle varer. Inkrementer tick_id.
+        """Kalles ved daggry (dag-skift). Oppdaterer alle priser én gang.
 
-        Hvis `regimes` er oppgitt, brukes regime-bias og vol-multiplier for
-        hver vare. Uten regimes får vi ren random drift som i Fase 1.
-        Uansett bygges price_history opp i hver Commodity.
+        Per vare:
+          change = direction * magnitude + noise
+          new_price = current_price * (1 + change)
+          new_price = clamp(new_price, base*0.5, base*2.0)
+          price_history.append(new_price)   # siste 14 dager beholdes
+          tick_id += 1
+
+        `regimes` er dict fra commodity.id → RegimeState. Mangler regime
+        for en vare tolkes som "stable" (ingen retnings-bias).
         """
         for cid, c in self._commodities.items():
             regime = regimes.get(cid) if regimes else None
-            c.tick(regime=regime, rng=self._rng)
+            direction = (
+                _REGIME_DIRECTION.get(regime.current, 0.0)
+                if regime is not None
+                else 0.0
+            )
+            magnitude = self._rng.uniform(
+                DAILY_MAGNITUDE_MIN, DAILY_MAGNITUDE_MAX
+            )
+            noise = self._rng.uniform(-DAILY_NOISE, DAILY_NOISE)
+            change = direction * magnitude + noise
+            new_price = c.current_price * (1.0 + change)
+            lo = c.base_price * PRICE_MIN_MULT
+            hi = c.base_price * PRICE_MAX_MULT
+            new_price = max(lo, min(hi, new_price))
+            c.current_price = round(new_price, 2)
+            c.price_history.append(c.current_price)
+            if len(c.price_history) > PRICE_HISTORY_WINDOW:
+                del c.price_history[
+                    : len(c.price_history) - PRICE_HISTORY_WINDOW
+                ]
         self._tick_id += 1
 
     @property
     def tick_id(self) -> int:
-        """Monotont tall – UI kan cache tekst-surfaces per tick_id."""
+        """Monotont tall – UI cacher tekst-surfaces per tick_id. Inkrementeres
+        kun av `on_dawn()` fra og med Commit 5C (tidligere også per 10 s-tick)."""
         return self._tick_id
 
     # --- Oppslag ---

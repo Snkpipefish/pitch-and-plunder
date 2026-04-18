@@ -25,7 +25,7 @@ from __future__ import annotations
 import pygame
 
 import constants
-from entities.commodity import InventoryItem
+from entities.commodity import InventoryItem, compute_trend
 from systems.economy import Market
 from systems.save import GameState
 
@@ -39,7 +39,7 @@ PANEL_Y = (constants.RENDER_HEIGHT - PANEL_H) // 2  # 60
 # Kolonner (i render-koordinater)
 NAME_X = PANEL_X + 24
 PRICE_X = PANEL_X + 200
-SPARK_X = PANEL_X + 290
+TREND_X = PANEL_X + 310
 QTY_X = PANEL_X + 360
 
 # Rader
@@ -47,13 +47,13 @@ HEADER_Y = PANEL_Y + 40
 ROW_Y_START = PANEL_Y + 64
 ROW_HEIGHT = 22
 
-# Sparkline-geometri
-SPARK_BARS = 10
-SPARK_BAR_W = 3
-SPARK_GAP = 1
-SPARK_W = SPARK_BARS * (SPARK_BAR_W + SPARK_GAP)
-SPARK_H = 10
-SPARK_COLORKEY = (255, 0, 255)
+# Trend-indikator (Commit 5C, erstatter sparkline). Piler i fargekodet sett:
+# stigende = kald blå, stabil = dempet grå, fallende = varm ember.
+_TREND_COLORS = {
+    "\u2191": constants.COLOR_STONE_LIT,
+    "\u2192": constants.COLOR_FOG,
+    "\u2193": constants.COLOR_EMBER,
+}
 
 
 def _build_panel_surface() -> pygame.Surface:
@@ -132,15 +132,12 @@ class ExchangeOverlay:
         self._cargo_cap: int | None = None
         self._cargo_surf: pygame.Surface | None = None
 
-        # Sparkline-surfaces pre-allokerte per vare. Re-bakes naar
-        # market.tick_id endrer seg (hver 10. sek).
-        self._spark_tick_id: int = -1
-        self._spark_surfs: dict[str, pygame.Surface] = {
-            c.id: pygame.Surface((SPARK_W, SPARK_H)).convert()
-            for c in self._commodities
-        }
-        for surf in self._spark_surfs.values():
-            surf.set_colorkey(SPARK_COLORKEY)
+        # Trend-indikator pre-rendres for hver tick_id og vare. Cache-
+        # nøkkel er (tick_id, commodity.id) slik at re-render kun skjer
+        # ved daggry. Tom streng ("<3 dager") → lagres som None for å
+        # markere "ikke noe blit".
+        self._trend_tick_id: int = -1
+        self._trend_surfs: dict[str, pygame.Surface | None] = {}
 
     # --- Lifecycle ---
 
@@ -253,35 +250,24 @@ class ExchangeOverlay:
             f"Gull: {g} d.", False, constants.COLOR_MOON_CORE
         ).convert_alpha()
 
-    def _ensure_sparklines(self) -> None:
+    def _ensure_trends(self) -> None:
+        """Pre-render trend-pil per vare. Oppdateres én gang per daggry
+        (når `market.tick_id` endrer seg). Varer med < 3 dager historikk
+        får `None` (ingen blit).
+        """
         tid = self._market.tick_id
-        if self._spark_tick_id == tid:
+        if self._trend_tick_id == tid:
             return
-        self._spark_tick_id = tid
+        self._trend_tick_id = tid
         for c in self._commodities:
-            surf = self._spark_surfs[c.id]
-            surf.fill(SPARK_COLORKEY)
-            history = c.price_history[-SPARK_BARS:]
-            if not history:
+            arrow = compute_trend(c.price_history)
+            if not arrow:
+                self._trend_surfs[c.id] = None
                 continue
-            # Auto-skaler til min/max i vinduet — viser trend, ikke
-            # absolutt nivaa. Hvis hi == lo (alle like) → midtstilte barer.
-            lo = min(history)
-            hi = max(history)
-            span = hi - lo if hi > lo else 1.0
-            max_bar_h = SPARK_H - 1
-            step = SPARK_BAR_W + SPARK_GAP
-            for i, p in enumerate(history):
-                ratio = (p - lo) / span
-                ratio = max(0.0, min(1.0, ratio))
-                h = max(1, int(ratio * max_bar_h))
-                x = i * step
-                y = SPARK_H - h
-                pygame.draw.rect(
-                    surf,
-                    constants.COLOR_STONE_LIT,
-                    (x, y, SPARK_BAR_W, h),
-                )
+            color = _TREND_COLORS.get(arrow, constants.COLOR_FOG)
+            self._trend_surfs[c.id] = self._font.render(
+                arrow, False, color
+            ).convert_alpha()
 
     def _ensure_cargo(self) -> None:
         total = sum(item.quantity for item in self._state.inventory.values())
@@ -306,7 +292,7 @@ class ExchangeOverlay:
         self._ensure_qty()
         self._ensure_gold()
         self._ensure_cargo()
-        self._ensure_sparklines()
+        self._ensure_trends()
 
         surface.blit(self._panel, (PANEL_X, PANEL_Y))
         assert self._title_surf is not None
@@ -342,11 +328,10 @@ class ExchangeOverlay:
                 )
             surface.blit(self._name_surfs[c.id], (NAME_X, y))
             surface.blit(self._price_surfs[c.id], (PRICE_X, y))
-            # Sparkline: vertikalt sentrert mot row-baseline (font ~8 px)
-            surface.blit(
-                self._spark_surfs[c.id],
-                (SPARK_X, y + 2),
-            )
+            # Trend-pil: tegnes kun hvis vi har ≥3 dagers historikk
+            trend_surf = self._trend_surfs.get(c.id)
+            if trend_surf is not None:
+                surface.blit(trend_surf, (TREND_X, y))
             surface.blit(self._qty_surfs[c.id], (QTY_X, y))
 
         assert self._gold_surf is not None

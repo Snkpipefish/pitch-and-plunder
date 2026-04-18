@@ -97,7 +97,10 @@ COLOR_SKY_DUSK_HORIZON = COLOR_EMBER         # (217, 108, 46)  brennende horison
 # --- Gameplay ---
 STARTING_GOLD = 300  # Fase 2A Commit 5: redusert fra 500 m/regime-friksjon.
 MARKET_TICK_INTERVAL_SEC = 10.0
-SECONDS_PER_DAY = 60.0  # Fase 2A: 60 sek/dag. Justeres i Commit 8-polish.
+SECONDS_PER_DAY = 180.0  # Fase 2A Commit 5C: 180 s/dag (30 morgen + 120 dag + 30 natt).
+# MARKET_TICK_INTERVAL_SEC er ikke lenger i bruk: priser endres kun ved daggry.
+# Konstanten beholdes for at save-migreringstester og historiske kjøringer skal
+# kunne referere den; kan fjernes i Commit 8-polish hvis ingen bruker den da.
 CARGO_CAPACITY = 40  # Totalt antall enheter i lasterom (Fase 2A Commit 4).
 PLAYER_WALK_SPEED = 80  # px/sek
 INTERACTION_DISTANCE = 40

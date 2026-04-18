@@ -1,27 +1,30 @@
-"""Vare (commodity) som handles paa borsen, samt spiller-inventar-post."""
+"""Vare (commodity) som handles paa borsen, samt spiller-inventar-post.
+
+Fase 2A Commit 5C: priser endres nå KUN ved daggry via `Market.on_dawn()`.
+Commodity-klassen er derfor en ren dataholder; tidligere `Commodity.tick()`
+er fjernet fordi drift-logikken lever i Market nå (ett sted for hele
+markedsmodellen).
+"""
 
 from __future__ import annotations
 
-import random
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from systems.regime_manager import RegimeState
 
 
-#: Hvor mange priser vi holder i historikken (for sparkline-visning).
-PRICE_HISTORY_WINDOW = 20
-
-#: Klamp-grenser for current_price i forhold til base_price.
-#: Hindrer at random walk drifter til meningsløse ytterpunkter.
-PRICE_MIN_MULT = 0.3
-PRICE_MAX_MULT = 3.0
+#: Hvor mange priser vi holder i historikken (Fase 2A Commit 5C: 14 dager
+#: = 2 uker). Trend-indikatoren leser de siste 3; lenger historikk er
+#: tilgjengelig for framtidige UI-utvidelser.
+PRICE_HISTORY_WINDOW = 14
 
 
 @dataclass
 class Commodity:
-    """En vare med grunnpris, volatility og løpende markedspris."""
+    """En vare med grunnpris, volatility og løpende markedspris.
+
+    `price_history` akkumulerer ved daggry via `Market.on_dawn()`. Den
+    brukes av `compute_trend()` for enkel pil-indikator og for framtidig
+    visning (f.eks. sparkline som toggle i polish-commit).
+    """
 
     id: str
     name: str
@@ -43,43 +46,6 @@ class Commodity:
             description=data.get("description", ""),
         )
 
-    def tick(
-        self,
-        regime: "RegimeState | None" = None,
-        rng: random.Random | None = None,
-    ) -> None:
-        """Oppdater current_price med random drift + eventuell regime-bias.
-
-        - Regime-bias (ubetydelig per enkelt-tick, men akkumulerer over dager).
-        - Vol-multiplier fra regimet (stable-regime demper amplituden).
-        - Klamping mot [base*0.3, base*3.0] hindrer runaway.
-        - price_history holder de siste PRICE_HISTORY_WINDOW prisene (for
-          sparkline-visning og trend-lesning).
-        """
-        # Sen import for å unngå sirkulær avhengighet (regime_manager
-        # refererer ikke Commodity, men vi holder type-hint bak TYPE_CHECKING).
-        from systems.regime_manager import REGIME_BIAS, REGIME_VOL_MULT
-
-        rng = rng or random.Random()
-        if regime is None:
-            bias = 0.0
-            vol_mult = 1.0
-        else:
-            bias = REGIME_BIAS.get(regime.current, 0.0)
-            vol_mult = REGIME_VOL_MULT.get(regime.current, 1.0)
-
-        drift = rng.uniform(-self.volatility, self.volatility) * vol_mult
-        new_price = self.current_price * (1.0 + bias + drift)
-        # Klamp
-        lo = self.base_price * PRICE_MIN_MULT
-        hi = self.base_price * PRICE_MAX_MULT
-        new_price = max(lo, min(hi, new_price))
-        self.current_price = round(new_price, 2)
-
-        self.price_history.append(self.current_price)
-        if len(self.price_history) > PRICE_HISTORY_WINDOW:
-            del self.price_history[: len(self.price_history) - PRICE_HISTORY_WINDOW]
-
 
 @dataclass
 class InventoryItem:
@@ -93,3 +59,40 @@ class InventoryItem:
 
     quantity: int = 0
     avg_cost: float = 0.0
+
+
+# -----------------------------------------------------------------------------
+# Trend-indikator (Fase 2A Commit 5C)
+# -----------------------------------------------------------------------------
+
+#: Rising: siste pris > startpris × (1 + TREND_THRESHOLD).
+#: Falling: siste pris < startpris × (1 - TREND_THRESHOLD).
+#: 3% terskel unngår at ren markedsstøy (±1% per dag fra on_dawn-noise)
+#: viser feilaktig retning – skal være klar trend før pilen viser opp/ned.
+TREND_THRESHOLD = 0.03
+
+#: Antall siste priser som inspiseres for trend-beregning.
+TREND_WINDOW = 3
+
+
+def compute_trend(price_history: list[float]) -> str:
+    """Returner trend-pil ('↑', '→', '↓') basert på siste 3 priser.
+
+    Returnerer tom streng hvis historikken er kortere enn 3 dager – da har
+    vi ikke nok signal til å vise trend med mening.
+
+    Resultatet er fargekodet i exchange UI:
+    ↑ i COLOR_STONE_LIT (kald blå, institusjonelt signal),
+    → i COLOR_FOG (nøytral dempet), ↓ i COLOR_EMBER (varm advarsel).
+    """
+    if len(price_history) < TREND_WINDOW:
+        return ""
+    recent = price_history[-TREND_WINDOW:]
+    start, end = recent[0], recent[-1]
+    if start <= 0.0:
+        return "\u2192"
+    if end > start * (1.0 + TREND_THRESHOLD):
+        return "\u2191"
+    if end < start * (1.0 - TREND_THRESHOLD):
+        return "\u2193"
+    return "\u2192"
