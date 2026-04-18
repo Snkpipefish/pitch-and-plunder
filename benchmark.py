@@ -24,6 +24,7 @@ import constants
 import pygame
 
 from main import PlaceholderScene, _load_font
+from scenes.parallax_test import ParallaxTestScene
 
 
 log = logging.getLogger("benchmark")
@@ -33,22 +34,48 @@ def _build_scene(name: str, font: pygame.font.Font):
     """Scene-fabrikk. Utvides etter hvert som flere scener finnes."""
     if name == "placeholder":
         return PlaceholderScene(font)
+    if name == "parallax_test":
+        return ParallaxTestScene(font)
     raise ValueError(f"Ukjent scene: {name}")
 
 
-def _run_loop(scene, duration_sec: float) -> list[float]:
-    """Kjør scene i oppgitt tid. Returnerer liste over frame times i sekunder."""
+def _run_loop(scene, duration_sec: float, drive_camera: bool = False) -> list[float]:
+    """Kjør scene i oppgitt tid. Returnerer liste over frame times i sekunder.
+
+    Hvis `drive_camera=True`: poster syntetiske KEYDOWN/KEYUP-events for
+    høyre og venstre pil slik at kameraet beveger seg jevnt gjennom hele
+    verden under målingen. Brukes for parallax-test der statisk rendering
+    ikke ville dekke scroll-costen.
+    """
     render_surface = pygame.Surface(
         (constants.RENDER_WIDTH, constants.RENDER_HEIGHT)
     ).convert()
     clock = pygame.time.Clock()
     frame_times: list[float] = []
+
+    if drive_camera:
+        # Simuler "hold D" for høyre-bevegelse fra start
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_d}))
+    reverse_at = duration_sec * 0.5
+    reversed_yet = False
+
     start = time.perf_counter()
-    while time.perf_counter() - start < duration_sec:
+    while True:
+        elapsed = time.perf_counter() - start
+        if elapsed >= duration_sec:
+            break
         dt = clock.tick(constants.TARGET_FPS) / 1000.0
-        # Pump event-køen slik at SDL ikke henger
-        for _ in pygame.event.get():
-            pass
+
+        if drive_camera and not reversed_yet and elapsed >= reverse_at:
+            # Bytt retning halvveis for å dekke begge endene av verden
+            pygame.event.post(pygame.event.Event(pygame.KEYUP, {"key": pygame.K_d}))
+            pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_a}))
+            reversed_yet = True
+
+        for event in pygame.event.get():
+            if drive_camera:
+                scene.handle_event(event)
+
         frame_start = time.perf_counter()
         scene.update(dt)
         scene.draw(render_surface)
@@ -93,9 +120,10 @@ def benchmark(scene_name: str = "placeholder", duration_sec: float = 10.0) -> No
     scene = _build_scene(scene_name, font)
     scene.on_enter()
 
+    drive_camera = scene_name == "parallax_test"
     profiler = cProfile.Profile()
     profiler.enable()
-    frame_times = _run_loop(scene, duration_sec)
+    frame_times = _run_loop(scene, duration_sec, drive_camera=drive_camera)
     profiler.disable()
 
     stats_buf = io.StringIO()
@@ -125,7 +153,7 @@ def benchmark(scene_name: str = "placeholder", duration_sec: float = 10.0) -> No
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Pitch & Plunder benchmark")
-    parser.add_argument("--scene", default="placeholder", help="Navn på scenen")
+    parser.add_argument("--scene", default="parallax_test", help="Navn på scenen")
     parser.add_argument("--duration", type=float, default=10.0, help="Sekunder")
     args = parser.parse_args()
     benchmark(args.scene, args.duration)

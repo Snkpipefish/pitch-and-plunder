@@ -19,6 +19,7 @@ import constants  # Setter env vars som MÅ være satt før pygame importeres
 import pygame
 
 from scenes.base_scene import BaseScene
+from scenes.parallax_test import ParallaxTestScene
 
 
 log = logging.getLogger("pitch_and_plunder")
@@ -163,8 +164,9 @@ def run() -> int:
     manager = SceneManager(
         factories={
             "placeholder": lambda: PlaceholderScene(font_small),
+            "parallax_test": lambda: ParallaxTestScene(font_small),
         },
-        initial="placeholder",
+        initial="parallax_test",
     )
 
     clock = pygame.time.Clock()
