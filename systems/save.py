@@ -58,6 +58,7 @@ class GameState:
     player_position: tuple[float, float] = (320.0, 280.0)
     clock: GameClock = field(default_factory=GameClock)
     commodities_state: dict[str, dict] = field(default_factory=dict)
+    cargo_capacity: int = constants.CARGO_CAPACITY
 
 
 def save(state: GameState, path: str = constants.SAVE_PATH) -> bool:
@@ -201,6 +202,13 @@ def load(path: str = constants.SAVE_PATH) -> GameState | None:
     except (TypeError, ValueError):
         gold = defaults.gold
 
+    try:
+        cargo_capacity = int(
+            data.get("cargo_capacity", defaults.cargo_capacity)
+        )
+    except (TypeError, ValueError):
+        cargo_capacity = defaults.cargo_capacity
+
     # Clock: v3 har nested dict; v1/v2 har kun top-level `day`.
     try:
         legacy_day = int(data.get("day", defaults.clock.day))
@@ -222,4 +230,5 @@ def load(path: str = constants.SAVE_PATH) -> GameState | None:
         player_position=player_position,
         clock=clock,
         commodities_state=commodities_state,
+        cargo_capacity=cargo_capacity,
     )

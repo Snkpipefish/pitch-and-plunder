@@ -83,6 +83,7 @@ COLOR_FOG = (58, 58, 74)
 STARTING_GOLD = 500
 MARKET_TICK_INTERVAL_SEC = 10.0
 SECONDS_PER_DAY = 60.0  # Fase 2A: 60 sek/dag. Justeres i Commit 8-polish.
+CARGO_CAPACITY = 40  # Totalt antall enheter i lasterom (Fase 2A Commit 4).
 PLAYER_WALK_SPEED = 80  # px/sek
 INTERACTION_DISTANCE = 40
 

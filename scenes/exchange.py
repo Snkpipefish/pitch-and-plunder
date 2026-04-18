@@ -117,6 +117,12 @@ class ExchangeOverlay:
         self._gold_value: int | None = None
         self._gold_surf: pygame.Surface | None = None
 
+        # Cargo-indikator ("Last: X/40") i topp-hoyre. Re-rendres bare naar
+        # totalen endres.
+        self._cargo_total: int | None = None
+        self._cargo_cap: int | None = None
+        self._cargo_surf: pygame.Surface | None = None
+
     # --- Lifecycle ---
 
     @property
@@ -146,7 +152,11 @@ class ExchangeOverlay:
     def _buy(self, amount: int) -> None:
         cid = self._commodities[self._selected].id
         new_gold, new_inv, bought = self._market.buy(
-            cid, amount, self._state.gold, self._state.inventory
+            cid,
+            amount,
+            self._state.gold,
+            self._state.inventory,
+            cargo_capacity=self._state.cargo_capacity,
         )
         if bought > 0:
             self._state.gold = new_gold
@@ -224,6 +234,21 @@ class ExchangeOverlay:
             f"Gull: {g} d.", False, constants.COLOR_MOON_CORE
         ).convert_alpha()
 
+    def _ensure_cargo(self) -> None:
+        total = sum(item.quantity for item in self._state.inventory.values())
+        cap = self._state.cargo_capacity
+        if self._cargo_total == total and self._cargo_cap == cap:
+            return
+        self._cargo_total = total
+        self._cargo_cap = cap
+        # Dempet farge hvis lasten er full (stoene varselsignal uten roedt)
+        color = (
+            constants.COLOR_LANTERN if total >= cap else constants.COLOR_STONE_LIT
+        )
+        self._cargo_surf = self._font.render(
+            f"Last: {total}/{cap}", False, color
+        ).convert_alpha()
+
     # --- Rendering ---
 
     def draw(self, surface: pygame.Surface) -> None:
@@ -231,23 +256,37 @@ class ExchangeOverlay:
         self._ensure_prices()
         self._ensure_qty()
         self._ensure_gold()
+        self._ensure_cargo()
 
         surface.blit(self._panel, (PANEL_X, PANEL_Y))
         assert self._title_surf is not None
         surface.blit(self._title_surf, (PANEL_X + 16, PANEL_Y + 14))
 
+        # Cargo-indikator, topp-hoyre (samme baseline som tittelen)
+        assert self._cargo_surf is not None
+        cargo_x = PANEL_X + PANEL_W - self._cargo_surf.get_width() - 16
+        surface.blit(self._cargo_surf, (cargo_x, PANEL_Y + 14))
+
         surface.blit(self._header_name, (NAME_X, HEADER_Y))
         surface.blit(self._header_price, (PRICE_X, HEADER_Y))
         surface.blit(self._header_qty, (QTY_X, HEADER_Y))
 
-        # Rader
+        # Rader: dimmet hvis lasten er full (kan ikke kjoepe mer av noen vare)
+        cargo_full = (self._cargo_total or 0) >= (self._cargo_cap or 0)
         for i, c in enumerate(self._commodities):
             y = ROW_Y_START + i * ROW_HEIGHT
             if i == self._selected:
-                # Highlight-ramme i COLOR_LANTERN (1 px)
+                # Highlight-ramme i COLOR_LANTERN (1 px). Dempet naar
+                # lasten er full slik at markoeren ikke lyver om at
+                # radene er aktive.
+                frame_color = (
+                    constants.COLOR_STONE_MID
+                    if cargo_full
+                    else constants.COLOR_LANTERN
+                )
                 pygame.draw.rect(
                     surface,
-                    constants.COLOR_LANTERN,
+                    frame_color,
                     (PANEL_X + 12, y - 3, PANEL_W - 24, ROW_HEIGHT - 2),
                     1,
                 )

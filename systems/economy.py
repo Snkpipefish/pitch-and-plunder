@@ -86,11 +86,14 @@ class Market:
         amount: int,
         gold: int,
         inventory: dict[str, InventoryItem],
+        cargo_capacity: int | None = None,
     ) -> tuple[int, dict[str, InventoryItem], int]:
         """Forsøk å kjøpe `amount` av vare. Returner (nytt_gull, nytt_inventar, kjopt).
 
-        Kjøper maks det gullet tillater hvis `amount` er mer enn mulig; returner
-        `kjopt == 0` hvis ingenting kunne kjøpes. Modifiserer ikke input-argumentene
+        Kjøper maks det gullet tillater hvis `amount` er mer enn mulig.
+        Hvis `cargo_capacity` er satt, klampes også mot tilgjengelig
+        lasterom (totalt på tvers av alle varer). Returner `kjopt == 0`
+        hvis ingenting kunne kjøpes. Modifiserer ikke input-argumentene
         (ren funksjon på immutable snapshot).
 
         Oppdaterer `avg_cost` som veid gjennomsnitt over alle kjoep.
@@ -102,6 +105,12 @@ class Market:
             return gold, inventory, 0
         max_affordable = gold // price
         bought = min(amount, max_affordable)
+        if cargo_capacity is not None:
+            current_total = sum(
+                item.quantity for item in inventory.values()
+            )
+            cargo_space = max(0, cargo_capacity - current_total)
+            bought = min(bought, cargo_space)
         if bought <= 0:
             return gold, inventory, 0
         new_inventory = dict(inventory)
