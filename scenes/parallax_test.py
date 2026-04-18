@@ -123,40 +123,42 @@ def _lerp_color(
 def _bake_moon(
     surf: pygame.Surface, cx: int, cy: int, bg_height: int
 ) -> None:
-    """Bak mane som mange konsentriske sirkler med smoothstep-falloff.
+    """Bak mane som en skarp skive med subtil halo.
 
-    Vi starter fra ytterste radius med *himmel-fargen* (saa kanten blender
-    seamless inn i den eksisterende himmelen) og jobber oss innover mot
-    moon_halo og deretter moon_core. Hver sirkel overskriver kun pikslene
-    innenfor sin radius, slik at vi effektivt bygger en radial gradient.
+    Kjerne: solid COLOR_MOON_CORE diameter ~28 px (radius 14). Ingen intern
+    gradient – den skal fremstaa som en klar avgrenset skive, slik en
+    mane paa nattehimmel gjoer.
 
-    For aa unngaa synlige ringer bruker vi 1 px steg og smoothstep-kurve.
+    Halo: subtil antydning rundt kjernen, ikke en dominerende gloed. Fra
+    kjernekanten (r=14) ut til r=30 interpoleres himmel-fargen mot
+    COLOR_MOON_HALO med topp-blanding paa 40% ved kjernekanten og 0% ved
+    r=30. Bruker smoothstep for myk avfasing uten synlige ringer.
+
+    Referanse: `references/tortuga_signature_scene.svg` — skarp kjerne,
+    diskret halo.
     """
     sky_bg = _sky_color_at(cy, bg_height)
     halo_color = constants.COLOR_MOON_HALO
     core_color = constants.COLOR_MOON_CORE
 
-    outer_r = 45
-    halo_r = 14  # overgang fra halo-kant til kjerne-område
-    core_r = 8
+    core_r = 14       # Diameter 28 px
+    halo_max_r = 30   # Halo strekker seg kun ca. 16 px utenfor kjernen
+    max_halo_blend = 0.40  # Sterkeste halo-innblanding = 40% av halo_color
 
-    # Ytre halo: sky-bg -> halo
-    for r in range(outer_r, halo_r, -1):
-        t = (outer_r - r) / (outer_r - halo_r)
-        t = _smoothstep(t)
-        pygame.draw.circle(surf, _lerp_color(sky_bg, halo_color, t), (cx, cy), r)
+    # Halo: fra halo_max_r (0% innblanding) til core_r (40% innblanding).
+    # Ved halo_max_r settes fargen til sky_bg (usynlig mot himmelen), saa
+    # det er ingen skarp ytterring.
+    for r in range(halo_max_r, core_r, -1):
+        t = (halo_max_r - r) / (halo_max_r - core_r)
+        t = _smoothstep(t) * max_halo_blend
+        pygame.draw.circle(
+            surf, _lerp_color(sky_bg, halo_color, t), (cx, cy), r
+        )
 
-    # Midt: halo -> core
-    for r in range(halo_r, core_r, -1):
-        t = (halo_r - r) / (halo_r - core_r)
-        t = _smoothstep(t)
-        pygame.draw.circle(surf, _lerp_color(halo_color, core_color, t), (cx, cy), r)
+    # Kjerne: solid MOON_CORE, ingen gradient. Skarp kant mot halo.
+    pygame.draw.circle(surf, core_color, (cx, cy), core_r)
 
-    # Kjerne: solid core
-    for r in range(core_r, 0, -1):
-        pygame.draw.circle(surf, core_color, (cx, cy), r)
-
-    # Et par diskrete "krater"-prikker
+    # Et par diskrete krater-prikker i halo-fargen (maa ikke overvelde kjernen)
     pygame.draw.circle(surf, halo_color, (cx + 3, cy - 3), 1)
     pygame.draw.circle(surf, halo_color, (cx - 3, cy + 2), 1)
 

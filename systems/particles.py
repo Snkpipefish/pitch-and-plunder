@@ -26,10 +26,12 @@ import pygame
 import constants
 
 
-# Taake-farge: 30% COLOR_FOG + 70% COLOR_SEA_HIGHLIGHT. Lysere enn foer saa
-# taaka faktisk er synlig mot den moerke gateplan/sjoe-bakgrunnen.
-# 0.3 * (58,58,74) + 0.7 * (74,90,138) = (69, 80, 119) — blaa-graa.
-_FOG_MIXED = (69, 80, 119)
+# Taake-farge som *additiv* bidrag (BLEND_RGB_ADD). Vi tegner paa svart
+# bakgrunn og adderer en subtil blaa-graa som "loefter" pikslene bak
+# litt. Valget (14, 18, 28) gir ~15%-aktig opasitet-foelelse mot moerk
+# bakgrunn, men overlappende taake stables additivt saa flekkvis tetthet
+# oppstaar naturlig (uten "annulleringen" man faar med colorkey-blit).
+_FOG_ADDITIVE = (14, 18, 28)
 
 # Firefly-farge: full-intensitet gir additiv blast. Vi demper litt.
 _FIREFLY_COLOR = (200, 170, 96)
@@ -39,14 +41,27 @@ _CK = (255, 0, 255)
 
 
 def _build_fog_sprites() -> list[pygame.Surface]:
-    """Tre ellipsestoerrelser som recycles blant taake-partiklene."""
-    sizes = [(24, 12), (32, 16), (40, 20)]
+    """Tre ujevne amoebe-formede taake-sprites.
+
+    Hver sprite er et rektangel paa svart (nullbidrag for BLEND_RGB_ADD)
+    med 4 overlappende fylte sirkler i `_FOG_ADDITIVE`. Sirklenes
+    uregelmessige plassering gir en organisk, ikke-symmetrisk form – vekk
+    fra den "sauer paa parade"-effekten rene ellipser gir. RNG er seedet
+    per-stoerrelse saa formene er deterministiske mellom scene-innlastinger.
+    """
+    # Bredere enn hoye – taake "legger seg" horisontalt over gata.
+    sizes = [(24, 10), (32, 14), (48, 18)]
     sprites: list[pygame.Surface] = []
     for w, h in sizes:
         surf = pygame.Surface((w, h)).convert()
-        surf.fill(_CK)
-        pygame.draw.ellipse(surf, _FOG_MIXED, (0, 0, w, h))
-        surf.set_colorkey(_CK)
+        surf.fill((0, 0, 0))  # svart = ingen additivt bidrag
+        rng = random.Random(w * 17 + h * 31)
+        # Plasser 4 overlappende sirkler innenfor en indre margin.
+        for _ in range(4):
+            cx = rng.randint(w // 4, 3 * w // 4)
+            cy = rng.randint(max(1, h // 3), max(h // 3 + 1, 2 * h // 3))
+            radius = rng.randint(max(2, min(w, h) // 4), max(3, min(w, h) // 2))
+            pygame.draw.circle(surf, _FOG_ADDITIVE, (cx, cy), radius)
         sprites.append(surf)
     return sprites
 
@@ -125,15 +140,19 @@ class ParticleSystem:
 
         `spread=True`: spre over hele verden ved init slik at taaken ikke
         "stroemmer inn" paa start. Ellers: spawn rett utenfor venstre kant.
+
+        Hastighet og y-posisjon trekkes individuelt per partikkel saa
+        taaken ikke oppfoerer seg som en synkronisert rad.
         """
         if spread:
             p.x = self._rng.uniform(0.0, float(self._world_width))
         else:
-            p.x = -40.0
-        p.y = self._rng.uniform(320.0, 345.0)
-        # Raskere enn foer — 15–20 px/s gir tydelig drift men forblir
-        # atmosfaerisk.
-        p.vx = self._rng.uniform(15.0, 20.0)
+            p.x = -60.0
+        # Y-variasjon 325..350 — bredere enn foer, hver partikkel paa sin
+        # egen hoeyde-linje.
+        p.y = self._rng.uniform(325.0, 350.0)
+        # Saktere drift, 6–10 px/s, individuell per partikkel.
+        p.vx = self._rng.uniform(6.0, 10.0)
         p.vy = 0.0
         p.sprite = self._rng.choice(self._fog_sprites)
 
@@ -185,8 +204,11 @@ class ParticleSystem:
     def draw(self, target: pygame.Surface, camera_x: float) -> None:
         """Tegn begge batcher. Kalleren bestemmer rekkefoelgen rundt dette.
 
-        Taake tegnes foerst (alminnelig blit, colorkey). Ildfluer tegnes
-        deretter med BLEND_RGB_ADD saa de stikker gjennom taaken.
+        Taake og ildfluer tegnes begge additivt (BLEND_RGB_ADD) men i hver
+        sin batch. Additiv taake betyr at overlappende partikler stables i
+        tetthet (flekkvis tykkere mist) i stedet for aa "annullere"
+        hverandre, og at varme lys i bygningene ikke farger selve taake-
+        spritene (vi tegnes uansett etter dynamiske lys per scene-logikk).
         """
         cx = int(camera_x)
         fog_batch = self._fog_batch
@@ -210,6 +232,6 @@ class ParticleSystem:
                 )
 
         if fog_batch:
-            target.fblits(fog_batch)
+            target.fblits(fog_batch, pygame.BLEND_RGB_ADD)
         if firefly_batch:
             target.fblits(firefly_batch, pygame.BLEND_RGB_ADD)
