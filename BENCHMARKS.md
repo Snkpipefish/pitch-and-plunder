@@ -186,3 +186,71 @@ Lagret screenshots (ikke commit-et) viser:
 Village-scenen ligger godt innenfor ytelsesbudsjett. Klar for Commit 5
 (dynamisk lys).
 
+---
+
+## Commit 5 – Dynamisk lyssystem (3 lys med BLEND_RGB_ADD)
+
+Kjørt: 2026-04-18
+Kommando: `python benchmark.py --scene village --duration 10`
+Miljø: målmaskin (T4200 / GM45 / Linux Mint 21.3), pygame-ce 2.5.7
+
+3 lys aktive per frame:
+1. Tavernaens svingende lanterne (radius 40, `COLOR_LANTERN_BRIGHT`, sinus ±3 px, periode 2 s)
+2. Tavernaens dør-glød (radius 70, `COLOR_FLAME`, statisk)
+3. Børshusets midtvindu (radius 60, `COLOR_STONE_LIT`, statisk)
+
+Alle 3 gradienter pre-rendres i `LightingSystem.prewarm()` ved scene-init.
+Tegnes per frame med `fblits(..., BLEND_RGB_ADD)`.
+
+| Metrikk | Verdi | Endring fra Commit 4 |
+|---------|-------|----------------------|
+| Frames målt | 302 | – |
+| FPS avg (compute) | 420.68 | −15 |
+| FPS min (compute) | 118.72 | −6 |
+| FPS 1% lav (compute) | 136.95 | +8 |
+| Frame time avg | 2.495 ms | +0.06 ms (+3%) |
+| Peak RSS | 103.70 MB | +0.33 MB |
+| Gradient-cache-størrelse | 3 | – |
+
+### cProfile – topp hete funksjoner (ekskl. Clock.tick)
+
+| per frame (ms) | % av frame time | funksjon |
+|----------------|-----------------|----------|
+| 2.05 | 82% | `Surface.fblits` (4 kall per frame: lag 0-1, entiteter, lys, lag 2) |
+| 0.15 | 6% | `LightingSystem.draw` inkl. batch-bygging (ekskl. fblits) |
+| 0.023 | 1% | `math.sin` + `horizontal_offset` (lanterne-swing) |
+| 0.040 | 2% | `pygame.event.get` |
+| 0.030 | 1% | `Surface.blit` (HUD hint) |
+
+### Vurdering
+
+- **Kostnaden av å legge til 3 lys: 63 μs per frame.** Grensen i
+  brukerspesifikasjonen var «revurder gradient-størrelser hvis frame time
+  > 15 ms». Vi er på 2.50 ms – 6× under den grensen.
+- **Gradient-prewarm** skjer én gang i scene-init; ingen gradient-
+  generering per frame.
+- **FPS 1% lav gikk opp** (128 → 137) tross ekstra arbeid – sannsynligvis
+  støy i målingen; frame-tiden er så kort at små variasjoner i OS-
+  scheduling slår gjennom.
+- **RSS-endring marginal** (3 gradient-surfaces: ~81×81 + 141×141 +
+  121×121 × 4 byte = ~130 KB).
+
+### Visuell kontroll
+
+Screenshots lagret (ikke commit-et):
+- `village_lit_tavern.png`: tavernaen med varm glød fra vinduene,
+  gullfarget glow fra lanterne-området over skiltet, sterk varm glød
+  fra den åpne døren. Spilleren står i døråpningen og får varm rim-
+  light.
+- `village_lit_exchange.png`: børshuset med tydelig kald blå glød fra
+  midtvinduet, søylene får subtil blå belysning. Kald autoritær ro i
+  kontrast til tavernaen.
+- Månen forblir dominerende i bakgrunnen.
+
+Den tematiske varm/kald-kontrasten fra SVG-referansen er nå synlig.
+
+### Konklusjon
+
+Ytelse- og minnebudsjettet holder lett. Klar for Commit 6 (økonomi og
+børs-overlay).
+

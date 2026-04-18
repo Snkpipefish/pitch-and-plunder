@@ -31,6 +31,7 @@ from scenes.parallax_test import (
     _build_background_layer,
     _build_empty_layer,
 )
+from systems.lighting import Light, LightingSystem
 from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
 
 
@@ -268,6 +269,44 @@ class VillageScene(BaseScene):
             NPC.from_data(npc_db["hawkins"], HAWKINS_X, float(player_y)),
         ]
 
+        # Dynamisk lyssystem. 3 lys, 3 unike gradienter.
+        self._lighting = LightingSystem()
+        # Tavern-svingende lanterne (over skiltet, rett under tak-overhenget)
+        lantern_x = TAVERN_X + TAVERN_W / 2
+        lantern_y = TAVERN_Y + 10
+        # Tavern-dør-glød (midten av doeraapningen)
+        tavern_door_x = TAVERN_X + TAVERN_W / 2
+        tavern_door_y = GROUND_TOP_Y - 16
+        # Børshusets midtvindu
+        exchange_window_x = EXCHANGE_X + EXCHANGE_W / 2
+        exchange_window_y = EXCHANGE_Y + 42
+        self._lights: list[Light] = [
+            Light(
+                x=lantern_x,
+                y=lantern_y,
+                radius=40,
+                color=constants.COLOR_LANTERN_BRIGHT,
+                swing_amplitude=3.0,
+                swing_period=2.0,
+            ),
+            Light(
+                x=tavern_door_x,
+                y=tavern_door_y,
+                radius=70,
+                color=constants.COLOR_FLAME,
+            ),
+            Light(
+                x=exchange_window_x,
+                y=exchange_window_y,
+                radius=60,
+                color=constants.COLOR_STONE_LIT,
+            ),
+        ]
+        self._lighting.prewarm(
+            [(light.radius, light.color) for light in self._lights]
+        )
+        self._elapsed: float = 0.0
+
         # Hint-tekst (cachet)
         self._hint = font.render(
             "A/D gaa  F11 fullskjerm  ESC avslutt",
@@ -297,6 +336,7 @@ class VillageScene(BaseScene):
     def update(self, dt: float) -> None:
         self._player.update(dt, self._player_min_x, self._player_max_x)
         self._center_camera_on_player()
+        self._elapsed += dt
 
     def _center_camera_on_player(self) -> None:
         # Kamera sentrerer spilleren horisontalt; klamping gjøres av Camera
@@ -307,9 +347,9 @@ class VillageScene(BaseScene):
 
     def draw(self, surface: pygame.Surface) -> None:
         cam_x = self._camera.x
-        # Bakgrunn + gameplay-lag
+        # 1) Bakgrunn + gameplay-lag
         self._renderer.draw(surface, cam_x, start=0, stop=2)
-        # Entiteter (spiller og NPC-er) i verdens-koordinater.
+        # 2) Entiteter (spiller og NPC-er) i verdens-koordinater.
         # Bruk fblits for én batch; ingen overlap-sortering er nødvendig
         # i Fase 1 siden alle står på samme gatenivå.
         cx = int(cam_x)
@@ -320,7 +360,10 @@ class VillageScene(BaseScene):
             (self._player.sprite, (int(self._player.x) - cx, int(self._player.y)))
         )
         surface.fblits(batch)
-        # Forgrunnslag
-        self._renderer.draw(surface, cam_x, start=2, stop=3)
-        # Hint
+        # 3) Dynamiske lys (BLEND_RGB_ADD) – legger seg over bygninger og
+        # entiteter slik at lyset "faller på" spilleren.
+        self._lighting.draw(surface, self._lights, cam_x, self._elapsed)
+        # 4) HUD / hint
         surface.blit(self._hint, self._hint_pos)
+        # 5) Forgrunnslag
+        self._renderer.draw(surface, cam_x, start=2, stop=3)
