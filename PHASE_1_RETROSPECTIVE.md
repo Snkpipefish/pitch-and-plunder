@@ -175,8 +175,75 @@ Ting som ble enklere enn spec / må ryddes før Fase 3–4:
 - **Hint-tekst er ASCII-only.** "aa" i stedet for "å" etc. Public Pixel-
   fontens glyph-dekning er ikke verifisert for norsk. Bør testes eller
   byttes til en font med full latin-1.
+  *Oppdatert i Commit 10: Public Pixel støtter både norsk tegn og
+  piler – hele UI bruker nå æøå og ↑↓←→.*
 
 ---
 
-Hvis du vil diskutere noen av observasjonene, er jeg klar. Fase 2 er ikke
-påbegynt og blir ikke startet uten eksplisitt godkjenning.
+## Post-polish observasjoner
+
+To polish-runder etter den formelle Fase 1-avslutningen (Commit 8):
+
+**Commit 10 – første polish-runde.** Ut fra skjermbilder fra spiller:
+- Månens gradient viste synlige konsentriske ringer (6-trinns lerp) →
+  erstattet med 1 px-steps smoothstep fra bakgrunnshimmel til halo til
+  kjerne.
+- Månen var plassert slik at den drev over tomt hav når spilleren var
+  ved tavernaen → re-anchor til bakgrunns-layer_x=720 slik at den er
+  skjult ved tavernaen og dominerer over Børshuset.
+- Tåken var ikke synlig (for mørk mot bakgrunn, for treg, for få
+  partikler) → fargen løftet, antall 4 → 8, hastighet 8–12 → 15–20 px/s,
+  spredd over hele verden.
+- Børs-hint kuttes ved panelkanten og manglet norsk tegn → Public Pixel
+  verifisert å støtte æøå + ↑↓←→; hint forkortet med piler.
+- **Kritisk gameplay-mangel**: spilleren kunne ikke se hva hun hadde
+  betalt for varer. Flat `dict[str, int]`-inventar erstattet med
+  `InventoryItem(quantity, avg_cost)`; kjøp oppdaterer vektet
+  gjennomsnittlig innkjøpspris; salg beholder snittet uendret. Børsen
+  viser "5 @ 37.00" i Antall-kolonnen. GameState bumpet til v2 med
+  graceful v1-migrering.
+
+**Commit 11 – andre polish-runde.** Ut fra ny spilletesting av 10:
+- Månen var blitt for "sol-aktig" — stor myk glød dominerte hele
+  himmelarealet → skarp 28 px kjerneskive uten gradient + subtil halo
+  ut til r=30 med maks 40% blend. Nå en klar måneskive med diskret
+  antydning, ikke en diffus sky.
+- Tåken "marsjerte som sauer på parade" — symmetriske ellipser i samme
+  høyde, raske og synkrone → hastighet 6–10 px/s (individuell per
+  partikkel), y-jitter 325–350, amøbe-form via 4 overlappende sirkler
+  per sprite (3 seedede varianter), BLEND_RGB_ADD-tegning med
+  additiv-farge (14, 18, 28) slik at overlapp stables i tetthet
+  istedenfor å annullere. Tåken puster nå som atmosfære, ikke som
+  partikler.
+
+**Sluttresultat.** Signaturscenen fra `references/tortuga_signature_scene.svg`
+er ærlig realisert: månen henger over Børshuset (ikke over tavernaen), den
+varme tavernaen til venstre og den kalde institusjonen til høyre har
+kontrasterende lys som forblir rene gjennom tåkelaget, og den subtile
+mist-driften gir scenen pustende dybde uten å lyve om palettens kalde
+identitet.
+
+**Gameplay-observasjon fra spiller** (ikke bug, strukturelt design):
+
+> "Markedet er for lett å utnytte – priser skifter raskt og ingen reell
+> risiko gjør arbitrasje trivielt."
+
+Dette er et økonomi-design-problem, ikke en implementasjonsbug. I Fase 1
+har vi bygget den *mekaniske* børsen (pris-drift, kjøp/salg, spread,
+innkjøpspris-historikk), men den har ingen friksjon eller risiko utover
+tilfeldig drift. Ekte arbitrasje-gameplay krever:
+
+- Begrenset lager/etterspørsel per vare (kjøp flytter prisen selv)
+- Transport-risiko (å frakte sukker fra plantasjer koster tid/piratfare)
+- Konsekvenser av markedsmanipulasjon (guvernør-mistanke når piratvirksomhet
+  lar prisen stige raskt)
+- Informasjon ikke er gratis (nyheter/rykter om priser har kost eller
+  kommer med forsinkelse)
+
+Adresseres i Fase 2 gjennom utvidet økonomisystem sammen med verdenskart
+og seiling. Se `PROSJEKT.md` CHANGELOG v2.2.
+
+---
+
+Fase 1 er formelt lukket. Fase 2-planlegging skjer eksplisitt gjennom
+samtale med bruker; ingen kode før den diskusjonen.
