@@ -47,15 +47,38 @@ def _build_sky_gradient(width: int, height: int, horizon_y: int) -> pygame.Surfa
     return surf
 
 
-def _bake_stars(surf: pygame.Surface, horizon_y: int, seed: int = 42) -> None:
-    """Streng stjerner i øvre del av himmelen (deterministisk via seed)."""
+def _bake_stars(
+    surf: pygame.Surface,
+    horizon_y: int,
+    seed: int = 42,
+    intensity: float = 1.0,
+) -> None:
+    """Streng stjerner i øvre del av himmelen (deterministisk via seed).
+
+    `intensity` er 0.0 (ingen stjerner tegnet) til 1.0 (full lysstyrke).
+    Mellomverdier interpolerer hver stjerne-farge mot himmel-fargen på sin
+    posisjon, slik at stjernene fader inn/ut glatt mot bakgrunnen.
+    """
+    if intensity <= 0.0:
+        return
     rng = random.Random(seed)
     width = surf.get_width()
+    star_color = constants.COLOR_MOON_CORE
     for _ in range(14):
         x = rng.randint(4, width - 5)
         y = rng.randint(4, horizon_y - 30)
         radius = rng.choice([1, 1, 1, 2])
-        pygame.draw.circle(surf, constants.COLOR_MOON_CORE, (x, y), radius)
+        if intensity >= 1.0:
+            color = star_color
+        else:
+            # Lerp himmel-pixel mot stjerne-farge ved intensity.
+            sky_pixel = surf.get_at((x, y))
+            color = (
+                int(sky_pixel[0] * (1.0 - intensity) + star_color[0] * intensity),
+                int(sky_pixel[1] * (1.0 - intensity) + star_color[1] * intensity),
+                int(sky_pixel[2] * (1.0 - intensity) + star_color[2] * intensity),
+            )
+        pygame.draw.circle(surf, color, (x, y), radius)
 
 
 def _bake_distant_islands(surf: pygame.Surface, horizon_y: int) -> None:
@@ -186,3 +209,175 @@ def build_empty_layer(speed: float) -> pygame.Surface:
     surf.fill(_COLORKEY_MAGENTA)
     surf.set_colorkey(_COLORKEY_MAGENTA)
     return surf
+
+
+# -----------------------------------------------------------------------------
+# Fase 2A Commit 5B: 6 pre-rendrede bakgrunnsvarianter for dag-natt-syklus.
+# Brukes av VillageRenderer via cross-fade mellom de to nærmeste anker-
+# fraksjonene basert på DaySnapshot.day_fraction. Celestial (sol/måne)
+# rendres som separat overlay og IKKE bakt inn i noen variant.
+# -----------------------------------------------------------------------------
+
+#: Linja mellom himmel og hav (i intern RENDER_HEIGHT-skala). Samme formel
+#: som brukes av den originale build_background_layer() for konsistens.
+_HORIZON_Y_RATIO = 0.58
+
+
+def _lerp_rgb(
+    a: tuple[int, int, int],
+    b: tuple[int, int, int],
+    t: float,
+) -> tuple[int, int, int]:
+    if t <= 0.0:
+        return a
+    if t >= 1.0:
+        return b
+    return (
+        int(a[0] * (1.0 - t) + b[0] * t),
+        int(a[1] * (1.0 - t) + b[1] * t),
+        int(a[2] * (1.0 - t) + b[2] * t),
+    )
+
+
+def _build_parameterized_sky(
+    width: int,
+    height: int,
+    horizon_y: int,
+    top_color: tuple[int, int, int],
+    horizon_color: tuple[int, int, int],
+    sea_color: tuple[int, int, int],
+) -> pygame.Surface:
+    """Lineær himmelgradient fra topp-farge til horisont-farge, og sjø nedenfor.
+
+    Enklere enn `_build_sky_gradient` (som har to-trinns interpolasjon med
+    fast palett). Her gis alle farger eksplisitt slik at hver backdrop-
+    variant kan bruke sin egen palett.
+    """
+    surf = pygame.Surface((width, height)).convert()
+    for y in range(horizon_y):
+        t = y / horizon_y
+        r = int(top_color[0] * (1 - t) + horizon_color[0] * t)
+        g = int(top_color[1] * (1 - t) + horizon_color[1] * t)
+        bl = int(top_color[2] * (1 - t) + horizon_color[2] * t)
+        pygame.draw.line(surf, (r, g, bl), (0, y), (width - 1, y))
+    pygame.draw.rect(
+        surf, sea_color, (0, horizon_y, width, height - horizon_y)
+    )
+    return surf
+
+
+def build_backdrop_variants() -> list[tuple[float, pygame.Surface]]:
+    """Bygg 6 pre-rendrede bakgrunner for dag-natt-syklus.
+
+    Returnerer en liste med `(day_fraction, surface)`-tupler sortert
+    stigende på fraksjon. Anker-fraksjonene er valgt slik at hvert av
+    de tre DayCycle-fasene (morgen, dag, natt) får tilstrekkelig
+    sampling for cross-fade.
+
+    Sol/måne er IKKE bakt inn i noen variant – rendring av himmellegeme
+    gjøres av `entities.celestial.Celestial` som overlay.
+
+    Anker-fraksjoner (samme navn som i spec):
+    - 0.00 bg_000: midnatt, full stjerner
+    - 0.08 bg_008: morgengry starter, full stjerner, antydning av varme
+    - 0.17 bg_017: daggry fullført, stjerner halvveis ute
+    - 0.50 bg_050: midt på dagen, ingen stjerner
+    - 0.83 bg_083: solnedgang begynner, brennende horisont
+    - 0.92 bg_092: solnedgang fullført, stjerner halvveis inn
+    """
+    speed = 0.2
+    width = required_layer_width(
+        constants.WORLD_WIDTH, constants.RENDER_WIDTH, speed
+    )
+    height = constants.RENDER_HEIGHT
+    horizon_y = int(height * _HORIZON_Y_RATIO)
+
+    # (fraction, top_color, horizon_color, sea_color, star_intensity, seed)
+    # Seed holdes konstant på 42 slik at stjerne-posisjoner er identiske
+    # på tvers av varianter – ellers ville cross-fade "flimre" stjernene.
+    anchors: list[
+        tuple[
+            float,
+            tuple[int, int, int],
+            tuple[int, int, int],
+            tuple[int, int, int],
+            float,
+        ]
+    ] = [
+        # 0.00 midnatt: natt-palett, full stjerner
+        (
+            0.00,
+            constants.COLOR_SKY_DEEP,
+            constants.COLOR_SKY_HORIZON,
+            constants.COLOR_SEA_DEEP,
+            1.0,
+        ),
+        # 0.08 morgengry starter: fortsatt mørkt men med varm antydning på
+        # horisonten. Topp er lik mid-himmel, horisont er blanding av
+        # natt-horisont og dag-horisont (20% mot dag).
+        (
+            0.08,
+            constants.COLOR_SKY_MID,
+            _lerp_rgb(
+                constants.COLOR_SKY_HORIZON,
+                constants.COLOR_SKY_DAY_HORIZON,
+                0.2,
+            ),
+            constants.COLOR_SEA_DEEP,
+            1.0,
+        ),
+        # 0.17 daggry fullført: klarblå dag-topp med varm peach-horisont.
+        # Topp MÅ være klart lysere enn bg_008 for å unngå at morgen-
+        # progresjonen ser ut som en "dip" (numerisk monoton, men
+        # perseptuelt dunkel hvis STONE_LIGHT brukes). Kraftigere warm
+        # tint på horisont (30% mot SUN_DAWN) gir tydelig daggry-feel.
+        (
+            0.17,
+            constants.COLOR_SKY_DAY_TOP,
+            _lerp_rgb(
+                constants.COLOR_SKY_DAY_HORIZON,
+                constants.COLOR_SUN_DAWN,
+                0.3,
+            ),
+            constants.COLOR_SEA_MID,
+            0.5,
+        ),
+        # 0.50 midt på dagen: full dag-palett, sjø lysere
+        (
+            0.50,
+            constants.COLOR_SKY_DAY_TOP,
+            constants.COLOR_SKY_DAY_HORIZON,
+            constants.COLOR_SEA_LIGHT,
+            0.0,
+        ),
+        # 0.83 solnedgang begynner: skumring, brennende horisont
+        (
+            0.83,
+            constants.COLOR_SKY_DUSK_TOP,
+            constants.COLOR_SKY_DUSK_HORIZON,
+            constants.COLOR_SEA_MID,
+            0.0,
+        ),
+        # 0.92 solnedgang fullført: mørkt med antydning av rødt i horisont
+        (
+            0.92,
+            constants.COLOR_SKY_MID,
+            _lerp_rgb(
+                constants.COLOR_SKY_HORIZON,
+                constants.COLOR_SKY_DUSK_HORIZON,
+                0.3,
+            ),
+            constants.COLOR_SEA_DEEP,
+            0.5,
+        ),
+    ]
+
+    variants: list[tuple[float, pygame.Surface]] = []
+    for frac, top_c, horizon_c, sea_c, star_intensity in anchors:
+        surf = _build_parameterized_sky(
+            width, height, horizon_y, top_c, horizon_c, sea_c
+        )
+        _bake_stars(surf, horizon_y, intensity=star_intensity)
+        _bake_distant_islands(surf, horizon_y)
+        variants.append((frac, surf))
+    return variants

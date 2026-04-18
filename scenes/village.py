@@ -16,11 +16,12 @@ import os
 import pygame
 
 import constants
+from entities.celestial import Celestial
 from entities.npc import NPC
 from entities.player import Player
 from scenes.base_scene import BaseScene
 from scenes.exchange import ExchangeOverlay
-from scenes.parallax_backdrops import build_background_layer, build_empty_layer
+from scenes.parallax_backdrops import build_backdrop_variants, build_empty_layer
 from scenes.village_buildings import (
     EXCHANGE_CENTER_X,
     EXCHANGE_W,
@@ -34,6 +35,7 @@ from scenes.village_buildings import (
 )
 from scenes.village_renderer import VillageRenderer
 from systems import save as save_module
+from systems.day_cycle import DayCycle
 from systems.economy import Market
 from systems.lighting import Light, LightingSystem
 from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
@@ -74,11 +76,14 @@ class VillageScene(BaseScene):
         self._font = font
         self._state = state
 
-        # Parallax-lag. Bakgrunn og tom forgrunn deles med parallax_test.
-        bg_layer = ParallaxLayer(build_background_layer(), speed=0.2)
+        # Parallax-lag. Bakgrunnen er nå dynamisk (6 varianter med cross-
+        # fade styrt av DayCycle); ParallaxRenderer håndterer kun gameplay
+        # og forgrunn. Backdrop-rendering skjer i VillageRenderer.
+        self._backdrops = build_backdrop_variants()
         gameplay_layer = ParallaxLayer(build_village_gameplay_layer(), speed=1.0)
         fg_layer = ParallaxLayer(build_empty_layer(1.3), speed=1.3)
-        parallax_renderer = ParallaxRenderer([bg_layer, gameplay_layer, fg_layer])
+        parallax_renderer = ParallaxRenderer([gameplay_layer, fg_layer])
+        self._celestial = Celestial()
 
         self._camera = Camera(constants.WORLD_WIDTH, constants.RENDER_WIDTH)
 
@@ -200,8 +205,14 @@ class VillageScene(BaseScene):
             pos=(8, constants.RENDER_HEIGHT - 12),
         )
 
-        # Render-komposisjon (parallax + entiteter + lys + partikler + hint)
-        self._renderer = VillageRenderer(parallax_renderer, hint)
+        # Render-komposisjon (backdrops + celestial + parallax + entiteter +
+        # lys + partikler + hint)
+        self._renderer = VillageRenderer(
+            backdrops=self._backdrops,
+            parallax_renderer=parallax_renderer,
+            celestial=self._celestial,
+            hint=hint,
+        )
 
     # --- Input ---
 
@@ -288,10 +299,14 @@ class VillageScene(BaseScene):
     # --- Rendering ---
 
     def draw(self, surface: pygame.Surface) -> None:
+        # Beregn dag-natt-snapshot én gang per frame og send til renderen.
+        # DayCycle er stateless, så dette er billig (~5 μs).
+        snapshot = DayCycle.compute_snapshot(self._state.clock)
         # Verdens-laget (bakgrunn → forgrunn) tegnes av renderen.
         self._renderer.draw(
             surface=surface,
             cam_x=self._camera.x,
+            snapshot=snapshot,
             player=self._player,
             npcs=self._npcs,
             lighting=self._lighting,

@@ -84,9 +84,12 @@ COLOR_FOG = (58, 58, 74)
 COLOR_SUN_DAWN = COLOR_LANTERN           # (255, 179, 71)  varm lav sol
 COLOR_SUN_DAY = COLOR_MOON_CORE          # (255, 248, 231) hvit middag
 COLOR_SUN_DUSK = COLOR_EMBER             # (217, 108, 46)  kveld
-# Himmelfarger gjennom dagen (topp og horisont).
-COLOR_SKY_DAY_TOP = COLOR_STONE_LIGHT        # (61, 70, 96)    mellomblå
-COLOR_SKY_DAY_HORIZON = COLOR_STONE_LIT      # (107, 139, 199) lys blå
+# Himmelfarger gjennom dagen (topp og horisont). Matcher review-spec
+# (#6b8bc7 = STONE_LIT som dag-topp); nødvendig for monoton lysning
+# gjennom morgen-fasen. Tidligere (STONE_LIGHT) ga dagen et dunet
+# overcast-preg i stedet for klarblå himmel.
+COLOR_SKY_DAY_TOP = COLOR_STONE_LIT          # (107, 139, 199) klarblå
+COLOR_SKY_DAY_HORIZON = COLOR_STONE_BRIGHT   # (139, 168, 214) lys blå horisont
 COLOR_SKY_DUSK_TOP = COLOR_COAT              # (61, 53, 72)    dempet lilla
 COLOR_SKY_DUSK_HORIZON = COLOR_EMBER         # (217, 108, 46)  brennende horisont
 # Natthimmel og måne finnes allerede via COLOR_SKY_DEEP/MID/HORIZON + COLOR_MOON_CORE

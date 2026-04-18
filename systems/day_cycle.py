@@ -1,27 +1,32 @@
 """Dag-natt-syklus.
 
 Ren beregning: gitt en `GameClock`, returner en `DaySnapshot` som beskriver
-visuell state (himmelfarge, sol/måne-posisjon og -farge, stjerne-alpha).
-Renderen tar snapshotten og tegner scenen deretter.
+visuell state (himmelfarge, sol/måne-posisjon og -farge, stjerne-alpha,
+celestial-alpha for fading).
 
 Designvalg:
 - **Stateless**. `DayCycle.compute_snapshot()` er en ren funksjon av klokken.
-  Scene/renderer sporer selv om fasen har skiftet (f.eks. via forrige snapshot
-  eller via clock-events). Holder systemet testbart uten fixtures.
-- **Proporsjoner, ikke absolutte sekunder**. Fase-lengder er brøker av
-  `clock.seconds_per_day` slik at endring av dag-lengde (f.eks. Commit 8
-  polish eller tester med akselerert tid) automatisk skalerer fasene.
-- **Paletten er låst** til farger i `constants.py` (30-paletten i PROSJEKT.md).
-  Interpolering skjer kun mellom disse ankerfargene, ikke mot vilkårlige RGB.
+- **Himmel-fase** (morning/day/night) er proporsjoner av dagen. Fase bruker
+  `MORNING_FRAC` = 1/6 og `NIGHT_FRAC` = 1/6 av `seconds_per_day`.
+- **Celestial-vinduer** er uavhengige av fase-grensene (bruker explicit
+  fraksjoner fra review-spec):
+    - Moon window:  [0.00, 0.12) + [0.88, 1.00)   (wrapping over midnatt)
+    - Sun window:   [0.17, 0.83)
+    - Gap windows:  [0.12, 0.17) + [0.83, 0.88)   (ingen celestial synlig)
+  Hvorfor? Fysisk korrekt: måne er oppe om natten og i tidlig daggry;
+  solen kommer opp først når daggry er fullført. Gap-vinduene representerer
+  den "tomme himmelen" rett før solen kommer og rett etter den går ned.
+- **Sol-farge 3-stegs**:
+    - [0.17, 0.25): SUN_DAWN → SUN_DAY (varm innledning)
+    - [0.25, 0.65): SUN_DAY (hvit midt på dagen, konstant)
+    - [0.65, 0.83): SUN_DAY → SUN_DUSK (orange mot kvelden)
+- **Moon fade**: måne fader ut [0.08, 0.12) og fader inn [0.88, 0.92).
 
-Fase-oppdeling (brøker av én dag):
+Fase-oppdeling (for himmelfarge):
 
-    0.0    ... 1/6    morning  — himmel lysner, sol stiger fra høyre
-    1/6    ... 5/6    day      — sol beveger seg over himmelen mot venstre
-    5/6    ... 1.0    night    — mørk indigo, måne på venstre side,
-                                 stjerner synlige
-
-Spec-verdier (ved seconds_per_day = 180): morning 30 s, day 120 s, night 30 s.
+    0.0   ... 1/6    morning  — himmel lysner, stjerner fader ut
+    1/6   ... 5/6    day      — dag-palett, glir mot skumring i andre halvdel
+    5/6   ... 1.0    night    — skumring → natt i første halvdel, holdes resten
 """
 
 from __future__ import annotations
@@ -35,40 +40,57 @@ if TYPE_CHECKING:
     from systems.game_clock import GameClock
 
 
-#: Proporsjonell fase-oppdeling. Summerer til 1.0.
+#: Proporsjonell fase-oppdeling for himmelfarge.
 MORNING_FRAC = 1.0 / 6.0
 DAY_FRAC = 4.0 / 6.0
 NIGHT_FRAC = 1.0 / 6.0
+MORNING_END = MORNING_FRAC
+DAY_END = MORNING_FRAC + DAY_FRAC
 
-#: Kumulative fase-grenser (dag-brøk).
-MORNING_END = MORNING_FRAC                       # 0.1667
-DAY_END = MORNING_FRAC + DAY_FRAC                # 0.8333
-# NIGHT_END = 1.0 (implisitt)
+# --- Celestial-vinduer (review-spec) ---
+#: Måne synlig på full styrke til og med denne fraksjonen (før morgen-fade).
+MOON_FADE_OUT_START = 0.08
+#: Måne ute av syne (alpha=0) fra og med denne fraksjonen.
+MOON_FADE_OUT_END = 0.12
+#: Sol begynner å være synlig (full alpha) fra og med denne fraksjonen.
+SUN_VISIBLE_START = 0.17
+#: Sol starter fade-out (alpha 1.0 → 0.0) fra og med denne fraksjonen.
+SUN_FADE_OUT_START = 0.83
+#: Sol fullt ute av syne (alpha=0) fra og med denne fraksjonen.
+SUN_FADE_OUT_END = 0.88
+#: Måne fader inn fra denne fraksjonen.
+MOON_FADE_IN_START = 0.88
+#: Måne på full styrke fra og med denne fraksjonen.
+MOON_FADE_IN_END = 0.92
 
-#: Sol-bane (x,y-fraksjoner av skjerm-bredde/høyde-område). Sol står opp i
-#: høyre kant av skjermen, buer til venstre over hele dagen, går ned til
-#: venstre ved kveld. Y er målt fra horisont-toppen: 1.0 = høyt på himmelen,
-#: 0.1 = like over horisonten.
-SUN_X_DAWN = 0.9
+# --- Sol-farge-grenser (3-stegs) ---
+SUN_COLOR_WARM_END = 0.25     # Slutt på varm innledning
+SUN_COLOR_DUSK_START = 0.65   # Start på orange-glidning mot dusk
+
+# --- Sol-bane (skjerm-fraksjoner) ---
+SUN_X_DAWN = 0.9  # Sol stiger fra høyre
 SUN_X_NOON = 0.5
-SUN_X_DUSK = 0.1
-SUN_Y_DAWN = 0.15
-SUN_Y_NOON = 0.85
-SUN_Y_DUSK = 0.15
+SUN_X_DUSK = 0.1  # Sol går ned mot venstre
+SUN_Y_DAWN = 0.15   # Like over horisonten
+SUN_Y_NOON = 0.85   # Nær topp av himmelen (parabel-topp)
 
-#: Måne-plassering (konstant). Tematisk hører månen til Børshuset; posisjonen
-#: matcher nåværende statiske måne (over børshuset på skjermen).
+# --- Måne-plassering ---
+#: MOON_Y=0.65 gir screen_y ≈ 72, matcher den originale statiske månen
+#: fra Fase 1.
 MOON_X = 0.75
-MOON_Y = 0.25
+MOON_Y = 0.65
 
 
 @dataclass(frozen=True)
 class DaySnapshot:
     """Visuell state for ett tidspunkt i døgnet.
 
-    `celestial_x` og `celestial_y` er skjerm-relative fraksjoner (0.0–1.0).
-    Renderen skalerer mot faktisk skjerm-geometri.
-    `star_alpha` er 0.0 (ingen stjerner synlig) til 1.0 (full natt).
+    `celestial_x/y` er skjerm-relative fraksjoner (0.0–1.0).
+    `celestial_alpha` er 0.0 (sprite ikke synlig) til 1.0 (full styrke);
+    brukt for fade inn/ut ved celestial-vindu-grensene.
+    `star_alpha` er 0.0 (ingen stjerner) til 1.0 (full natt).
+    `day_fraction` matcher `clock.progress_fraction()` (renderen bruker det
+    til å velge backdrop-varianter for cross-fade).
     """
 
     phase: str  # "morning" | "day" | "night"
@@ -78,7 +100,9 @@ class DaySnapshot:
     celestial_y: float
     celestial_color: tuple[int, int, int]
     celestial_is_sun: bool
+    celestial_alpha: float
     star_alpha: float
+    day_fraction: float
 
 
 def _lerp_color(
@@ -86,7 +110,6 @@ def _lerp_color(
     b: tuple[int, int, int],
     t: float,
 ) -> tuple[int, int, int]:
-    """Lineær interpolering mellom to RGB-tripler. t klampes til [0, 1]."""
     if t <= 0.0:
         return a
     if t >= 1.0:
@@ -106,36 +129,17 @@ def _lerp(a: float, b: float, t: float) -> float:
     return a * (1.0 - t) + b * t
 
 
-class DayCycle:
-    """Stateless beregner av visuell state fra klokke-posisjon."""
+# -----------------------------------------------------------------------------
+# Himmel-farge (avhenger av fase)
+# -----------------------------------------------------------------------------
 
-    # Fase-grenser eksponert som klasse-konstanter slik at tester kan lese
-    # dem uten å duplikere magic numbers.
-    MORNING_END_FRAC: float = MORNING_END
-    DAY_END_FRAC: float = DAY_END
+def _morning_sky(
+    f: float,
+) -> tuple[tuple[int, int, int], tuple[int, int, int], float]:
+    """Morgen-fase sky. `f` er 0.0 (start) til 1.0 (slutt).
 
-    @staticmethod
-    def compute_snapshot(clock: "GameClock") -> DaySnapshot:
-        """Returner DaySnapshot for klokkens nåværende posisjon.
-
-        Bruker `clock.progress_fraction()` som input; tåler alle gyldige
-        klokke-tilstander (inkl. degenerated seconds_per_day=0 fra clock-
-        default-factory).
-        """
-        t = clock.progress_fraction()
-
-        if t < MORNING_END:
-            return _morning_snapshot(t / MORNING_FRAC)
-        if t < DAY_END:
-            return _day_snapshot((t - MORNING_END) / DAY_FRAC)
-        return _night_snapshot((t - DAY_END) / NIGHT_FRAC)
-
-
-def _morning_snapshot(f: float) -> DaySnapshot:
-    """Morgenfase. `f` er 0.0 (daggry start) til 1.0 (morgen slutter).
-
-    Himmelen glir fra natt-palett til dag-palett. Solen står opp fra høyre,
-    stjernene fader ut.
+    Sky interpolerer monotont fra natt-palett mot dag-palett.
+    Stjerner fader ut lineært.
     """
     sky_top = _lerp_color(
         constants.COLOR_SKY_DEEP, constants.COLOR_SKY_DAY_TOP, f
@@ -143,77 +147,41 @@ def _morning_snapshot(f: float) -> DaySnapshot:
     sky_horizon = _lerp_color(
         constants.COLOR_SKY_HORIZON, constants.COLOR_SKY_DAY_HORIZON, f
     )
-    # Sol-farge: varm daggry → mot hvit middag
-    celestial_color = _lerp_color(
-        constants.COLOR_SUN_DAWN, constants.COLOR_SUN_DAY, f
-    )
-    celestial_x = _lerp(SUN_X_DAWN, SUN_X_DAWN - 0.1, f)  # 0.9 → 0.8
-    celestial_y = _lerp(SUN_Y_DAWN, SUN_Y_DAWN + 0.25, f)  # 0.15 → 0.4
-    return DaySnapshot(
-        phase="morning",
-        sky_top_color=sky_top,
-        sky_horizon_color=sky_horizon,
-        celestial_x=celestial_x,
-        celestial_y=celestial_y,
-        celestial_color=celestial_color,
-        celestial_is_sun=True,
-        star_alpha=1.0 - f,
-    )
+    return sky_top, sky_horizon, 1.0 - f
 
 
-def _day_snapshot(f: float) -> DaySnapshot:
-    """Dagfase. `f` er 0.0 (morgen slutt) til 1.0 (kveld starter).
+def _day_sky(
+    f: float,
+) -> tuple[tuple[int, int, int], tuple[int, int, int], float]:
+    """Dag-fase sky. `f` er 0.0 (morgen slutt) til 1.0 (kveld starter).
 
-    Himmelen går fra dag-palett mot skumring. Solen buer over himmelen
-    fra 0.8 → 0.5 → 0.2 i x, med parabolsk y (høyest ved f=0.5).
+    Første halvdel: ren dag-palett. Andre halvdel: glir mot skumring.
+    Ingen stjerner.
     """
-    # Himmel: dag-palett i første halvdel, glir mot skumring i andre halvdel
     if f < 0.5:
-        # Ingen merkbar endring innen første halvdel; holder dag-palett
-        sky_top = constants.COLOR_SKY_DAY_TOP
-        sky_horizon = constants.COLOR_SKY_DAY_HORIZON
-    else:
-        # Andre halvdel: glir fra dag mot skumring
-        k = (f - 0.5) / 0.5
-        sky_top = _lerp_color(
-            constants.COLOR_SKY_DAY_TOP, constants.COLOR_SKY_DUSK_TOP, k
+        return (
+            constants.COLOR_SKY_DAY_TOP,
+            constants.COLOR_SKY_DAY_HORIZON,
+            0.0,
         )
-        sky_horizon = _lerp_color(
-            constants.COLOR_SKY_DAY_HORIZON, constants.COLOR_SKY_DUSK_HORIZON, k
-        )
-
-    # Sol-farge: hvit middag → brennende kveld (lineært gjennom dagen)
-    celestial_color = _lerp_color(
-        constants.COLOR_SUN_DAY, constants.COLOR_SUN_DUSK, f
+    k = (f - 0.5) / 0.5
+    sky_top = _lerp_color(
+        constants.COLOR_SKY_DAY_TOP, constants.COLOR_SKY_DUSK_TOP, k
     )
-
-    # Sol-x: lineært fra 0.8 til 0.2 over hele dagfasen
-    celestial_x = _lerp(SUN_X_NOON + 0.3, SUN_X_NOON - 0.3, f)
-
-    # Sol-y: parabel med topp ved f=0.5. y = y_low + (y_high - y_low) * 4f(1-f)
-    parabola = 4.0 * f * (1.0 - f)
-    celestial_y = SUN_Y_DAWN + (SUN_Y_NOON - SUN_Y_DAWN) * parabola
-
-    return DaySnapshot(
-        phase="day",
-        sky_top_color=sky_top,
-        sky_horizon_color=sky_horizon,
-        celestial_x=celestial_x,
-        celestial_y=celestial_y,
-        celestial_color=celestial_color,
-        celestial_is_sun=True,
-        star_alpha=0.0,
+    sky_horizon = _lerp_color(
+        constants.COLOR_SKY_DAY_HORIZON, constants.COLOR_SKY_DUSK_HORIZON, k
     )
+    return sky_top, sky_horizon, 0.0
 
 
-def _night_snapshot(f: float) -> DaySnapshot:
-    """Nattfase. `f` er 0.0 (kveld starter) til 1.0 (natt slutter).
+def _night_sky(
+    f: float,
+) -> tuple[tuple[int, int, int], tuple[int, int, int], float]:
+    """Natt-fase sky. `f` er 0.0 (kveld starter) til 1.0 (natt slutter).
 
-    Himmelen glir fra skumring til full natt i første halvdel, holdes i
-    natt-palett resten av nattfasen. Månen er på plass over Børshuset.
-    Stjernene fader inn i første halvdel.
+    Første halvdel: skumring → natt (stjerner fader inn). Andre halvdel:
+    fullt natt-palett.
     """
-    # Første halvdel av natten: skumring → full natt. Andre halvdel: holdes.
     if f < 0.5:
         k = f / 0.5
         sky_top = _lerp_color(
@@ -222,19 +190,169 @@ def _night_snapshot(f: float) -> DaySnapshot:
         sky_horizon = _lerp_color(
             constants.COLOR_SKY_DUSK_HORIZON, constants.COLOR_SKY_HORIZON, k
         )
-        star_alpha = k
-    else:
-        sky_top = constants.COLOR_SKY_DEEP
-        sky_horizon = constants.COLOR_SKY_HORIZON
-        star_alpha = 1.0
-
-    return DaySnapshot(
-        phase="night",
-        sky_top_color=sky_top,
-        sky_horizon_color=sky_horizon,
-        celestial_x=MOON_X,
-        celestial_y=MOON_Y,
-        celestial_color=constants.COLOR_MOON_CORE,
-        celestial_is_sun=False,
-        star_alpha=star_alpha,
+        return sky_top, sky_horizon, k
+    return (
+        constants.COLOR_SKY_DEEP,
+        constants.COLOR_SKY_HORIZON,
+        1.0,
     )
+
+
+# -----------------------------------------------------------------------------
+# Celestial (uavhengig av fase — basert på global day_fraction)
+# -----------------------------------------------------------------------------
+
+def _celestial_for_fraction(
+    t: float,
+) -> tuple[bool, float, float, tuple[int, int, int], float]:
+    """Returner (is_sun, x, y, color, alpha) for global day_fraction t.
+
+    Celestial-vinduer (review-spec):
+    - [0.00, 0.08):         måne, full styrke
+    - [0.08, 0.12):         måne, fading ut (1.0 → 0.0)
+    - [0.12, 0.17):         ingen celestial (alpha=0)
+    - [0.17, 0.83):         sol (farge og posisjon per _sun_state)
+    - [0.83, 0.88):         ingen celestial (alpha=0)
+    - [0.88, 0.92):         måne, fading inn (0.0 → 1.0)
+    - [0.92, 1.00):         måne, full styrke
+    """
+    # Måne-vinduer først (wrap-around over midnatt)
+    if t < MOON_FADE_OUT_START:
+        # Full måne, første del av natten-etter-midnatt
+        return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0
+
+    if t < MOON_FADE_OUT_END:
+        # Måne fader ut
+        k = (t - MOON_FADE_OUT_START) / (
+            MOON_FADE_OUT_END - MOON_FADE_OUT_START
+        )
+        return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0 - k
+
+    if t < SUN_VISIBLE_START:
+        # Gap mellom måne-set og sol-opp (ingen celestial synlig)
+        return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, 0.0
+
+    if t < SUN_FADE_OUT_START:
+        # Sol synlig, full alpha
+        is_sun, x, y, color = _sun_state(t)
+        return is_sun, x, y, color, 1.0
+
+    if t < SUN_FADE_OUT_END:
+        # Sol synlig men fader ut. Bruker normal sol-posisjon/farge fra
+        # _sun_state (den dekker fraksjonen [0.17, 0.83+] fordi 0.83 er
+        # langt inn i DUSK-fargestadiet), men multiplisert med fade-alpha.
+        k = (t - SUN_FADE_OUT_START) / (
+            SUN_FADE_OUT_END - SUN_FADE_OUT_START
+        )
+        # Bruk posisjon/farge fra like før fade starter (0.83) slik at
+        # solen "henger" ved venstre horisont mens den fader — ikke driver
+        # videre inn mot ikke-eksisterende posisjoner.
+        is_sun, x, y, color = _sun_state(SUN_FADE_OUT_START)
+        return is_sun, x, y, color, 1.0 - k
+
+    if t < MOON_FADE_IN_START:
+        # Numerisk nesten-umulig (SUN_FADE_OUT_END == MOON_FADE_IN_START),
+        # men defensivt: ingen celestial i denne micro-greinen.
+        return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, 0.0
+
+    if t < MOON_FADE_IN_END:
+        # Måne fader inn
+        k = (t - MOON_FADE_IN_START) / (
+            MOON_FADE_IN_END - MOON_FADE_IN_START
+        )
+        return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, k
+
+    # t in [MOON_FADE_IN_END, 1.0)
+    return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0
+
+
+def _sun_state(
+    t: float,
+) -> tuple[bool, float, float, tuple[int, int, int]]:
+    """Sol-posisjon og farge innenfor [SUN_VISIBLE_START, SUN_FADE_OUT_START).
+
+    - Lineær x-bane fra SUN_X_DAWN → SUN_X_DUSK
+    - Parabolsk y-bane, topp ved midten av sol-vinduet
+    - 3-stegs farge:
+        [0.17, 0.25): SUN_DAWN → SUN_DAY (varm innledning)
+        [0.25, 0.65): SUN_DAY hold (hvit midt på dagen)
+        [0.65, 0.83): SUN_DAY → SUN_DUSK (orange mot kvelden)
+    """
+    # Lineær sol-x: 0.9 → 0.1 over hele sol-vinduet
+    span = SUN_FADE_OUT_START - SUN_VISIBLE_START
+    f = (t - SUN_VISIBLE_START) / span  # 0 at sunrise, 1 at sunset
+    x = _lerp(SUN_X_DAWN, SUN_X_DUSK, f)
+    # Parabolsk y: 4f(1-f) har topp 1.0 ved f=0.5
+    parabola = 4.0 * f * (1.0 - f)
+    y = SUN_Y_DAWN + (SUN_Y_NOON - SUN_Y_DAWN) * parabola
+
+    # 3-stegs farge
+    if t < SUN_COLOR_WARM_END:
+        k = (t - SUN_VISIBLE_START) / (SUN_COLOR_WARM_END - SUN_VISIBLE_START)
+        color = _lerp_color(
+            constants.COLOR_SUN_DAWN, constants.COLOR_SUN_DAY, k
+        )
+    elif t < SUN_COLOR_DUSK_START:
+        color = constants.COLOR_SUN_DAY
+    else:
+        k = (t - SUN_COLOR_DUSK_START) / (
+            SUN_FADE_OUT_START - SUN_COLOR_DUSK_START
+        )
+        color = _lerp_color(
+            constants.COLOR_SUN_DAY, constants.COLOR_SUN_DUSK, k
+        )
+
+    return True, x, y, color
+
+
+# -----------------------------------------------------------------------------
+# Public API
+# -----------------------------------------------------------------------------
+
+class DayCycle:
+    """Stateless beregner av visuell state fra klokke-posisjon."""
+
+    MORNING_END_FRAC: float = MORNING_END
+    DAY_END_FRAC: float = DAY_END
+
+    @staticmethod
+    def compute_snapshot(clock: "GameClock") -> DaySnapshot:
+        """Returner DaySnapshot for klokkens nåværende posisjon."""
+        t = clock.progress_fraction()
+
+        # Himmel-farge (fase-basert)
+        if t < MORNING_END:
+            sky_top, sky_horizon, star_alpha = _morning_sky(t / MORNING_FRAC)
+            phase = "morning"
+        elif t < DAY_END:
+            sky_top, sky_horizon, star_alpha = _day_sky(
+                (t - MORNING_END) / DAY_FRAC
+            )
+            phase = "day"
+        else:
+            sky_top, sky_horizon, star_alpha = _night_sky(
+                (t - DAY_END) / NIGHT_FRAC
+            )
+            phase = "night"
+
+        # Celestial (global-fraksjon-basert, uavhengig av fase)
+        (
+            is_sun,
+            cel_x,
+            cel_y,
+            cel_color,
+            cel_alpha,
+        ) = _celestial_for_fraction(t)
+
+        return DaySnapshot(
+            phase=phase,
+            sky_top_color=sky_top,
+            sky_horizon_color=sky_horizon,
+            celestial_x=cel_x,
+            celestial_y=cel_y,
+            celestial_color=cel_color,
+            celestial_is_sun=is_sun,
+            celestial_alpha=cel_alpha,
+            star_alpha=star_alpha,
+            day_fraction=t,
+        )
