@@ -1,0 +1,32 @@
+{
+  "commodities": [
+    {
+      "id": "sugar",
+      "name": "Sukker",
+      "base_price": 40,
+      "volatility": 0.15,
+      "description": "Basisvare fra plantasjene."
+    },
+    {
+      "id": "rum",
+      "name": "Rom",
+      "base_price": 75,
+      "volatility": 0.20,
+      "description": "Destillert fra sukker. Hoyt ettersport av marinen."
+    },
+    {
+      "id": "tobacco",
+      "name": "Tobakk",
+      "base_price": 90,
+      "volatility": 0.10,
+      "description": "Stabil vare med god margin."
+    },
+    {
+      "id": "pitch",
+      "name": "Bek",
+      "base_price": 55,
+      "volatility": 0.25,
+      "description": "Tettingsmiddel for skipsskrog."
+    }
+  ]
+}

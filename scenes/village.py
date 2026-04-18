@@ -27,10 +27,12 @@ import constants
 from entities.npc import NPC
 from entities.player import Player
 from scenes.base_scene import BaseScene
+from scenes.exchange import ExchangeOverlay, PlayerFinance
 from scenes.parallax_test import (
     _build_background_layer,
     _build_empty_layer,
 )
+from systems.economy import Market
 from systems.lighting import Light, LightingSystem
 from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
 
@@ -54,6 +56,8 @@ EXCHANGE_H = GROUND_TOP_Y - EXCHANGE_Y  # 92
 PLAYER_START_X = 1340.0
 # Hawkins står rett foran Børshusets trapp
 HAWKINS_X = 1470.0
+# Midt-x paa Borshuset, brukes for INTERACTION_DISTANCE-sjekk paa E
+EXCHANGE_CENTER_X = EXCHANGE_X + EXCHANGE_W / 2  # 1480
 
 # Colorkey for transparente områder på gameplay-laget
 _COLORKEY = (255, 0, 255)
@@ -307,20 +311,45 @@ class VillageScene(BaseScene):
         )
         self._elapsed: float = 0.0
 
-        # Hint-tekst (cachet)
-        self._hint = font.render(
+        # Økonomi og spiller-finans
+        self._market = Market.from_json(
+            os.path.join(constants.DATA_DIR, "commodities.json")
+        )
+        self._finance = PlayerFinance(
+            gold=constants.STARTING_GOLD,
+            inventory={c.id: 0 for c in self._market.commodities},
+        )
+        self._market_tick_timer: float = 0.0
+
+        # Overlay (børs) — None naar lukket
+        self._overlay: ExchangeOverlay | None = None
+
+        # Hint-tekst (cachet). Endres naar spilleren er ved borshuset.
+        self._hint_far = font.render(
             "A/D gaa  F11 fullskjerm  ESC avslutt",
             False,
             constants.COLOR_STONE_LIT,
+        ).convert_alpha()
+        self._hint_near = font.render(
+            "E aapne bors  A/D gaa  F11 fullskjerm  ESC avslutt",
+            False,
+            constants.COLOR_LANTERN_BRIGHT,
         ).convert_alpha()
         self._hint_pos = (8, constants.RENDER_HEIGHT - 12)
 
     # --- Input ---
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        # Nar borsen er aapen konsumerer overlayet all input.
+        if self._overlay is not None:
+            self._overlay.handle_event(event)
+            return
         if event.type == pygame.KEYDOWN:
             if event.key in constants.KEY_MENU:
                 self.want_quit = True
+            elif event.key in constants.KEY_INTERACT:
+                if self._player_can_interact_with_exchange():
+                    self._open_exchange()
             elif event.key in constants.KEY_LEFT:
                 self._player.press(-1)
             elif event.key in constants.KEY_RIGHT:
@@ -331,12 +360,39 @@ class VillageScene(BaseScene):
             elif event.key in constants.KEY_RIGHT:
                 self._player.release(+1)
 
+    def _player_can_interact_with_exchange(self) -> bool:
+        player_center_x = self._player.x + self._player.width / 2
+        return (
+            abs(player_center_x - EXCHANGE_CENTER_X) < constants.INTERACTION_DISTANCE
+        )
+
+    def _open_exchange(self) -> None:
+        # Slipp eventuelle holdte tastetrykk slik at spilleren ikke fortsetter
+        # aa gaa naar overlayet lukkes.
+        self._player.press(0)
+        self._overlay = ExchangeOverlay(self._font, self._market, self._finance)
+
     # --- Logikk ---
 
     def update(self, dt: float) -> None:
+        # Markedet ticker uansett — fremdeles drift i prisene mens overlayet
+        # er aapent. Dette gjor det mulig aa se "markedet beveger seg" live.
+        self._market_tick_timer += dt
+        if self._market_tick_timer >= constants.MARKET_TICK_INTERVAL_SEC:
+            self._market.tick()
+            self._market_tick_timer -= constants.MARKET_TICK_INTERVAL_SEC
+
+        # Lanterne-swing og andre tidsavhengige effekter gaar videre ogsaa.
+        self._elapsed += dt
+
+        if self._overlay is not None:
+            self._overlay.update(dt)
+            if self._overlay.want_close:
+                self._overlay = None
+            return
+        # Kun naar overlayet er lukket kan spilleren bevege seg.
         self._player.update(dt, self._player_min_x, self._player_max_x)
         self._center_camera_on_player()
-        self._elapsed += dt
 
     def _center_camera_on_player(self) -> None:
         # Kamera sentrerer spilleren horisontalt; klamping gjøres av Camera
@@ -364,6 +420,14 @@ class VillageScene(BaseScene):
         # entiteter slik at lyset "faller på" spilleren.
         self._lighting.draw(surface, self._lights, cam_x, self._elapsed)
         # 4) HUD / hint
-        surface.blit(self._hint, self._hint_pos)
+        hint_surf = (
+            self._hint_near
+            if self._player_can_interact_with_exchange() and self._overlay is None
+            else self._hint_far
+        )
+        surface.blit(hint_surf, self._hint_pos)
         # 5) Forgrunnslag
         self._renderer.draw(surface, cam_x, start=2, stop=3)
+        # 6) Overlay (borsen) — over alt, inkludert forgrunnen
+        if self._overlay is not None:
+            self._overlay.draw(surface)

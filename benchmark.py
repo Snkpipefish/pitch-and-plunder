@@ -108,7 +108,11 @@ def _peak_rss_mb() -> float:
     return usage.ru_maxrss / 1024.0
 
 
-def benchmark(scene_name: str = "placeholder", duration_sec: float = 10.0) -> None:
+def benchmark(
+    scene_name: str = "placeholder",
+    duration_sec: float = 10.0,
+    open_exchange: bool = False,
+) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     pygame.display.init()
@@ -123,7 +127,14 @@ def benchmark(scene_name: str = "placeholder", duration_sec: float = 10.0) -> No
     scene = _build_scene(scene_name, font)
     scene.on_enter()
 
-    drive_camera = scene_name in ("parallax_test", "village")
+    if open_exchange and scene_name == "village":
+        # Plasser spilleren ved borshuset og aapne overlayet direkte
+        scene._player.x = 1465.0
+        scene._center_camera_on_player()
+        scene._open_exchange()
+
+    # Kameradrift gir ikke mening naar overlayet er aapent (bevegelse er blokket)
+    drive_camera = scene_name in ("parallax_test", "village") and not open_exchange
     profiler = cProfile.Profile()
     profiler.enable()
     frame_times = _run_loop(scene, duration_sec, drive_camera=drive_camera)
@@ -158,8 +169,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Pitch & Plunder benchmark")
     parser.add_argument("--scene", default="village", help="Navn på scenen")
     parser.add_argument("--duration", type=float, default=10.0, help="Sekunder")
+    parser.add_argument(
+        "--open-exchange",
+        action="store_true",
+        help="For village: aapne bors-overlay under maaling",
+    )
     args = parser.parse_args()
-    benchmark(args.scene, args.duration)
+    benchmark(args.scene, args.duration, open_exchange=args.open_exchange)
     return 0
 
 

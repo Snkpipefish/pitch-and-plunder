@@ -254,3 +254,73 @@ Den tematiske varm/kald-kontrasten fra SVG-referansen er nå synlig.
 Ytelse- og minnebudsjettet holder lett. Klar for Commit 6 (økonomi og
 børs-overlay).
 
+---
+
+## Commit 6 – Økonomi og børs-overlay
+
+Kjørt: 2026-04-18
+Kommandoer:
+- `python benchmark.py --scene village --duration 10` (overlay lukket)
+- `python benchmark.py --scene village --duration 10 --open-exchange` (overlay aapent)
+
+Miljø: målmaskin (T4200 / GM45 / Linux Mint 21.3), pygame-ce 2.5.7
+
+4 varer (Sukker, Rom, Tobakk, Bek) lastet fra `data/commodities.json`.
+Marked-tick hvert 10. sekund (én tick innenfor hver 10-sekunders måling).
+Overlay-panel: 480×240 SRCALPHA (95% opacity) + 2px stein-ramme + 1px
+sekundær ramme. ~19 blit-kall per frame i overlay-modus.
+
+| Metrikk | Lukket | Aapen | Δ |
+|---------|--------|-------|---|
+| Frames | 301 | 301 | – |
+| FPS avg (compute) | 413.87 | 292.72 | −29% |
+| FPS min (compute) | 124.88 | 68.81 | −45% |
+| FPS 1% lav (compute) | 141.88 | 91.38 | −36% |
+| Frame time avg | 2.533 ms | 3.585 ms | +1.05 ms |
+| Peak RSS | 103.33 MB | 104.42 MB | +1.1 MB |
+
+### cProfile – overlay aapen, topp hete funksjoner (ekskl. Clock.tick)
+
+| per frame (ms) | % av frame time | funksjon |
+|----------------|-----------------|----------|
+| 2.14 | 60% | `Surface.fblits` (1204 kall = 4 per frame: parallax-lag, entiteter, lys, forgrunn) |
+| 0.84 | 23% | `Surface.blit` (6020 kall ≈ 20 per frame: 1 panel + 2 headers + 4×3 rader + gull + hint + 2 i village) |
+| 0.17 | 5% | `LightingSystem.draw` + `ExchangeOverlay._ensure_*` |
+| 0.04 | 1% | `pygame.event.get` |
+
+### Vurdering
+
+- **Absolutt kost: +1.05 ms per frame naar overlay er aapent.** Det gir
+  3.58 ms av 33.3 ms-budsjett, dvs. ~11% utnyttelse. ~9× headroom over
+  30 FPS.
+- **Compute-FPS falt 29%** fordi det semi-transparente 480×240-panelet
+  er eneste "tunge" blit vi nå gjor per frame – pygame rasteriserer 115k
+  alpha-blendede pixler per panel-blit. Brukerens forventning var 5–10%
+  nedgang; men målt i absolutt frame time holder vi oss godt innenfor
+  alle grenser (15 ms-grensen som ble nevnt for Commit 5 gjelder godt
+  også her).
+- **RSS +1.1 MB**: Panel-surface (480×240×4 B = 460 KB) + tekst-cache
+  (~40 små surfaces).
+- **Tekst-cache virker som forventet**: `_ensure_prices` kalles 301
+  ganger men re-rendrer kun ved tick_id-endring (1 gang innenfor 10s).
+  `_ensure_qty` re-rendrer kun ved inventar-endring. Gull-surface
+  re-rendres kun ved kjøp/salg.
+
+### Visuell kontroll
+
+Screenshots lagret (ikke commit-et):
+- `exchange_overlay.png`: Panelet over Tortuga-gata. Månen og børshusets
+  blå vindu lyser gjennom 5%-transparensen. Sukker er valgt (gul ramme).
+  Priser viser Kjøp/Salg-spread (f.eks. Sukker 40/39 = 2% margin).
+- `exchange_populated.png`: Samme panel med realistisk inventar (12
+  Sukker, 3 Rom, 0 Tobakk, 4 Bek) og Tobakk valgt.
+
+Hint-linjen i village oppdateres dynamisk: naar spilleren er innen
+INTERACTION_DISTANCE av Børshusets midt-x vises "E aapne bors ..." i
+varm COLOR_LANTERN_BRIGHT-farge; ellers kald COLOR_STONE_LIT.
+
+### Konklusjon
+
+Overlayet er innenfor ytelsesbudsjett. Kjøp/salg, pristick, og
+cache-invalidering fungerer. Klar for Commit 7 (HUD + save).
+
