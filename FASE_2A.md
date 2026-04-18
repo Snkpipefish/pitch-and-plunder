@@ -354,6 +354,16 @@ pitch-and-plunder/
 
 ## 6. Utviklingsrekkefølge (8 commits)
 
+> **Revidert 2026-04-19** (etter brukertest av Commit 5): Commits 5 og framover er
+> erstattet av en ny plan. Se `FASE_2A_REVIEW.md` for Commits 5.6, 5A–5E samt ny
+> Commit 6 og Commit 7. Commits 1–4 og original Commit 5 beholdes i git-historikken
+> som dokumentasjon av læringsløypen; refactoringen gjøres inkrementelt på plass
+> (ikke git revert) slik at historikken forteller hva som faktisk skjedde.
+>
+> Sammendrag av endring: kontinuerlig markedsdrift per 10 sek forkastes til fordel
+> for daglig oppdatering ved daggry, med full dag-natt-syklus som visuell
+> feedback. Se `FASE_2A_REVIEW.md` for detaljer og begrunnelse.
+
 ### Commit 1 – VillageScene-splitt
 - Opprett `scenes/village_renderer.py`, `scenes/village_buildings.py`, `entities/hint_indicator.py`
 - Flytt logikk fra `scenes/village.py` til riktig modul
