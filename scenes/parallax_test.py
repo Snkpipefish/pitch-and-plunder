@@ -81,25 +81,84 @@ def _bake_distant_islands(surf: pygame.Surface, horizon_y: int) -> None:
     pygame.draw.polygon(surf, constants.COLOR_STONE_DARKEST, points)
 
 
-def _bake_moon(surf: pygame.Surface, cx: int, cy: int) -> None:
-    """Mål og bak halo-ringer med fallende lysstyrke + månekjerne.
+def _sky_color_at(y: int, height: int) -> tuple[int, int, int]:
+    """Returner bakgrunns-himmelfargen ved en gitt y i samme gradient som
+    `_build_sky_gradient` lager (himmel-over-horisont)."""
+    horizon_y = int(height * 0.58)
+    if y >= horizon_y:
+        return constants.COLOR_SEA_DEEP
+    t = y / horizon_y
+    if t < 0.6:
+        k = t / 0.6
+        a, b = constants.COLOR_SKY_DEEP, constants.COLOR_SKY_MID
+    else:
+        k = (t - 0.6) / 0.4
+        a, b = constants.COLOR_SKY_MID, constants.COLOR_SKY_HORIZON
+    return (
+        int(a[0] * (1 - k) + b[0] * k),
+        int(a[1] * (1 - k) + b[1] * k),
+        int(a[2] * (1 - k) + b[2] * k),
+    )
 
-    Ingen per-pixel alpha – kun konsentriske pygame.draw.circle-kall som
-    overskriver hverandre. Dette bakes inn i bakgrunnen ved scene-init.
+
+def _smoothstep(t: float) -> float:
+    """3*t^2 - 2*t^3 — myk S-kurve uten knekk i endepunkter."""
+    if t <= 0.0:
+        return 0.0
+    if t >= 1.0:
+        return 1.0
+    return t * t * (3.0 - 2.0 * t)
+
+
+def _lerp_color(
+    a: tuple[int, int, int], b: tuple[int, int, int], t: float
+) -> tuple[int, int, int]:
+    return (
+        int(a[0] * (1.0 - t) + b[0] * t),
+        int(a[1] * (1.0 - t) + b[1] * t),
+        int(a[2] * (1.0 - t) + b[2] * t),
+    )
+
+
+def _bake_moon(
+    surf: pygame.Surface, cx: int, cy: int, bg_height: int
+) -> None:
+    """Bak mane som mange konsentriske sirkler med smoothstep-falloff.
+
+    Vi starter fra ytterste radius med *himmel-fargen* (saa kanten blender
+    seamless inn i den eksisterende himmelen) og jobber oss innover mot
+    moon_halo og deretter moon_core. Hver sirkel overskriver kun pikslene
+    innenfor sin radius, slik at vi effektivt bygger en radial gradient.
+
+    For aa unngaa synlige ringer bruker vi 1 px steg og smoothstep-kurve.
     """
-    halo_rings = [
-        (42, (22, 26, 62)),    # svakt lysere enn sky_mid
-        (34, (36, 44, 92)),
-        (26, (70, 78, 130)),
-        (20, (140, 138, 160)),
-        (14, constants.COLOR_MOON_HALO),
-        (11, constants.COLOR_MOON_CORE),
-    ]
-    for r, color in halo_rings:
-        pygame.draw.circle(surf, color, (cx, cy), r)
+    sky_bg = _sky_color_at(cy, bg_height)
+    halo_color = constants.COLOR_MOON_HALO
+    core_color = constants.COLOR_MOON_CORE
+
+    outer_r = 45
+    halo_r = 14  # overgang fra halo-kant til kjerne-område
+    core_r = 8
+
+    # Ytre halo: sky-bg -> halo
+    for r in range(outer_r, halo_r, -1):
+        t = (outer_r - r) / (outer_r - halo_r)
+        t = _smoothstep(t)
+        pygame.draw.circle(surf, _lerp_color(sky_bg, halo_color, t), (cx, cy), r)
+
+    # Midt: halo -> core
+    for r in range(halo_r, core_r, -1):
+        t = (halo_r - r) / (halo_r - core_r)
+        t = _smoothstep(t)
+        pygame.draw.circle(surf, _lerp_color(halo_color, core_color, t), (cx, cy), r)
+
+    # Kjerne: solid core
+    for r in range(core_r, 0, -1):
+        pygame.draw.circle(surf, core_color, (cx, cy), r)
+
     # Et par diskrete "krater"-prikker
-    pygame.draw.circle(surf, constants.COLOR_MOON_HALO, (cx + 3, cy - 3), 2)
-    pygame.draw.circle(surf, constants.COLOR_MOON_HALO, (cx - 4, cy + 3), 1)
+    pygame.draw.circle(surf, halo_color, (cx + 3, cy - 3), 1)
+    pygame.draw.circle(surf, halo_color, (cx - 3, cy + 2), 1)
 
 
 def _build_background_layer() -> pygame.Surface:
@@ -112,10 +171,15 @@ def _build_background_layer() -> pygame.Surface:
     surf = _build_sky_gradient(width, height, horizon_y)
     _bake_stars(surf, horizon_y, seed=42)
     _bake_distant_islands(surf, horizon_y)
-    # Måne plassert rundt 70% av bakgrunnens bredde (høyre for senter) ved y=75
-    moon_cx = int(width * 0.70)
-    moon_cy = 75
-    _bake_moon(surf, moon_cx, moon_cy)
+    # Maanen plasseres paa bakgrunnslaget slik at den "hoerer til" Boershuset:
+    # ved camera_x=0 (tavernaen) er maanen off-screen hoeyre; ved camera_x=960
+    # (Boershuset) havner den rett over Boershuset paa skjermen. Se utregning
+    # i kommentar under. Konkret: bg-layer-x=720 gir screen_x=720 ved cam=0
+    # (off-screen), 624 ved cam=480 (ved hoeyrekanten), 528 ved cam=960 (rett
+    # over Boershuset som okkuperer screen 420..620).
+    moon_cx = 720
+    moon_cy = 72
+    _bake_moon(surf, moon_cx, moon_cy, height)
     return surf
 
 

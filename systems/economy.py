@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import random
 
-from entities.commodity import Commodity
+from entities.commodity import Commodity, InventoryItem
 
 
 #: Kjop/salg-margin begge veier (0.02 = 2% spread per PROSJEKT.md §6).
@@ -82,13 +82,19 @@ class Market:
     # --- Transaksjoner ---
 
     def buy(
-        self, commodity_id: str, amount: int, gold: int, inventory: dict[str, int]
-    ) -> tuple[int, dict[str, int], int]:
+        self,
+        commodity_id: str,
+        amount: int,
+        gold: int,
+        inventory: dict[str, InventoryItem],
+    ) -> tuple[int, dict[str, InventoryItem], int]:
         """Forsøk å kjøpe `amount` av vare. Returner (nytt_gull, nytt_inventar, kjopt).
 
         Kjøper maks det gullet tillater hvis `amount` er mer enn mulig; returner
         `kjopt == 0` hvis ingenting kunne kjøpes. Modifiserer ikke input-argumentene
         (ren funksjon på immutable snapshot).
+
+        Oppdaterer `avg_cost` som veid gjennomsnitt over alle kjoep.
         """
         if amount <= 0:
             return gold, inventory, 0
@@ -100,22 +106,45 @@ class Market:
         if bought <= 0:
             return gold, inventory, 0
         new_inventory = dict(inventory)
-        new_inventory[commodity_id] = new_inventory.get(commodity_id, 0) + bought
+        old = new_inventory.get(commodity_id, InventoryItem())
+        new_qty = old.quantity + bought
+        # Veid gjennomsnitt: vekt gammel snitt med gammel mengde og ny pris
+        # med kjoept mengde.
+        if new_qty > 0:
+            new_avg = (old.quantity * old.avg_cost + bought * price) / new_qty
+        else:
+            new_avg = 0.0
+        new_inventory[commodity_id] = InventoryItem(
+            quantity=new_qty, avg_cost=new_avg
+        )
         new_gold = gold - bought * price
         return new_gold, new_inventory, bought
 
     def sell(
-        self, commodity_id: str, amount: int, gold: int, inventory: dict[str, int]
-    ) -> tuple[int, dict[str, int], int]:
-        """Forsøk å selge `amount` av vare. Returner (nytt_gull, nytt_inventar, solgt)."""
+        self,
+        commodity_id: str,
+        amount: int,
+        gold: int,
+        inventory: dict[str, InventoryItem],
+    ) -> tuple[int, dict[str, InventoryItem], int]:
+        """Forsøk å selge `amount` av vare. Returner (nytt_gull, nytt_inventar, solgt).
+
+        Ved salg beholdes `avg_cost` uendret slik at spilleren fortsatt ser
+        hva hun *betalte*. Naar qty naar 0 nullstilles avg_cost.
+        """
         if amount <= 0:
             return gold, inventory, 0
-        have = inventory.get(commodity_id, 0)
+        old = inventory.get(commodity_id, InventoryItem())
+        have = old.quantity
         sold = min(amount, have)
         if sold <= 0:
             return gold, inventory, 0
         price = self.sell_price(commodity_id)
         new_inventory = dict(inventory)
-        new_inventory[commodity_id] = have - sold
+        new_qty = have - sold
+        new_avg = old.avg_cost if new_qty > 0 else 0.0
+        new_inventory[commodity_id] = InventoryItem(
+            quantity=new_qty, avg_cost=new_avg
+        )
         new_gold = gold + sold * price
         return new_gold, new_inventory, sold

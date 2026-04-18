@@ -1,4 +1,4 @@
-"""Vare (commodity) som handles paa borsen."""
+"""Vare (commodity) som handles paa borsen, samt spiller-inventar-post."""
 
 from __future__ import annotations
 
@@ -27,3 +27,17 @@ class Commodity:
             volatility=float(data["volatility"]),
             description=data.get("description", ""),
         )
+
+
+@dataclass
+class InventoryItem:
+    """En post i spillerens inventar: mengde + vektet gjennomsnittlig innkjoepspris.
+
+    `avg_cost` oppdateres ved kjoep som veid gjennomsnitt over alle kjoep:
+    `new_avg = (old_qty * old_avg + bought * buy_price) / (old_qty + bought)`
+    Ved salg beholdes `avg_cost` uendret (spilleren skal se hva hun *betalte*,
+    ikke hva hun har igjen i gjennomsnitt etter delsalg).
+    """
+
+    quantity: int = 0
+    avg_cost: float = 0.0

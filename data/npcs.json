@@ -2,9 +2,9 @@
   "npcs": [
     {
       "id": "hawkins",
-      "name": "Borsmester Hawkins",
+      "name": "Børsmester Hawkins",
       "location": "tortuga_exchange",
-      "dialog_greet": "Velkommen til borsen."
+      "dialog_greet": "Velkommen til børsen."
     }
   ]
 }

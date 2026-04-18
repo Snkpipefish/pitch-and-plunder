@@ -373,12 +373,12 @@ class VillageScene(BaseScene):
 
         # Hint-tekst (cachet). Endres naar spilleren er ved borshuset.
         self._hint_far = font.render(
-            "A/D gaa  F11 fullskjerm  ESC avslutt",
+            "A/D gå   F11 fullskjerm   Esc avslutt",
             False,
             constants.COLOR_STONE_LIT,
         ).convert_alpha()
         self._hint_near = font.render(
-            "E aapne bors  A/D gaa  F11 fullskjerm  ESC avslutt",
+            "E åpne børs   A/D gå   F11 fullskjerm   Esc avslutt",
             False,
             constants.COLOR_LANTERN_BRIGHT,
         ).convert_alpha()

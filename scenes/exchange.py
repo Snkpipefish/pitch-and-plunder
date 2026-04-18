@@ -25,6 +25,7 @@ from __future__ import annotations
 import pygame
 
 import constants
+from entities.commodity import InventoryItem
 from systems.economy import Market
 from systems.save import GameState
 
@@ -90,13 +91,15 @@ class ExchangeOverlay:
             "Vare", False, constants.COLOR_STONE_LIT
         ).convert_alpha()
         self._header_price = font.render(
-            "Kjop / Salg", False, constants.COLOR_STONE_LIT
+            "Kjøp / Salg", False, constants.COLOR_STONE_LIT
         ).convert_alpha()
         self._header_qty = font.render(
             "Antall", False, constants.COLOR_STONE_LIT
         ).convert_alpha()
+        # Pixelfont stoetter norsk tegn og piler – bruker dem for kompakt hint
         self._hint = font.render(
-            "Op/Ned velg  Hoyre kjop  Venstre selg  Shift x10  Esc lukk",
+            "\u2191\u2193 velg   \u2192 kj\u00f8p   \u2190 selg   "
+            "Shift\u00d710   Esc lukk",
             False,
             constants.COLOR_STONE_LIT,
         ).convert_alpha()
@@ -170,7 +173,7 @@ class ExchangeOverlay:
         if self._title_day != day:
             self._title_day = day
             self._title_surf = self._font.render(
-                f"Tortuga Bors - Dag {day}",
+                f"Tortuga Børs \u2014 Dag {day}",
                 False,
                 constants.COLOR_MOON_CORE,
             ).convert_alpha()
@@ -191,13 +194,25 @@ class ExchangeOverlay:
 
     def _ensure_qty(self) -> None:
         inv = self._state.inventory
-        key = tuple(inv.get(c.id, 0) for c in self._commodities)
+        # Cache-noekkel: (quantity, rounded avg_cost) per vare
+        key = tuple(
+            (
+                inv.get(c.id, InventoryItem()).quantity,
+                round(inv.get(c.id, InventoryItem()).avg_cost, 2),
+            )
+            for c in self._commodities
+        )
         if self._qty_key == key:
             return
         self._qty_key = key
-        for i, c in enumerate(self._commodities):
+        for c in self._commodities:
+            item = inv.get(c.id, InventoryItem())
+            if item.quantity == 0:
+                text = "0"
+            else:
+                text = f"{item.quantity} @ {item.avg_cost:.2f}"
             self._qty_surfs[c.id] = self._font.render(
-                str(key[i]), False, constants.COLOR_SHIRT
+                text, False, constants.COLOR_SHIRT
             ).convert_alpha()
 
     def _ensure_gold(self) -> None:

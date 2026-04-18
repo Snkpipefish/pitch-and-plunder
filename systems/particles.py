@@ -26,10 +26,10 @@ import pygame
 import constants
 
 
-# Approksimert "30% taake over sjoe-moerk bakgrunn".
-# 0.3 * COLOR_FOG (58,58,74) + 0.7 * COLOR_SEA_DEEP (15,24,41) ≈ (28,34,51).
-# Vi loefter den litt for at taaka skal vaere lesbar: (45, 45, 58).
-_FOG_MIXED = (45, 45, 58)
+# Taake-farge: 30% COLOR_FOG + 70% COLOR_SEA_HIGHLIGHT. Lysere enn foer saa
+# taaka faktisk er synlig mot den moerke gateplan/sjoe-bakgrunnen.
+# 0.3 * (58,58,74) + 0.7 * (74,90,138) = (69, 80, 119) — blaa-graa.
+_FOG_MIXED = (69, 80, 119)
 
 # Firefly-farge: full-intensitet gir additiv blast. Vi demper litt.
 _FIREFLY_COLOR = (200, 170, 96)
@@ -100,9 +100,11 @@ class ParticleSystem:
         self._world_width = world_width
         self._elapsed: float = 0.0
 
-        # Forhaandsallokert pool
+        # Forhaandsallokert pool: 8 taake + 4 ildfluer = 12 aktive (under
+        # 20-grensen fra PROSJEKT.md). Taake er mer luftig og spredt ut
+        # langs gaten, ildfluene samles rundt tavernaen.
         self._particles: list[Particle] = []
-        for _ in range(4):
+        for _ in range(8):
             p = Particle(kind="fog")
             self._init_fog(p, spread=True)
             self._particles.append(p)
@@ -128,8 +130,10 @@ class ParticleSystem:
             p.x = self._rng.uniform(0.0, float(self._world_width))
         else:
             p.x = -40.0
-        p.y = self._rng.uniform(325.0, 345.0)
-        p.vx = self._rng.uniform(8.0, 12.0)
+        p.y = self._rng.uniform(320.0, 345.0)
+        # Raskere enn foer — 15–20 px/s gir tydelig drift men forblir
+        # atmosfaerisk.
+        p.vx = self._rng.uniform(15.0, 20.0)
         p.vy = 0.0
         p.sprite = self._rng.choice(self._fog_sprites)
 

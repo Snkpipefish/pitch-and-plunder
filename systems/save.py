@@ -21,11 +21,27 @@ import os
 from dataclasses import asdict, dataclass, field
 
 import constants
+from entities.commodity import InventoryItem
 
 
 log = logging.getLogger(__name__)
 
-CURRENT_SAVE_VERSION = 1
+#: Naaverende save-format. Bump naar schema endres; load() migrerer fra
+#: eldre versjoner hvis mulig, ellers returnerer None (kaller faller
+#: tilbake til GameState()).
+CURRENT_SAVE_VERSION = 2
+
+#: Versjoner som load() aksepterer (med migrering for ikke-current).
+ACCEPTED_VERSIONS = frozenset({1, 2})
+
+
+def _default_inventory() -> dict[str, InventoryItem]:
+    return {
+        "sugar": InventoryItem(),
+        "rum": InventoryItem(),
+        "tobacco": InventoryItem(),
+        "pitch": InventoryItem(),
+    }
 
 
 @dataclass
@@ -34,9 +50,7 @@ class GameState:
 
     version: int = CURRENT_SAVE_VERSION
     gold: int = constants.STARTING_GOLD
-    inventory: dict[str, int] = field(
-        default_factory=lambda: {"sugar": 0, "rum": 0, "tobacco": 0, "pitch": 0}
-    )
+    inventory: dict[str, InventoryItem] = field(default_factory=_default_inventory)
     current_scene: str = "village"
     player_position: tuple[float, float] = (320.0, 280.0)
     day: int = 1
@@ -44,11 +58,18 @@ class GameState:
 
 
 def save(state: GameState, path: str = constants.SAVE_PATH) -> bool:
-    """Skriv hele `state` til `path`. Returner True ved suksess."""
+    """Skriv hele `state` til `path`. Returner True ved suksess.
+
+    Skriver alltid i naaverende format (CURRENT_SAVE_VERSION).
+    """
     try:
         parent = os.path.dirname(path)
         if parent:
             os.makedirs(parent, exist_ok=True)
+        # Tvinger current version ved save uansett hva state.version er
+        state.version = CURRENT_SAVE_VERSION
+        # asdict() rekurserer gjennom InventoryItem slik at inventory blir
+        # {"sugar": {"quantity": N, "avg_cost": P}, ...}
         data = asdict(state)
         # Tuple til list for JSON-vennlighet
         data["player_position"] = [
@@ -62,6 +83,38 @@ def save(state: GameState, path: str = constants.SAVE_PATH) -> bool:
     except OSError as exc:
         log.warning("Klarte ikke lagre save til %s: %s", path, exc)
         return False
+
+
+def _parse_inventory(raw: object) -> dict[str, InventoryItem]:
+    """Tolke lagret inventar fra v1 (int) eller v2 (dict) format.
+
+    Ukjente eller korrupte poster settes til InventoryItem() (tom).
+    """
+    result = _default_inventory()
+    if not isinstance(raw, dict):
+        return result
+    for cid, val in raw.items():
+        if isinstance(val, int):
+            # v1: mengde som int, ingen pris tilgjengelig
+            result[cid] = InventoryItem(quantity=val, avg_cost=0.0)
+        elif isinstance(val, dict):
+            # v2: {"quantity": N, "avg_cost": P}
+            try:
+                qty = int(val.get("quantity", 0))
+            except (TypeError, ValueError):
+                qty = 0
+            try:
+                avg = float(val.get("avg_cost", 0.0))
+            except (TypeError, ValueError):
+                avg = 0.0
+            result[cid] = InventoryItem(quantity=qty, avg_cost=avg)
+        else:
+            # Ukjent form – hold default
+            pass
+    # Soerg for at alle kjente varer finnes (setter default for manglende)
+    for known_id in _default_inventory():
+        result.setdefault(known_id, InventoryItem())
+    return result
 
 
 def load(path: str = constants.SAVE_PATH) -> GameState | None:
@@ -79,13 +132,17 @@ def load(path: str = constants.SAVE_PATH) -> GameState | None:
         return None
 
     version = data.get("version")
-    if version != CURRENT_SAVE_VERSION:
+    if version not in ACCEPTED_VERSIONS:
         log.warning(
-            "Ukjent save-versjon %r (forventet %d) – startverdier brukes",
+            "Ukjent save-versjon %r (aksepterer %s) – startverdier brukes",
             version,
-            CURRENT_SAVE_VERSION,
+            sorted(ACCEPTED_VERSIONS),
         )
         return None
+    if version != CURRENT_SAVE_VERSION:
+        log.info(
+            "Migrerer save fra v%d til v%d", version, CURRENT_SAVE_VERSION
+        )
 
     defaults = GameState()
 
@@ -99,12 +156,8 @@ def load(path: str = constants.SAVE_PATH) -> GameState | None:
     else:
         player_position = defaults.player_position
 
-    inventory = data.get("inventory")
-    if not isinstance(inventory, dict):
-        inventory = dict(defaults.inventory)
-    # Sørg for at alle kjente varer er til stede
-    for cid, zero in defaults.inventory.items():
-        inventory.setdefault(cid, zero)
+    # Inventar: tolk v1 (int) eller v2 (dict) form
+    inventory = _parse_inventory(data.get("inventory"))
 
     commodities_state = data.get("commodities_state", {})
     if not isinstance(commodities_state, dict):
@@ -123,8 +176,10 @@ def load(path: str = constants.SAVE_PATH) -> GameState | None:
     if not isinstance(current_scene, str):
         current_scene = defaults.current_scene
 
+    # Oppgrader version-feltet i retur-objektet til naaverende; neste save
+    # skriver i v2-format uansett.
     return GameState(
-        version=version,
+        version=CURRENT_SAVE_VERSION,
         gold=gold,
         inventory=inventory,
         current_scene=current_scene,
