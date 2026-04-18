@@ -79,6 +79,18 @@ COLOR_SHIRT = (232, 220, 196)
 # Tåke & atmosfære (bruk med lav alpha)
 COLOR_FOG = (58, 58, 74)
 
+# Dag-natt-syklus (Fase 2A Commit 5A). Alle fra eksisterende 30-palett.
+# Sol-farger gjennom dagen: varm daggry → hvit middag → brennende kveld.
+COLOR_SUN_DAWN = COLOR_LANTERN           # (255, 179, 71)  varm lav sol
+COLOR_SUN_DAY = COLOR_MOON_CORE          # (255, 248, 231) hvit middag
+COLOR_SUN_DUSK = COLOR_EMBER             # (217, 108, 46)  kveld
+# Himmelfarger gjennom dagen (topp og horisont).
+COLOR_SKY_DAY_TOP = COLOR_STONE_LIGHT        # (61, 70, 96)    mellomblå
+COLOR_SKY_DAY_HORIZON = COLOR_STONE_LIT      # (107, 139, 199) lys blå
+COLOR_SKY_DUSK_TOP = COLOR_COAT              # (61, 53, 72)    dempet lilla
+COLOR_SKY_DUSK_HORIZON = COLOR_EMBER         # (217, 108, 46)  brennende horisont
+# Natthimmel og måne finnes allerede via COLOR_SKY_DEEP/MID/HORIZON + COLOR_MOON_CORE
+
 # --- Gameplay ---
 STARTING_GOLD = 300  # Fase 2A Commit 5: redusert fra 500 m/regime-friksjon.
 MARKET_TICK_INTERVAL_SEC = 10.0
