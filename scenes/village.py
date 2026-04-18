@@ -36,6 +36,7 @@ from systems import save as save_module
 from systems.economy import Market
 from systems.lighting import Light, LightingSystem
 from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
+from systems.particles import ParticleSystem
 from systems.save import GameState
 from ui.hud import Hud
 
@@ -360,6 +361,13 @@ class VillageScene(BaseScene):
             font, place="Tortuga", gold=state.gold, day=state.day
         )
 
+        # Partikler: taake paa gata + ildfluer rundt tavernaen.
+        # Tavernaens "levende midt" ligger litt foran doera og over gulvet.
+        self._particles = ParticleSystem(
+            tavern_center=(TAVERN_X + TAVERN_W / 2, GROUND_TOP_Y - 22),
+            world_width=constants.WORLD_WIDTH,
+        )
+
         # Overlay (børs) — None naar lukket
         self._overlay: ExchangeOverlay | None = None
 
@@ -425,6 +433,7 @@ class VillageScene(BaseScene):
 
         # Lanterne-swing og andre tidsavhengige effekter gaar videre ogsaa.
         self._elapsed += dt
+        self._particles.update(dt)
 
         # HUD – settere er no-ops hvis verdien ikke har endret seg
         self._hud.set_gold(self._state.gold)
@@ -467,19 +476,24 @@ class VillageScene(BaseScene):
         # 3) Dynamiske lys (BLEND_RGB_ADD) – legger seg over bygninger og
         # entiteter slik at lyset "faller på" spilleren.
         self._lighting.draw(surface, self._lights, cam_x, self._elapsed)
-        # 4) HUD / hint
+        # 4) Partikler: taake (normal blit) + ildfluer (BLEND_RGB_ADD).
+        # Taake tegnes ETTER lysene slik at tavernaens varme gloed ikke
+        # vasker taaken oransje – taaken forblir kald og atmosfaerisk.
+        # Ildfluene tegnes til slutt i systemet siden de er "naerere" og
+        # skal stikke gjennom taaken.
+        self._particles.draw(surface, cam_x)
+        # 5) Hint-linje
         hint_surf = (
             self._hint_near
             if self._player_can_interact_with_exchange() and self._overlay is None
             else self._hint_far
         )
         surface.blit(hint_surf, self._hint_pos)
-        # 5) Forgrunnslag
+        # 6) Forgrunnslag
         self._renderer.draw(surface, cam_x, start=2, stop=3)
-        # 6) HUD (oeverst venstre) – under overlayet, men utenfor panelets
-        # omraade saa de ikke overlapper visuelt.
+        # 7) HUD (oeverst venstre)
         self._hud.draw(surface)
-        # 7) Overlay (borsen) — over alt
+        # 8) Overlay (borsen) — over alt
         if self._overlay is not None:
             self._overlay.draw(surface)
 
