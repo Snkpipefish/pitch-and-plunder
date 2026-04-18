@@ -46,16 +46,31 @@ class ParallaxRenderer:
 
     def __init__(self, layers: list[ParallaxLayer]) -> None:
         self._layers = layers
-        # Pre-allokert liste for fblits for å unngå list-allokering per frame.
-        self._batch: list[tuple[pygame.Surface, tuple[int, int]]] = [
-            (layer.surface, (0, 0)) for layer in layers
-        ]
 
-    def draw(self, target: pygame.Surface, camera_x: float) -> None:
-        """Tegn alle lag til `target` basert på kameraposisjon."""
-        for i, layer in enumerate(self._layers):
-            self._batch[i] = (layer.surface, (int(-camera_x * layer.speed), 0))
-        target.fblits(self._batch)
+    @property
+    def layers(self) -> list[ParallaxLayer]:
+        return self._layers
+
+    def draw(
+        self,
+        target: pygame.Surface,
+        camera_x: float,
+        start: int = 0,
+        stop: int | None = None,
+    ) -> None:
+        """Tegn et sammenhengende lagintervall [start, stop) til `target`.
+
+        Uten argumenter tegnes alle lag. `start`/`stop` lar kalleren splitte
+        tegningen i to rundt entiteter som skal ligge *mellom* lagene (f.eks.
+        spiller og NPC skal ligge over gameplay-laget men bak forgrunnen).
+        """
+        if stop is None:
+            stop = len(self._layers)
+        batch = [
+            (self._layers[i].surface, (int(-camera_x * self._layers[i].speed), 0))
+            for i in range(start, stop)
+        ]
+        target.fblits(batch)
 
 
 def required_layer_width(

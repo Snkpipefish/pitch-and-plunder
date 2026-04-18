@@ -11,10 +11,10 @@ Mål (fra `PROSJEKT.md` seksjon 0):
 - Peak RSS (heap-indikasjon): mål 80 MB, hard grense 150 MB
 - Frame-allokering av Surfaces: 0
 
-> **Merk om målmaskin:** Målingene under er tatt på utviklingsmaskinen, ikke
-> på Intel Pentium T4200 / GM45. De fungerer som en relativ referanse; når
-> vi får tilgang til målmaskinen skal vi kjøre det samme benchmarket der og
-> dokumentere det i egen kolonne.
+> **Målmaskin:** Målingene under er tatt direkte på målmaskinen (Pentium
+> T4200 @ 2.00 GHz, 2 kjerner, GM45, 3.8 GB RAM, Linux Mint 21.3). Claude
+> Code kjører i samme shell som benchmarken, så tallene er autentiske for
+> den hardware vi designer mot.
 
 ---
 
@@ -22,7 +22,7 @@ Mål (fra `PROSJEKT.md` seksjon 0):
 
 Kjørt: 2026-04-18
 Kommando: `python benchmark.py --scene placeholder --duration 10`
-Miljø: dev-maskin, Linux, pygame-ce 2.5.7 (SDL 2.32.10), Python 3.10.12
+Miljø: målmaskin (Pentium T4200 / GM45 / 3.8GB RAM, Linux Mint 21.3, pygame-ce 2.5.7 / SDL 2.32.10 / Python 3.10.12)
 
 | Metrikk | Verdi |
 |---------|-------|
@@ -54,8 +54,6 @@ ncalls  tottime  cumtime  funksjon
 - **Minnebruk:** 96 MB peak RSS er over 80 MB-målet, men under 150 MB hard
   grense. Dette er totalt prosess-RSS (Python + pygame + SDL + font) – når
   vi legger til parallax-surfaces i Commit 3 må vi holde øye med veksten.
-  På målmaskinen (med mindre andre Python-libs og annen systemoverhead)
-  kan dette være lavere.
 - **Ingen flaskehalser** å adressere nå.
 
 ### Konklusjon
@@ -68,7 +66,7 @@ Grunnmuren er lett nok. Vi fortsetter til Commit 3 (parallax-system).
 
 Kjørt: 2026-04-18
 Kommando: `python benchmark.py --scene parallax_test --duration 10`
-Miljø: dev-maskin, Linux, pygame-ce 2.5.7 (SDL 2.32.10), Python 3.10.12
+Miljø: målmaskin (Pentium T4200 / GM45 / 3.8GB RAM, Linux Mint 21.3, pygame-ce 2.5.7 / SDL 2.32.10 / Python 3.10.12)
 Benchmark simulerer kamerabevegelse: holder "D" første halvdel, deretter "A"
 for å dekke hele `[0, 960]`-intervallet.
 
@@ -117,13 +115,12 @@ destinasjon, så ikke-synlige piksler koster lite.
    «nå-tilstand» per lag og håndterer retningsskifter, noe som
    kompliserer koden betydelig.
 3. Vi har svært mye headroom i absolutt målestokk: **2.26 ms av 33.33 ms
-   frame-budsjett brukt (6.8%)** – dvs. ~14× headroom over 30 FPS.
+   frame-budsjett brukt (6.8%)** – dvs. ~14× headroom over 30 FPS. Dette
+   er på målmaskinen (T4200/GM45), ikke på en raskere utviklings-CPU.
 
 **Konklusjon:** `fblits` dominerer profilet fordi blit ER arbeidet i en
-parallax-scene, men det er billig i absolutte tall. Vi beholder nåværende
-implementasjon og går videre til Commit 4. Hvis målmaskinbenchmarking (når
-vi får tilgang) viser <30 FPS, revurderer vi (f.eks. kan vi gå direkte til
-`subsurface`-basert source-rect-blit, eller bakt-smalere bakgrunn).
+parallax-scene, men det er billig i absolutte tall på målmaskinen. Vi
+beholder nåværende implementasjon og går videre til Commit 4.
 
 **Andre observasjoner:**
 - Peak RSS 102.75 MB (opp fra 96 MB i Commit 2). De tre lag-surfacesene
@@ -133,4 +130,59 @@ vi får tilgang) viser <30 FPS, revurderer vi (f.eks. kan vi gå direkte til
   på 30 FPS ≈ 2.7 px/frame. Dette er lite cost i praksis (0.096 ms per
   frame). I produksjon kunne vi cache HUD-teksten per heltallsposisjon,
   men i et reelt spill viser ikke HUD kamera-x uansett.
+
+---
+
+## Commit 4 – Village-scene med bygninger, spiller og Hawkins
+
+Kjørt: 2026-04-18
+Kommando: `python benchmark.py --scene village --duration 10`
+Miljø: målmaskin (T4200 / GM45 / Linux Mint 21.3), pygame-ce 2.5.7
+Kamerabevegelse simulert som i Commit 3 (syntetiske keydown/-up for D og A).
+
+| Metrikk | Verdi | Endring fra Commit 3 |
+|---------|-------|----------------------|
+| Frames målt | 302 | – |
+| FPS avg (compute) | 435.30 | −24 |
+| FPS min (compute) | 125.05 | −55 |
+| FPS 1% lav (compute) | 128.67 | −53 |
+| Frame time avg | 2.432 ms | +0.17 ms |
+| Peak RSS | 103.37 MB | +0.6 MB |
+
+### cProfile – topp hete funksjoner (ekskl. Clock.tick)
+
+| per frame (ms) | % av frame time | funksjon |
+|----------------|-----------------|----------|
+| 2.12 | 87% | `Surface.fblits` (906 kall → 3 per frame: lag 0-1, entiteter, lag 2) |
+| 0.040 | 2% | `Surface.blit` (bare hint-teksten) |
+| 0.043 | 2% | `pygame.event.get` |
+| 0.017 | 1% | `Player.update` + `Camera.set_x` |
+| 0.023 | 1% | `ParallaxTestScene._build_*`-hjelpere kalt kun én gang (overhead fra init, ikke per frame) |
+
+Alle øvrige oppføringer er <1%.
+
+### Vurdering
+
+- **Frame time økte fra 2.26 → 2.43 ms (+7%)**. Forventet fra ekstra fblits-
+  kall (2 → 3 per frame) og en mer kompleks gameplay-surface.
+- **7.3% av 33.3 ms frame-budsjett brukt, ~14× headroom over 30 FPS.**
+- **Peak RSS: +0.6 MB**. Gameplay-surfaken er 1600×360×4 = ~2.3 MB, men
+  den erstatter den gamle tomme 1600-surface-en fra parallax_test, så
+  netto endring er liten.
+- **Ingen nye flaskehalser.** Fblits fortsatt dominerende (87% av frame
+  time), men total kost er lav.
+
+### Visuell kontroll
+
+Lagret screenshots (ikke commit-et) viser:
+- Tavernaen med 2 varme vinduer, skilt, varm åpen dør og bakt gulv-glød
+- Børshuset med trekantgavl, 4 søyler, 3 kalde vinduer, steinfasade
+- Månen forblir i synsfeltet gjennom hele kameraets panorering
+- Distante øyer og stjerner følger bakgrunnslagets drift
+- Spiller og Hawkins står på gateplanet, player-sprite vender begge veier
+
+### Konklusjon
+
+Village-scenen ligger godt innenfor ytelsesbudsjett. Klar for Commit 5
+(dynamisk lys).
 

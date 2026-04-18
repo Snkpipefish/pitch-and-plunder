@@ -20,6 +20,7 @@ import pygame
 
 from scenes.base_scene import BaseScene
 from scenes.parallax_test import ParallaxTestScene
+from scenes.village import VillageScene
 
 
 log = logging.getLogger("pitch_and_plunder")
@@ -165,8 +166,9 @@ def run() -> int:
         factories={
             "placeholder": lambda: PlaceholderScene(font_small),
             "parallax_test": lambda: ParallaxTestScene(font_small),
+            "village": lambda: VillageScene(font_small),
         },
-        initial="parallax_test",
+        initial="village",
     )
 
     clock = pygame.time.Clock()

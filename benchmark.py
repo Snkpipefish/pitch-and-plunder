@@ -25,6 +25,7 @@ import pygame
 
 from main import PlaceholderScene, _load_font
 from scenes.parallax_test import ParallaxTestScene
+from scenes.village import VillageScene
 
 
 log = logging.getLogger("benchmark")
@@ -36,6 +37,8 @@ def _build_scene(name: str, font: pygame.font.Font):
         return PlaceholderScene(font)
     if name == "parallax_test":
         return ParallaxTestScene(font)
+    if name == "village":
+        return VillageScene(font)
     raise ValueError(f"Ukjent scene: {name}")
 
 
@@ -120,7 +123,7 @@ def benchmark(scene_name: str = "placeholder", duration_sec: float = 10.0) -> No
     scene = _build_scene(scene_name, font)
     scene.on_enter()
 
-    drive_camera = scene_name == "parallax_test"
+    drive_camera = scene_name in ("parallax_test", "village")
     profiler = cProfile.Profile()
     profiler.enable()
     frame_times = _run_loop(scene, duration_sec, drive_camera=drive_camera)
@@ -153,7 +156,7 @@ def benchmark(scene_name: str = "placeholder", duration_sec: float = 10.0) -> No
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Pitch & Plunder benchmark")
-    parser.add_argument("--scene", default="parallax_test", help="Navn på scenen")
+    parser.add_argument("--scene", default="village", help="Navn på scenen")
     parser.add_argument("--duration", type=float, default=10.0, help="Sekunder")
     args = parser.parse_args()
     benchmark(args.scene, args.duration)
