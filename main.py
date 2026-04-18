@@ -68,13 +68,25 @@ SceneFactory = Callable[[], BaseScene]
 
 
 class SceneManager:
-    """Holder aktiv scene og utfører bytter mellom dem."""
+    """Holder aktiv scene og utfører bytter mellom dem.
 
-    def __init__(self, factories: dict[str, SceneFactory], initial: str) -> None:
+    Eier `GameState`-referansen og sender den med inn i scenenes
+    `on_enter`/`on_exit`-kall slik at scener ikke trenger å hente state
+    selv. `from_scene=None` ved første oppstart; ellers navnet på
+    forrige scene.
+    """
+
+    def __init__(
+        self,
+        factories: dict[str, SceneFactory],
+        initial: str,
+        game_state: GameState,
+    ) -> None:
         self._factories = factories
+        self._game_state = game_state
         self._current_name = initial
         self._current: BaseScene = factories[initial]()
-        self._current.on_enter()
+        self._current.on_enter(game_state, from_scene=None)
 
     @property
     def current(self) -> BaseScene:
@@ -93,10 +105,11 @@ class SceneManager:
             log.warning("Ukjent scene: %s", target)
             self._current.next_scene = None
             return
-        self._current.on_exit()
+        self._current.on_exit(to_scene=target)
+        prev_name = self._current_name
         self._current = self._factories[target]()
         self._current_name = target
-        self._current.on_enter()
+        self._current.on_enter(self._game_state, from_scene=prev_name)
 
 
 def _create_display(fullscreen: bool) -> pygame.Surface:
@@ -164,31 +177,21 @@ def run() -> int:
 
     font_small = _load_font(8)
 
-    # Last spilltilstand fra disk, eller fall tilbake til startverdier
+    # Last spilltilstand fra disk, eller fall tilbake til startverdier.
+    # VillageScene avgjoer selv i on_enter om den skal bruke saved posisjon
+    # eller scene-spesifikk startposisjon, basert paa from_scene-argumentet
+    # og innholdet i game_state.
     loaded = save_module.load()
-    if loaded is None:
-        game_state = GameState()
-        is_fresh = True
-    else:
-        game_state = loaded
-        is_fresh = False
-
-    # Ved scene-re-entry (Fase 2+) maa `is_fresh` oppdateres til False etter
-    # forste instansiering saa vi ikke nullstiller posisjon igjen.
-    fresh_flags = {"village": is_fresh}
-
-    def make_village() -> VillageScene:
-        scene = VillageScene(font_small, game_state, fresh=fresh_flags["village"])
-        fresh_flags["village"] = False
-        return scene
+    game_state = loaded if loaded is not None else GameState()
 
     manager = SceneManager(
         factories={
             "placeholder": lambda: PlaceholderScene(font_small),
             "parallax_test": lambda: ParallaxTestScene(font_small),
-            "village": make_village,
+            "village": lambda: VillageScene(font_small, game_state),
         },
         initial="village",
+        game_state=game_state,
     )
 
     clock = pygame.time.Clock()

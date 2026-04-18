@@ -32,15 +32,14 @@ from systems.save import GameState
 log = logging.getLogger("benchmark")
 
 
-def _build_scene(name: str, font: pygame.font.Font):
+def _build_scene(name: str, font: pygame.font.Font, state: GameState):
     """Scene-fabrikk. Utvides etter hvert som flere scener finnes."""
     if name == "placeholder":
         return PlaceholderScene(font)
     if name == "parallax_test":
         return ParallaxTestScene(font)
     if name == "village":
-        # Benchmark bruker alltid fersk GameState (ingen save-file-avhengighet)
-        return VillageScene(font, GameState(), fresh=True)
+        return VillageScene(font, state)
     raise ValueError(f"Ukjent scene: {name}")
 
 
@@ -126,8 +125,10 @@ def benchmark(
     )
 
     font = _load_font(8)
-    scene = _build_scene(scene_name, font)
-    scene.on_enter()
+    # Benchmark bruker alltid fersk GameState (ingen save-file-avhengighet).
+    state = GameState()
+    scene = _build_scene(scene_name, font, state)
+    scene.on_enter(state, from_scene=None)
 
     if open_exchange and scene_name == "village":
         # Plasser spilleren ved borshuset og aapne overlayet direkte

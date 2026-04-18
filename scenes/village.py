@@ -68,7 +68,6 @@ class VillageScene(BaseScene):
         self,
         font: pygame.font.Font,
         state: GameState,
-        fresh: bool = True,
     ) -> None:
         super().__init__()
         self._font = font
@@ -82,27 +81,13 @@ class VillageScene(BaseScene):
 
         self._camera = Camera(constants.WORLD_WIDTH, constants.RENDER_WIDTH)
 
-        # Spilleren: føttene hviler på GROUND_TOP_Y.
-        # Ved fresh start bruker vi spec-verdien "midt paa gaten foran
-        # Borshuset" (ignorerer GameState-defaultet 320/280 som er for en
-        # generisk scene); ved lastet save bruker vi lagret x, men snapper
-        # y til gatenivaa for robusthet.
+        # Spilleren: føttene hviler på GROUND_TOP_Y. Plasseres ved
+        # PLAYER_START_X som trygt utgangspunkt; on_enter overskriver x
+        # basert paa from_scene og lagret tilstand.
         player_y = GROUND_TOP_Y - 20  # sprite-høyde 20
-        if fresh:
-            player_x = PLAYER_START_X
-        else:
-            player_x = float(state.player_position[0])
-        self._player = Player(player_x, float(player_y))
+        self._player = Player(PLAYER_START_X, float(player_y))
         self._player_min_x = 8.0
         self._player_max_x = float(constants.WORLD_WIDTH - self._player.width - 8)
-        # Klamp lastet x til lovlig intervall
-        if self._player.x < self._player_min_x:
-            self._player.x = self._player_min_x
-        elif self._player.x > self._player_max_x:
-            self._player.x = self._player_max_x
-
-        # Kamera skal følge spilleren fra start
-        self._center_camera_on_player()
 
         # NPC-er
         npc_db = _load_npcs()
@@ -311,5 +296,32 @@ class VillageScene(BaseScene):
         self._sync_state()
         save_module.save(self._state)
 
-    def on_exit(self) -> None:
+    def on_enter(
+        self,
+        game_state: GameState,
+        from_scene: str | None = None,
+    ) -> None:
+        """Plasser spilleren og sentrer kamera.
+
+        - `from_scene=None` + state.player_position == GameState-default
+          (320.0, 280.0): fersk spillstart → PLAYER_START_X.
+        - Ellers: state.player_position er autoritativ (enten lagret fra
+          forrige oekt, eller synket av forrige scene ved bytte).
+        """
+        # GameState-default (tilstand uten save). Hvis player_position er
+        # dette eksakte tuplet, har state aldri blitt synket fra village –
+        # scene-spesifikk start gjelder.
+        GAMESTATE_DEFAULT_POS = (320.0, 280.0)
+        if from_scene is None and game_state.player_position == GAMESTATE_DEFAULT_POS:
+            self._player.x = PLAYER_START_X
+        else:
+            self._player.x = float(game_state.player_position[0])
+        # Klamp mot lovlig intervall (guard for korrupte saves)
+        if self._player.x < self._player_min_x:
+            self._player.x = self._player_min_x
+        elif self._player.x > self._player_max_x:
+            self._player.x = self._player_max_x
+        self._center_camera_on_player()
+
+    def on_exit(self, to_scene: str | None = None) -> None:
         self.autosave()
