@@ -25,6 +25,7 @@ from dataclasses import asdict, dataclass, field
 import constants
 from entities.commodity import InventoryItem
 from systems.game_clock import GameClock
+from systems.regime_manager import REGIMES, RegimeState
 
 
 log = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ class GameState:
     clock: GameClock = field(default_factory=GameClock)
     commodities_state: dict[str, dict] = field(default_factory=dict)
     cargo_capacity: int = constants.CARGO_CAPACITY
+    regimes: dict[str, RegimeState] = field(default_factory=dict)
 
 
 def save(state: GameState, path: str = constants.SAVE_PATH) -> bool:
@@ -122,6 +124,41 @@ def _parse_inventory(raw: object) -> dict[str, InventoryItem]:
     # Soerg for at alle kjente varer finnes (setter default for manglende)
     for known_id in _default_inventory():
         result.setdefault(known_id, InventoryItem())
+    return result
+
+
+def _parse_regimes(raw: object) -> dict[str, RegimeState]:
+    """Tolke lagret regime-dict. Ukjente eller korrupte poster ignoreres.
+
+    Manglende regimer er OK – VillageScene initialiserer manglende varer
+    ved scene-init.
+    """
+    result: dict[str, RegimeState] = {}
+    if not isinstance(raw, dict):
+        return result
+    for cid, val in raw.items():
+        if not isinstance(val, dict):
+            continue
+        current = val.get("current", "stable")
+        if current not in REGIMES:
+            current = "stable"
+        try:
+            days_remaining = int(val.get("days_remaining", 0))
+        except (TypeError, ValueError):
+            days_remaining = 0
+        raw_history = val.get("history", [])
+        if isinstance(raw_history, list):
+            history = [
+                h for h in raw_history
+                if isinstance(h, str) and h in REGIMES
+            ]
+        else:
+            history = []
+        result[cid] = RegimeState(
+            current=current,
+            days_remaining=days_remaining,
+            history=history,
+        )
     return result
 
 
@@ -220,6 +257,8 @@ def load(path: str = constants.SAVE_PATH) -> GameState | None:
     if not isinstance(current_scene, str):
         current_scene = defaults.current_scene
 
+    regimes = _parse_regimes(data.get("regimes"))
+
     # Oppgrader version-feltet i retur-objektet til naaverende; neste save
     # skriver i v3-format uansett.
     return GameState(
@@ -231,4 +270,5 @@ def load(path: str = constants.SAVE_PATH) -> GameState | None:
         clock=clock,
         commodities_state=commodities_state,
         cargo_capacity=cargo_capacity,
+        regimes=regimes,
     )

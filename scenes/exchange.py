@@ -36,15 +36,24 @@ PANEL_H = 240
 PANEL_X = (constants.RENDER_WIDTH - PANEL_W) // 2   # 80
 PANEL_Y = (constants.RENDER_HEIGHT - PANEL_H) // 2  # 60
 
-# Kolonner
+# Kolonner (i render-koordinater)
 NAME_X = PANEL_X + 24
-PRICE_X = PANEL_X + 220
-QTY_X = PANEL_X + 380
+PRICE_X = PANEL_X + 200
+SPARK_X = PANEL_X + 290
+QTY_X = PANEL_X + 360
 
 # Rader
 HEADER_Y = PANEL_Y + 40
 ROW_Y_START = PANEL_Y + 64
 ROW_HEIGHT = 22
+
+# Sparkline-geometri
+SPARK_BARS = 10
+SPARK_BAR_W = 3
+SPARK_GAP = 1
+SPARK_W = SPARK_BARS * (SPARK_BAR_W + SPARK_GAP)
+SPARK_H = 10
+SPARK_COLORKEY = (255, 0, 255)
 
 
 def _build_panel_surface() -> pygame.Surface:
@@ -122,6 +131,16 @@ class ExchangeOverlay:
         self._cargo_total: int | None = None
         self._cargo_cap: int | None = None
         self._cargo_surf: pygame.Surface | None = None
+
+        # Sparkline-surfaces pre-allokerte per vare. Re-bakes naar
+        # market.tick_id endrer seg (hver 10. sek).
+        self._spark_tick_id: int = -1
+        self._spark_surfs: dict[str, pygame.Surface] = {
+            c.id: pygame.Surface((SPARK_W, SPARK_H)).convert()
+            for c in self._commodities
+        }
+        for surf in self._spark_surfs.values():
+            surf.set_colorkey(SPARK_COLORKEY)
 
     # --- Lifecycle ---
 
@@ -234,6 +253,36 @@ class ExchangeOverlay:
             f"Gull: {g} d.", False, constants.COLOR_MOON_CORE
         ).convert_alpha()
 
+    def _ensure_sparklines(self) -> None:
+        tid = self._market.tick_id
+        if self._spark_tick_id == tid:
+            return
+        self._spark_tick_id = tid
+        for c in self._commodities:
+            surf = self._spark_surfs[c.id]
+            surf.fill(SPARK_COLORKEY)
+            history = c.price_history[-SPARK_BARS:]
+            if not history:
+                continue
+            # Auto-skaler til min/max i vinduet — viser trend, ikke
+            # absolutt nivaa. Hvis hi == lo (alle like) → midtstilte barer.
+            lo = min(history)
+            hi = max(history)
+            span = hi - lo if hi > lo else 1.0
+            max_bar_h = SPARK_H - 1
+            step = SPARK_BAR_W + SPARK_GAP
+            for i, p in enumerate(history):
+                ratio = (p - lo) / span
+                ratio = max(0.0, min(1.0, ratio))
+                h = max(1, int(ratio * max_bar_h))
+                x = i * step
+                y = SPARK_H - h
+                pygame.draw.rect(
+                    surf,
+                    constants.COLOR_STONE_LIT,
+                    (x, y, SPARK_BAR_W, h),
+                )
+
     def _ensure_cargo(self) -> None:
         total = sum(item.quantity for item in self._state.inventory.values())
         cap = self._state.cargo_capacity
@@ -257,6 +306,7 @@ class ExchangeOverlay:
         self._ensure_qty()
         self._ensure_gold()
         self._ensure_cargo()
+        self._ensure_sparklines()
 
         surface.blit(self._panel, (PANEL_X, PANEL_Y))
         assert self._title_surf is not None
@@ -292,6 +342,11 @@ class ExchangeOverlay:
                 )
             surface.blit(self._name_surfs[c.id], (NAME_X, y))
             surface.blit(self._price_surfs[c.id], (PRICE_X, y))
+            # Sparkline: vertikalt sentrert mot row-baseline (font ~8 px)
+            surface.blit(
+                self._spark_surfs[c.id],
+                (SPARK_X, y + 2),
+            )
             surface.blit(self._qty_surfs[c.id], (QTY_X, y))
 
         assert self._gold_surf is not None

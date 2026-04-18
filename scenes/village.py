@@ -38,6 +38,7 @@ from systems.economy import Market
 from systems.lighting import Light, LightingSystem
 from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
 from systems.particles import ParticleSystem
+from systems.regime_manager import RegimeManager
 from systems.save import GameState
 from ui.hint import HintIndicator
 from ui.hud import Hud
@@ -134,21 +135,45 @@ class VillageScene(BaseScene):
         self._elapsed: float = 0.0
 
         # Økonomi – Market lastes fra JSON, deretter applieres lagrede
-        # current_price per vare hvis tilgjengelig. Dag-telleren eies av
-        # state.clock (GameClock), ikke Market.
+        # current_price og price_history per vare hvis tilgjengelig.
+        # Dag-telleren eies av state.clock (GameClock), ikke Market.
         self._market = Market.from_json(
             os.path.join(constants.DATA_DIR, "commodities.json")
         )
         for cid, saved in state.commodities_state.items():
-            try:
-                cp = float(saved.get("current_price"))
-            except (TypeError, ValueError, AttributeError):
+            if not isinstance(saved, dict):
                 continue
             try:
-                self._market.get(cid).current_price = cp
+                commodity = self._market.get(cid)
             except KeyError:
                 continue
+            try:
+                commodity.current_price = float(saved.get("current_price"))
+            except (TypeError, ValueError):
+                pass
+            raw_history = saved.get("price_history", [])
+            if isinstance(raw_history, list):
+                try:
+                    commodity.price_history = [float(p) for p in raw_history]
+                except (TypeError, ValueError):
+                    pass
         self._market_tick_timer: float = 0.0
+
+        # Regime-system. Initialiser manglende regimer for kjente varer
+        # (first boot, eller save uten regime-dict).
+        self._regime_manager = RegimeManager()
+        missing_ids = [
+            c.id
+            for c in self._market.commodities
+            if c.id not in state.regimes
+        ]
+        if missing_ids:
+            state.regimes.update(
+                self._regime_manager.initialize_regimes(missing_ids)
+            )
+        # Dag-skift-sporing: naar state.clock.day overstiger denne, varsle
+        # RegimeManager for hver dag som har passert.
+        self._last_seen_day = state.clock.day
 
         # HUD (oeverst venstre: sted / gull / dag)
         self._hud = Hud(
@@ -218,11 +243,21 @@ class VillageScene(BaseScene):
     # --- Logikk ---
 
     def update(self, dt: float) -> None:
+        # Dag-skift: varsle RegimeManager for hver dag som har passert siden
+        # forrige frame. main.run() oppdaterer state.clock separat; vi
+        # trenger bare aa plukke opp endringen her.
+        curr_day = self._state.clock.day
+        if curr_day != self._last_seen_day:
+            days_passed = curr_day - self._last_seen_day
+            for _ in range(max(0, days_passed)):
+                self._regime_manager.on_new_day(self._state.regimes)
+            self._last_seen_day = curr_day
+
         # Markedet ticker uansett — fremdeles drift i prisene mens overlayet
         # er aapent. Dette gjor det mulig aa se "markedet beveger seg" live.
         self._market_tick_timer += dt
         if self._market_tick_timer >= constants.MARKET_TICK_INTERVAL_SEC:
-            self._market.tick()
+            self._market.tick(regimes=self._state.regimes)
             self._market_tick_timer -= constants.MARKET_TICK_INTERVAL_SEC
 
         # Lanterne-swing og andre tidsavhengige effekter gaar videre ogsaa.
@@ -283,7 +318,10 @@ class VillageScene(BaseScene):
             float(self._player.y),
         )
         self._state.commodities_state = {
-            c.id: {"current_price": float(c.current_price)}
+            c.id: {
+                "current_price": float(c.current_price),
+                "price_history": list(c.price_history),
+            }
             for c in self._market.commodities
         }
         # gold og inventory er allerede lagret i self._state – direkte mutert

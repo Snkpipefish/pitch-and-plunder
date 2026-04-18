@@ -16,8 +16,12 @@ from __future__ import annotations
 
 import json
 import random
+from typing import TYPE_CHECKING
 
 from entities.commodity import Commodity, InventoryItem
+
+if TYPE_CHECKING:
+    from systems.regime_manager import RegimeState
 
 
 #: Kjop/salg-margin begge veier (0.02 = 2% spread per PROSJEKT.md §6).
@@ -47,11 +51,19 @@ class Market:
 
     # --- Tick / pris-drift ---
 
-    def tick(self) -> None:
-        """Trekk nye priser for alle varer. Inkrementer tick_id."""
-        for c in self._commodities.values():
-            factor = 1.0 + self._rng.uniform(-c.volatility, c.volatility)
-            c.current_price = round(c.base_price * factor, 2)
+    def tick(
+        self,
+        regimes: "dict[str, RegimeState] | None" = None,
+    ) -> None:
+        """Trekk nye priser for alle varer. Inkrementer tick_id.
+
+        Hvis `regimes` er oppgitt, brukes regime-bias og vol-multiplier for
+        hver vare. Uten regimes får vi ren random drift som i Fase 1.
+        Uansett bygges price_history opp i hver Commodity.
+        """
+        for cid, c in self._commodities.items():
+            regime = regimes.get(cid) if regimes else None
+            c.tick(regime=regime, rng=self._rng)
         self._tick_id += 1
 
     @property
