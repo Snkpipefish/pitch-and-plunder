@@ -1,22 +1,28 @@
-"""Passiv bek-produksjon fra Pitch Lake på Trinidad (Fase 2A Commit 6).
+"""Passiv bek-produksjon fra Pitch Lake på Trinidad.
 
 Spilleren "arver" Pitch Lake ved spillstart. Lakeren produserer 2 bek
-per dag automatisk ved daggry. Produksjon tapes hvis lasterom er fullt –
-pitchen flyter bort, spilleren må aktivt kvitte seg med last for å
-ikke miste inntekt.
+per dag automatisk ved daggry, mot en daglig drifts-kostnad på 8
+dubloner (arbeiderlønn, transport, leie). Hvis spilleren ikke har råd
+til drift den dagen blir ingen bek produsert, og tilgjengelig gull
+trekkes til 0.
 
-Interaktiv utvinning med rør og pumper kommer i Fase 4.
+Produksjon tapes også hvis lasterom er fullt – pitchen flyter bort,
+selv om drift ble betalt.
+
+Interaktiv utvinning med rør og pumper kommer i Fase 4 (se FASE_2A.md
+"Fremtidige utvidelser").
 
 Designvalg:
-- `PitchLakeState` er ren dataholder (dataclass) som lagres i GameState
-  slik at `total_produced` og `last_production_day` overlever saves. Gir
-  stats-støtte for senere achievements.
-- `PitchLake.on_new_day` er en statisk metode (ren funksjon på state).
-  Ingen instansvariabler, ingen RNG — deterministisk produksjon.
-- Produsert bek får `avg_cost=0` (gratis produksjon). Dette trekker ned
-  vektet gjennomsnitt for eksisterende bek-inventar, slik at spilleren
-  ser en lavere snittpris over tid. Det er bevisst: produksjons-bek er
-  "gratis" fra spillerens synspunkt.
+- `PitchLakeState` er ren dataholder (dataclass) som lagres i GameState.
+  `total_produced` og `last_production_day` overlever saves for stats
+  og UI-status-detektering.
+- `PitchLake.on_new_day` er en statisk metode. Ingen instansvariabler,
+  deterministisk — men muterer både `state` og `game_state` direkte
+  (gold, inventory, total_produced, last_production_day).
+- Produsert bek får `avg_cost=0` (gratis fra spillerens synspunkt –
+  drift-kostnaden er allerede trukket separat fra gull).
+- `last_production_day` settes kun når `produced > 0` slik at HUD kan
+  detektere "ingen drift"-state via `clock.day - last_production_day > 1`.
 """
 
 from __future__ import annotations
@@ -39,6 +45,7 @@ class PitchLakeState:
     """Serialiserbar state for Pitch Lake-produksjonen."""
 
     production_per_day: int = 2
+    daily_upkeep_cost: int = 8
     total_produced: int = 0
     last_production_day: int = 0
 
@@ -50,17 +57,30 @@ class PitchLake:
     def on_new_day(
         state: PitchLakeState,
         game_state: "GameState",
-    ) -> int:
-        """Kalles ved daggry. Returnerer antall bek faktisk produsert.
+    ) -> tuple[int, int]:
+        """Kalles ved daggry.
 
-        - Hvis lasterom har plass: produserer `state.production_per_day`
-          (eller hva som får plass om det er mindre).
-        - Hvis lasterom er fullt: `produced == 0` og pitchen går tapt.
-          `total_produced` og `last_production_day` oppdateres uansett.
+        Returnerer `(produced, paid_upkeep)`.
 
-        `avg_cost` på pitch-inventaret oppdateres som vektet gjennomsnitt
-        der produsert bek teller som 0-kost.
+        Flyt:
+        1. Trekk upkeep fra gull. `paid_upkeep = min(upkeep, gold)`.
+           gold settes til `gold - paid_upkeep` (kan bli 0 men ikke negativ).
+        2. Hvis `paid_upkeep < upkeep` (ikke råd til full lønn) → produced=0.
+        3. Ellers: produced = min(production_per_day, ledig lasterom).
+           Tom produksjon tapes (full last) – det gir fortsatt produced=0.
+        4. `last_production_day` oppdateres KUN hvis `produced > 0`, slik
+           at HUD kan vise "ingen drift" etter mer enn én dag uten
+           produksjon.
         """
+        upkeep = max(0, state.daily_upkeep_cost)
+        paid_upkeep = min(upkeep, max(0, game_state.gold))
+        game_state.gold -= paid_upkeep
+
+        if paid_upkeep < upkeep:
+            # Ikke råd til full drift i dag – ingen produksjon.
+            return 0, paid_upkeep
+
+        # Drift betalt: forsøk produksjon begrenset av lasterom.
         current_total = sum(
             item.quantity for item in game_state.inventory.values()
         )
@@ -76,13 +96,11 @@ class PitchLake:
             old_qty = pitch.quantity
             new_qty = old_qty + produced
             if new_qty > 0:
-                # Vektet snitt: gammel snitt beholder sin vekt (old_qty),
-                # produsert bek har kost 0. Avrundet til 2 desimaler for
-                # UI-konsistens med buy()-resultater.
+                # Vektet snitt: produsert bek har kost 0, trekker snittet ned.
                 new_avg = (old_qty * pitch.avg_cost) / new_qty
                 pitch.avg_cost = round(new_avg, 2)
             pitch.quantity = new_qty
+            state.total_produced += produced
+            state.last_production_day = game_state.clock.day
 
-        state.total_produced += produced
-        state.last_production_day = game_state.clock.day
-        return produced
+        return produced, paid_upkeep

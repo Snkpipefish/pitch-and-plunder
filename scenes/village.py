@@ -186,13 +186,15 @@ class VillageScene(BaseScene):
         # RegimeManager for hver dag som har passert.
         self._last_seen_day = state.clock.day
 
-        # HUD (oeverst venstre: sted / gull / dag / bek-produksjon)
+        # HUD (oeverst venstre: sted / gull / dag / bek-drift)
         self._hud = Hud(
             font,
             place="Tortuga",
             gold=state.gold,
             day=state.clock.day,
             pitch_per_day=state.pitch_lake.production_per_day,
+            pitch_upkeep=state.pitch_lake.daily_upkeep_cost,
+            pitch_halted=self._compute_pitch_halted(),
         )
 
         # Partikler: taake paa gata + ildfluer rundt tavernaen.
@@ -279,54 +281,14 @@ class VillageScene(BaseScene):
         curr_day = self._state.clock.day
         if curr_day != self._last_seen_day:
             days_passed = max(0, curr_day - self._last_seen_day)
-            produced_today = 0
             for _ in range(days_passed):
                 self._market.on_dawn(self._state.regimes)
                 self._regime_manager.on_new_day(self._state.regimes)
-                produced_today = PitchLake.on_new_day(
-                    self._state.pitch_lake, self._state
-                )
+                # Upkeep trekkes uansett om produksjon lykkes. Returverdien
+                # ignoreres her — HUD leser state.pitch_lake direkte for
+                # halted-detektering, og toasts er fjernet (Commit 6.1).
+                PitchLake.on_new_day(self._state.pitch_lake, self._state)
             self._last_seen_day = curr_day
-            # Varsle spilleren visuelt. To scenarier:
-            # 1) Produksjon gikk greit → én kombinert toast med "+X bek".
-            # 2) Lasterom fullt (produced==0 mens production_per_day>0)
-            #    → to separate toasts: daggry (varm) + advarsel (ember).
-            # Hvis flere dager passerte i én frame viser vi kun én toast
-            # for gjeldende dag (bruker siste produced-verdi).
-            per_day = self._state.pitch_lake.production_per_day
-            if per_day > 0 and produced_today == 0:
-                # Full-last: eksplisitt varsel om tapt produksjon.
-                self._toasts.push(
-                    Toast(
-                        font=self._font,
-                        text=f"Daggry \u2014 Dag {curr_day}",
-                        color=constants.COLOR_LANTERN_BRIGHT,
-                        duration=3.0,
-                    )
-                )
-                self._toasts.push(
-                    Toast(
-                        font=self._font,
-                        text="Pitch Lake: lageret fullt",
-                        color=constants.COLOR_EMBER,
-                        duration=3.0,
-                    )
-                )
-            else:
-                text = (
-                    f"Daggry \u2014 Dag {curr_day} \u2014 "
-                    f"Pitch Lake: +{produced_today} bek"
-                    if produced_today > 0
-                    else f"Daggry \u2014 Dag {curr_day}"
-                )
-                self._toasts.push(
-                    Toast(
-                        font=self._font,
-                        text=text,
-                        color=constants.COLOR_LANTERN_BRIGHT,
-                        duration=3.0,
-                    )
-                )
 
         # Lanterne-swing og andre tidsavhengige effekter gaar videre ogsaa.
         self._elapsed += dt
@@ -336,7 +298,11 @@ class VillageScene(BaseScene):
         # HUD – settere er no-ops hvis verdien ikke har endret seg
         self._hud.set_gold(self._state.gold)
         self._hud.set_day(self._state.clock.day)
-        self._hud.set_pitch_per_day(self._state.pitch_lake.production_per_day)
+        self._hud.set_pitch_status(
+            pitch_per_day=self._state.pitch_lake.production_per_day,
+            upkeep=self._state.pitch_lake.daily_upkeep_cost,
+            halted=self._compute_pitch_halted(),
+        )
 
         if self._overlay is not None:
             self._overlay.update(dt)
@@ -349,6 +315,21 @@ class VillageScene(BaseScene):
         # Kun naar overlayet er lukket kan spilleren bevege seg.
         self._player.update(dt, self._player_min_x, self._player_max_x)
         self._center_camera_on_player()
+
+    def _compute_pitch_halted(self) -> bool:
+        """Returner True hvis Pitch Lake-produksjon har stoppet.
+
+        Definisjon: mer enn én dag siden siste faktiske produksjon
+        (`last_production_day < clock.day - 1`). Én missed dag aksepteres
+        som budsjettering; to eller flere signaliserer at driften står.
+        Ved fresh start er `last_production_day=0` og `clock.day=1`, som
+        gir 0 < 0 = False — HUD viser dermed "kjører" inntil første
+        faktiske daggry-forsøk.
+        """
+        return (
+            self._state.pitch_lake.last_production_day
+            < self._state.clock.day - 1
+        )
 
     def _center_camera_on_player(self) -> None:
         # Kamera sentrerer spilleren horisontalt; klamping gjøres av Camera

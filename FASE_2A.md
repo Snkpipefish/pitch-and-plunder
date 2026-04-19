@@ -491,3 +491,16 @@ Etter diskusjon med bruker før Commit 1 er følgende justert fra §6:
   casting uten sub-pixel-rendering, (2) cross-fade mellom backdrop-varianter
   med per-surface alpha kan gi varierende rendering-tid → dt-hikst. Fikses
   i Commit 8-polish (dedikert undersøkelse og mål).
+
+---
+
+## Fremtidige utvidelser (utover Fase 2A-scope)
+
+- **Pitch Lake visuell utvinning (Fase 4)**: Brukeren ønsker at bek-
+  produksjonen blir visuelt observerbar og interaktiv. Konseptskisse:
+  separat Pitch Lake-scene (nåbar via Fase 2B-seiling) med sideview av
+  svart beksjø, arbeidere som graver, vogner som spilleren kan interagere
+  med ("E hent bek" ved vogn). Erstatter passiv daglig produksjon med
+  aktiv henting. Den daglige upkeep-kostnaden forblir som abstraksjon av
+  driftsutgifter mellom besøk. Notert etter Commit 6.1-brukertest
+  (2026-04-19).

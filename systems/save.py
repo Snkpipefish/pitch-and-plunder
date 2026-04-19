@@ -193,8 +193,9 @@ def _parse_clock(raw: object, fallback_day: int) -> GameClock:
 def _parse_pitch_lake(raw: object) -> PitchLakeState:
     """Tolke lagret PitchLakeState-dict. Ukjente felt → default-verdier.
 
-    v1/v2/v3-saves har ikke feltet; kaller passerer None eller {} og vi
-    returnerer en fresh PitchLakeState().
+    v1/v2/v3-saves har ikke feltet; v4-saves før Commit 6.1 har det men
+    uten `daily_upkeep_cost`. I begge tilfeller returneres default 8
+    for upkeep uten versjons-bump.
     """
     if not isinstance(raw, dict):
         return PitchLakeState()
@@ -202,6 +203,10 @@ def _parse_pitch_lake(raw: object) -> PitchLakeState:
         production_per_day = int(raw.get("production_per_day", 2))
     except (TypeError, ValueError):
         production_per_day = 2
+    try:
+        daily_upkeep_cost = int(raw.get("daily_upkeep_cost", 8))
+    except (TypeError, ValueError):
+        daily_upkeep_cost = 8
     try:
         total_produced = int(raw.get("total_produced", 0))
     except (TypeError, ValueError):
@@ -212,6 +217,7 @@ def _parse_pitch_lake(raw: object) -> PitchLakeState:
         last_production_day = 0
     return PitchLakeState(
         production_per_day=production_per_day,
+        daily_upkeep_cost=daily_upkeep_cost,
         total_produced=total_produced,
         last_production_day=last_production_day,
     )
