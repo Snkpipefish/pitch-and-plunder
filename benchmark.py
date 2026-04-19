@@ -27,8 +27,11 @@ from main import PlaceholderScene, _load_font
 from config import port_config
 from scenes.parallax_test import ParallaxTestScene
 from scenes.port_village import PortVillageScene
+from scenes.voyage import VoyageScene
 from scenes.world_map import WorldMapScene
 from state import GameState
+from systems import balance as balance_module
+from systems import voyage as voyage_module
 
 
 log = logging.getLogger("benchmark")
@@ -46,6 +49,15 @@ def _build_scene(name: str, font: pygame.font.Font, state: GameState):
         )
     if name == "world_map":
         return WorldMapScene(font, state)
+    if name == "voyage":
+        # VoyageScene krever aktiv voyage. Bootstrap en typisk reise
+        # (Tortuga → Port Royal, 2 dager) før scene-init slik at
+        # benchmarken måler en realistisk runtime-tilstand.
+        if state.world_state.voyage is None:
+            voyage_module.start_voyage(
+                state, balance_module.get(), "tortuga", "port_royal",
+            )
+        return VoyageScene(font, state)
     raise ValueError(f"Ukjent scene: {name}")
 
 

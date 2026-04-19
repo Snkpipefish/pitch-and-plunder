@@ -35,6 +35,7 @@ port_config_module.init()
 from scenes.base_scene import BaseScene  # noqa: E402
 from scenes.parallax_test import ParallaxTestScene  # noqa: E402
 from scenes.port_village import PortVillageScene  # noqa: E402
+from scenes.voyage import VoyageScene  # noqa: E402
 from scenes.world_map import WorldMapScene  # noqa: E402
 from state import GameState  # noqa: E402
 from systems import save as save_module  # noqa: E402
@@ -272,6 +273,22 @@ def run() -> int:
     loaded = save_module.load()
     game_state = loaded if loaded is not None else save_module.new_game_state()
 
+    # Initial-scene-valg: hvis save inneholder en aktiv voyage, resume
+    # midt i reise via VoyageScene. Ellers start i havn.
+    initial_scene = (
+        "voyage"
+        if game_state.world_state.voyage is not None
+        else "port_village"
+    )
+    if initial_scene == "voyage":
+        log.info(
+            "Voyage-resume: %s → %s (dag %d → %d)",
+            game_state.world_state.voyage.from_port,
+            game_state.world_state.voyage.to_port,
+            game_state.world_state.voyage.depart_day,
+            game_state.world_state.voyage.arrival_day,
+        )
+
     manager = SceneManager(
         factories={
             "placeholder": lambda: PlaceholderScene(font_small),
@@ -282,8 +299,9 @@ def run() -> int:
                 port_config_module.get(game_state.world_state.current_port),
             ),
             "world_map": lambda: WorldMapScene(font_small, game_state),
+            "voyage": lambda: VoyageScene(font_small, game_state),
         },
-        initial="port_village",
+        initial=initial_scene,
         game_state=game_state,
     )
 

@@ -502,10 +502,16 @@ class PortVillageScene(BaseScene):
         game_state: GameState,
         from_scene: str | None = None,
     ) -> None:
-        """Plasser spilleren og sentrer kamera.
+        """Plasser spilleren og sentrer kamera. Kjør ankomst-rituale
+        ved retur fra reise (C7c).
 
+        - `from_scene="voyage"`: spilleren har akkurat ankommet etter
+          en sjøreise. Kjør write_observed_for_port (target-havnens
+          priser registreres som ferskt sett), realize_pending_units
+          hvis dette er home_port, og push ankomst-toast. Plasser ved
+          dock (samme som "world_map"-stien).
         - `from_scene="world_map"`: spilleren kommer tilbake fra kartet
-          — plasseres ved dock-retur-x (rett innenfor dock-region).
+          uten reise — plasseres ved dock-retur-x.
         - `from_scene=None` + player_state.position_x er GameState-default
           (320.0): fersk spillstart → buildings.player_start_x for havnen.
         - Ellers: player_state.position_x er autoritativ (lagret fra
@@ -514,8 +520,15 @@ class PortVillageScene(BaseScene):
         Y-koordinaten gjenopprettes fra `port.buildings.ground_top_y` —
         per-havn bakke-høyde (C4).
         """
+        # Ankomst-rituale (C7c). VoyageScene har allerede kalt
+        # complete_voyage så current_port er to_port og clock er
+        # in_port-tempo. Vi behøver kun observed-snapshot, pending-
+        # realisering og toast.
+        if from_scene == "voyage":
+            self._handle_voyage_arrival()
+
         GAMESTATE_DEFAULT_X = 320.0
-        if from_scene == "world_map":
+        if from_scene in ("world_map", "voyage"):
             self._player.x = _DOCK_RETURN_X
         elif (
             from_scene is None
@@ -534,6 +547,46 @@ class PortVillageScene(BaseScene):
             self._buildings.ground_top_y - _PLAYER_SPRITE_HEIGHT
         )
         self._center_camera_on_player()
+
+    def _handle_voyage_arrival(self) -> None:
+        """Ankomst-rituale (C7c). Kalles fra on_enter når from_scene
+        er "voyage".
+
+        Forutsetning: VoyageScene.update har allerede kalt
+        voyage.complete_voyage, så `state.world_state.voyage` er None,
+        `current_port` er to_port og clock-tempo er in_port. Vi rører
+        ikke disse her — ankomst-rituale handler kun om observed-
+        snapshot, pending-realisering og brukervarsel.
+        """
+        from systems.economy import write_observed_for_port
+        from systems.pitch_lake import PitchLake
+
+        port_id = self._port.id
+        # Snapshot priser i ny havn — dette er ferskt observert data
+        # (spilleren ser priser umiddelbart ved ankomst). Stale-logikk
+        # i C8 vil sammenligne mot clock.day.
+        write_observed_for_port(self._state, port_id)
+
+        # Realiser pending bek hvis vi ankommer home_port (typisk
+        # Tortuga). Pending som ikke får plass forblir for neste retur.
+        pl_state = self._state.pitch_lake_state
+        if port_id == pl_state.home_port and pl_state.pending_units > 0:
+            realized = PitchLake.realize_pending_units(
+                pl_state, self._state,
+            )
+            if realized > 0:
+                self._toasts.push(Toast(
+                    font=self._font,
+                    text=f"Hentet {realized} bek fra kaia",
+                    color=constants.COLOR_LANTERN_BRIGHT,
+                ))
+
+        # Ankomst-toast
+        self._toasts.push(Toast(
+            font=self._font,
+            text=f"Ankommet {self._port.name}",
+            color=constants.COLOR_MOON_CORE,
+        ))
 
     def on_exit(self, to_scene: str | None = None) -> None:
         self.autosave()

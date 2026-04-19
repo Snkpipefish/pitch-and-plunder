@@ -30,13 +30,79 @@ from entities.ship_icon import ShipIcon
 from scenes.base_scene import BaseScene
 from scenes.world_map_builder import build_all_phase_variants
 from state import GameState
+from systems import balance as _balance
+from systems import voyage as _voyage
 
 
 #: §8.3 — padding mellom markør-ring-bunn og label-topp.
 _LABEL_PADDING = 3
 
+#: Reise-dialog modal-boks dimensjoner (sentrert på skjermen).
+_DIALOG_WIDTH = 220
+_DIALOG_HEIGHT = 80
+
 
 log = logging.getLogger(__name__)
+
+
+class _VoyageConfirmDialog:
+    """Modal reise-bekreftelse-dialog (Fase 2B C7c).
+
+    Per FASE_2B.md §6.4 viser kort rute-info og venter på bekreft/avbryt.
+    Viser KUN "Tid: N dager" — ingen kost-linje (gull-håndtering eies
+    av C9 per godkjent C7-justering).
+    """
+
+    def __init__(
+        self,
+        font: pygame.font.Font,
+        target_port_name: str,
+        days: int,
+    ) -> None:
+        self._title_surf = font.render(
+            f"Seile til {target_port_name}?",
+            False, constants.COLOR_MOON_CORE,
+        ).convert_alpha()
+        self._info_surf = font.render(
+            f"Tid: {days} dager",
+            False, constants.COLOR_STONE_LIT,
+        ).convert_alpha()
+        self._hint_surf = font.render(
+            "[E] Bekreft   [Esc] Avbryt",
+            False, constants.COLOR_LANTERN_BRIGHT,
+        ).convert_alpha()
+        # Resultat — settes av handle_event, leses av WorldMapScene
+        self.confirmed: bool = False
+        self.cancelled: bool = False
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        if event.type != pygame.KEYDOWN:
+            return
+        if event.key in constants.KEY_INTERACT:
+            self.confirmed = True
+        elif event.key in constants.KEY_MENU:
+            self.cancelled = True
+
+    def draw(self, surface: pygame.Surface) -> None:
+        # Sentrert modal-boks
+        x = (constants.RENDER_WIDTH - _DIALOG_WIDTH) // 2
+        y = (constants.RENDER_HEIGHT - _DIALOG_HEIGHT) // 2
+        # Bakgrunn (mørk) + ramme (lys)
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST,
+            (x, y, _DIALOG_WIDTH, _DIALOG_HEIGHT),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_LIT,
+            (x, y, _DIALOG_WIDTH, _DIALOG_HEIGHT), 1,
+        )
+        # Tekst-stable
+        title_x = x + (_DIALOG_WIDTH - self._title_surf.get_width()) // 2
+        info_x = x + (_DIALOG_WIDTH - self._info_surf.get_width()) // 2
+        hint_x = x + (_DIALOG_WIDTH - self._hint_surf.get_width()) // 2
+        surface.blit(self._title_surf, (title_x, y + 12))
+        surface.blit(self._info_surf, (info_x, y + 32))
+        surface.blit(self._hint_surf, (hint_x, y + 56))
 
 
 class WorldMapScene(BaseScene):
@@ -104,6 +170,10 @@ class WorldMapScene(BaseScene):
         # Tid siden scene-åpning, brukt til markør-pulsering.
         self._elapsed: float = 0.0
 
+        # Reise-dialog (None når ikke aktiv). C7c-modal som blokkerer
+        # all kart-input til den lukkes via E (bekreft) eller Esc (avbryt).
+        self._dialog: _VoyageConfirmDialog | None = None
+
         # HUD-tekst: kartets overskrift (statisk)
         self._title_surf = font.render(
             "Karibia", False, constants.COLOR_MOON_CORE,
@@ -116,6 +186,13 @@ class WorldMapScene(BaseScene):
     # --- Input ---
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        # Når dialog er åpen konsumerer den all input, og vi reagerer
+        # på resultatet etter delegasjon.
+        if self._dialog is not None:
+            self._dialog.handle_event(event)
+            self._process_dialog_result()
+            return
+
         if event.type != pygame.KEYDOWN:
             return
         key = event.key
@@ -135,21 +212,60 @@ class WorldMapScene(BaseScene):
         elif key in constants.KEY_DOWN:
             self._navigate((0, 1))
 
+    def _process_dialog_result(self) -> None:
+        """Håndter dialog-resultat etter at den har konsumert en event.
+
+        Ved bekreft: kall voyage.start_voyage og bytt scene. Ved avbryt:
+        bare lukk dialogen.
+        """
+        if self._dialog is None:
+            return
+        if self._dialog.cancelled:
+            self._dialog = None
+            return
+        if self._dialog.confirmed:
+            target = self._focused_port_id
+            bal = _balance.get()
+            voyage = _voyage.start_voyage(
+                self._state, bal, self._current_port_id, target,
+            )
+            self._dialog = None
+            if voyage is None:
+                # start_voyage feilet (ukjent rute eller voyage allerede
+                # aktiv) — log og bli stående på kartet
+                log.warning(
+                    "start_voyage returnerte None for %s→%s",
+                    self._current_port_id, target,
+                )
+                return
+            self.next_scene = "voyage"
+
     def _confirm_focused(self) -> None:
-        """E bekrefter valg. I C5: kun current-port er gyldig mål.
-        Andre havner reserveres til C7-voyage; ingen handling nå.
+        """E bekrefter valg.
+
+        - Hvis fokusert havn er current_port: lukk kartet, tilbake til
+          PortVillageScene (samme som ESC).
+        - Hvis fokusert havn er en annen havn: åpne reise-dialog. Gull-
+          blokkering ligger i C9; C7c lar dialog åpnes uavhengig av
+          gull-balanse.
         """
         if self._focused_port_id == self._current_port_id:
             self.next_scene = "port_village"
-        else:
-            # C5 no-op. Dev-mode logger stille for sporbarhet under
-            # testing.
-            from systems.dev_mode import is_dev_mode
-            if is_dev_mode():
-                log.info(
-                    "E på annen havn '%s' — reise kommer i C7 (no-op i C5)",
-                    self._focused_port_id,
-                )
+            return
+        bal = _balance.get()
+        route = _voyage.get_route(
+            bal, self._current_port_id, self._focused_port_id,
+        )
+        if route is None:
+            log.warning(
+                "Ingen rute fra %s til %s — ingen dialog",
+                self._current_port_id, self._focused_port_id,
+            )
+            return
+        target_name = _port_config.get(self._focused_port_id).name
+        self._dialog = _VoyageConfirmDialog(
+            self._font, target_name, route.days,
+        )
 
     def _navigate(self, direction: tuple[int, int]) -> None:
         """Flytt fokus til nærmeste havn i gitt retning.
@@ -228,6 +344,10 @@ class WorldMapScene(BaseScene):
             self._hint_surf,
             (8, constants.RENDER_HEIGHT - self._hint_surf.get_height() - 4),
         )
+
+        # Reise-dialog (modal) tegnes sist, over alt annet
+        if self._dialog is not None:
+            self._dialog.draw(surface)
 
     def on_exit(self, to_scene: str | None = None) -> None:
         """Ingen save her — WorldMapScene har ingen mutabel state som

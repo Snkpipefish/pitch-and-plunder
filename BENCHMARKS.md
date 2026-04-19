@@ -1063,3 +1063,104 @@ verifiseres via TestTeleportClearsVoyage.
 C7c vil kreve full manuell voyage-test (start fra Tortuga → ankomst →
 priser → save+resume).
 
+## Fase 2B Commit C7c — VoyageScene + reise-dialog + ankomst + main.py + benchmark
+
+Integrasjon-commit som binder C7a-helpers og C7b-infrastruktur til en
+spillbar reise-flyt. Spilleren kan nå navigere til kart, velge en
+annen havn, bekrefte reisen i en modal-dialog, se VoyageScene mens
+klokken tikker akselerert, og ankomme målet med oppdaterte
+observed-priser.
+
+### Endringer
+
+- `scenes/voyage.py` (ny, 175 linjer): VoyageScene. Bakgrunn fra
+  `world_map_builder.build_world_map_background("noon")`, skip-sprite
+  fra ShipIcon. Posisjon og heading inline i scenen (ikke Entity, per
+  C7-plan-godkjent inline-tilnærming). Posisjon beregnes per frame fra
+  `voyage.compute_progress` + `voyage.interpolate_position` —
+  deterministisk fra clock-state, save/load-resume trivielt. Dawn-tikk
+  via `tick_all_ports_dawn` per dag som passerer (samme mønster som
+  PortVillageScene). Ankomst-deteksjon via `clock.day >= arrival_day`
+  → kall `voyage.complete_voyage` → `next_scene = "port_village"`.
+  Ingen player-bevegelse, ingen interaktivitet (autopilot per spec
+  §7.5).
+
+- `scenes/world_map.py`: ny `_VoyageConfirmDialog`-klasse (modal).
+  WorldMapScene._confirm_focused åpner dialog når annen havn er
+  fokusert. Dialog konsumerer all input (piltaster blokkert).
+  Bekreft → `voyage.start_voyage` + `next_scene = "voyage"`. Avbryt
+  → lukk dialog. Gull rører seg ikke (C9 eier hele gull-håndteringen).
+
+- `scenes/port_village.py`: ankomst-rituale i `on_enter` når
+  `from_scene == "voyage"`. Kaller `write_observed_for_port(port_id)`
+  for snapshot av ankomst-prisene, `realize_pending_units` hvis dette
+  er home_port, og pusher "Ankommet X"-toast (+ "Hentet N bek fra
+  kaia" hvis pending realiseres). Plasserer spilleren ved dock-region
+  (samme x-region som "world_map"-stien).
+
+- `main.py`: `"voyage"` registrert i scene-factory. Initial-scene
+  velges basert på `world_state.voyage`: "voyage" hvis aktiv reise
+  (resume fra save), ellers "port_village".
+
+- `benchmark.py`: `"voyage"`-scene i `_build_scene`-fabrikken.
+  Bootstraper en typisk reise (Tortuga → Port Royal, 2 dager) før
+  scene-init slik at benchmarken måler en realistisk tilstand.
+
+### Tester
+
+17 nye i `tests/test_voyage_scene.py`:
+
+- `TestVoyageSceneInit` (2): init med aktiv voyage, init uten voyage
+  raise
+- `TestVoyageSceneUpdate` (3): dawn-tikk for alle 4 markeder per
+  dag, ankomst trigger scene-bytte + complete_voyage, ingen ankomst
+  før arrival_day
+- `TestVoyageSceneRendering` (2): draw, draw etter ankomst defensivt
+- `TestWorldMapDialog` (5): E åpner dialog, ESC avbryter,
+  bekreft starter voyage + scene-bytte, gull uendret, navigasjon
+  blokkert mens dialog åpen
+- `TestVoyageArrivalFlow` (5): observed-snapshot, ankomst-toast,
+  pending realisering ved home-ankomst, pending IKKE realisert ved
+  ikke-home-ankomst, dock-plassering
+
+Total 371 grønne (354 → 371), 7.13 s.
+
+### Benchmark (målmaskin T4200)
+
+| Scene | C7b | C7c | Delta |
+|-------|-----|-----|-------|
+| Port lukket | 4.661 ms | 4.790 ms | +0.13 ms (støy) |
+| Port overlay | 6.113 ms | 5.929 ms | -0.18 ms (støy) |
+| World map | 1.076 ms | 0.966 ms | -0.11 ms (støy) |
+| **VoyageScene** | n/a | **0.814 ms** | ny baseline |
+
+VoyageScene er svært lett (én bakgrunns-blit + 1 skip-sprite-blit + 2
+prikker + tekst) og ligger godt under 5 ms-målet. Ingen regresjon på
+andre scener.
+
+### Manuell smoke
+
+Ikke kjørt automatisk — anbefalt brukerverifisering på målmaskin:
+
+1. Start `python main.py` (uten save). Tortuga lastes som vanlig.
+2. Gå til dock (venstre verdens-kant), trykk E. Verdenskart åpnes.
+3. Naviger med piltast til Port Royal, trykk E. Reise-dialog åpnes
+   ("Seile til Port Royal? Tid: 2 dager").
+4. Trykk Esc — dialog lukker, ingen reise startet.
+5. Gjenta steg 3, trykk E. Scene bytter til VoyageScene. Skip
+   beveger seg fra Tortuga mot Port Royal.
+6. Vent ~150 sekunder (2 dager á 75 sek). Scene bytter til Port Royal.
+   Toast "Ankommet Port Royal" vises.
+7. Åpne børs (E ved børshus). Verifiser at sukker-pris er ~32
+   (base 40 × bias 0.80) og kan ha drevet litt fra dawn-ticks under
+   reisen.
+8. Tilbake til kart, naviger til Tortuga, bekreft reise. Etter
+   ankomst: hvis pending bek > 0 vises "Hentet N bek fra kaia"-toast.
+9. **Voyage-resume**: under reise, lukk spillet (Esc). Start på nytt
+   — skipet skal fortsette fra samme posisjon, ikke nullstilles eller
+   hoppe til ankomst.
+10. **Debug-teleport under voyage** (krever `.devmode`-fil eller
+    `PITCH_DEV=1`): start reise, trykk F2 → teleport til Port Royal,
+    voyage clearet, clock tilbake til in_port-tempo.
+
+
