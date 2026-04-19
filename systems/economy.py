@@ -17,6 +17,7 @@ import json
 import random
 from typing import TYPE_CHECKING
 
+import constants
 from entities.commodity import PRICE_HISTORY_WINDOW, Commodity, InventoryItem
 
 if TYPE_CHECKING:
@@ -165,20 +166,28 @@ class Market:
     ) -> tuple[int, dict[str, InventoryItem], int]:
         """Forsøk å kjøpe `amount` av vare. Returner (nytt_gull, nytt_inventar, kjopt).
 
-        Kjøper maks det gullet tillater hvis `amount` er mer enn mulig.
-        Hvis `cargo_capacity` er satt, klampes også mot tilgjengelig
-        lasterom (totalt på tvers av alle varer). Returner `kjopt == 0`
-        hvis ingenting kunne kjøpes. Modifiserer ikke input-argumentene
-        (ren funksjon på immutable snapshot).
+        Kjøper maks det gullet tillater gitt pris + `TRANSACTION_FEE`
+        (flat gebyr per handel, ikke per enhet). Hvis `cargo_capacity`
+        er satt, klampes også mot tilgjengelig lasterom.
 
-        Oppdaterer `avg_cost` som veid gjennomsnitt over alle kjoep.
+        Transaksjon skjer kun hvis minst 1 enhet faktisk kan kjøpes;
+        ingen gebyr trekkes hvis `bought == 0` (ingen handel).
+
+        Modifiserer ikke input-argumentene (ren funksjon på immutable
+        snapshot). Oppdaterer `avg_cost` som veid gjennomsnitt per kjøp –
+        gebyret teller IKKE inn i avg_cost (det er en transaksjonskost,
+        ikke en vare-kost).
         """
         if amount <= 0:
             return gold, inventory, 0
         price = self.buy_price(commodity_id)
         if price <= 0:
             return gold, inventory, 0
-        max_affordable = gold // price
+        fee = constants.TRANSACTION_FEE
+        # Må kunne dekke minst 1 enhet + gebyr for å i det hele tatt handle.
+        if gold < price + fee:
+            return gold, inventory, 0
+        max_affordable = (gold - fee) // price
         bought = min(amount, max_affordable)
         if cargo_capacity is not None:
             current_total = sum(
@@ -192,7 +201,7 @@ class Market:
         old = new_inventory.get(commodity_id, InventoryItem())
         new_qty = old.quantity + bought
         # Veid gjennomsnitt: vekt gammel snitt med gammel mengde og ny pris
-        # med kjoept mengde.
+        # med kjøpt mengde. Gebyret teller ikke som en del av varekosten.
         if new_qty > 0:
             new_avg = (old.quantity * old.avg_cost + bought * price) / new_qty
         else:
@@ -200,7 +209,7 @@ class Market:
         new_inventory[commodity_id] = InventoryItem(
             quantity=new_qty, avg_cost=new_avg
         )
-        new_gold = gold - bought * price
+        new_gold = gold - bought * price - fee
         return new_gold, new_inventory, bought
 
     def sell(
@@ -212,8 +221,13 @@ class Market:
     ) -> tuple[int, dict[str, InventoryItem], int]:
         """Forsøk å selge `amount` av vare. Returner (nytt_gull, nytt_inventar, solgt).
 
-        Ved salg beholdes `avg_cost` uendret slik at spilleren fortsatt ser
-        hva hun *betalte*. Naar qty naar 0 nullstilles avg_cost.
+        Trekker `TRANSACTION_FEE` én gang fra inntekten. Hvis netto-
+        inntekt (sold*sell_price - fee) er negativ blir handelen refusert
+        (spilleren skal ikke tape penger på å selge); dette slår sjelden
+        til i praksis siden sell_price >> fee for alle fire varer.
+
+        Ved salg beholdes `avg_cost` uendret slik at spilleren fortsatt
+        ser hva hun *betalte*. Når qty når 0 nullstilles avg_cost.
         """
         if amount <= 0:
             return gold, inventory, 0
@@ -223,11 +237,16 @@ class Market:
         if sold <= 0:
             return gold, inventory, 0
         price = self.sell_price(commodity_id)
+        fee = constants.TRANSACTION_FEE
+        proceeds = sold * price - fee
+        if proceeds < 0:
+            # Edge case: selge gir netto tap. Refuser handelen.
+            return gold, inventory, 0
         new_inventory = dict(inventory)
         new_qty = have - sold
         new_avg = old.avg_cost if new_qty > 0 else 0.0
         new_inventory[commodity_id] = InventoryItem(
             quantity=new_qty, avg_cost=new_avg
         )
-        new_gold = gold + sold * price
+        new_gold = gold + proceeds
         return new_gold, new_inventory, sold

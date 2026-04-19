@@ -28,6 +28,7 @@ import constants
 from entities.commodity import InventoryItem, compute_trend
 from systems.economy import Market
 from systems.save import GameState
+from ui.toast import Toast, ToastQueue
 
 
 # Panel-geometri (i intern 640x360-oppløsning)
@@ -79,6 +80,7 @@ class ExchangeOverlay:
         font: pygame.font.Font,
         market: Market,
         state: GameState,
+        toasts: ToastQueue | None = None,
     ) -> None:
         self._font = font
         self._market = market
@@ -88,6 +90,9 @@ class ExchangeOverlay:
         self._selected = 0
         self._panel = _build_panel_surface()
         self._want_close = False
+        # ToastQueue delt med VillageScene – brukes for feilhint
+        # (gullmangel) ved mislykket kjøp. None = ingen toasts (testmodus).
+        self._toasts = toasts
 
         # Statisk pre-rendret
         self._name_surfs = {
@@ -111,6 +116,12 @@ class ExchangeOverlay:
             "Shift\u00d710   Esc lukk",
             False,
             constants.COLOR_STONE_LIT,
+        ).convert_alpha()
+        # Statisk gebyr-linje under gull-linjen
+        self._fee_surf = font.render(
+            f"Gebyr per handel: {constants.TRANSACTION_FEE} d.",
+            False,
+            constants.COLOR_FOG,
         ).convert_alpha()
 
         # Dynamisk (cached)
@@ -177,6 +188,23 @@ class ExchangeOverlay:
         if bought > 0:
             self._state.gold = new_gold
             self._state.inventory = new_inv
+            # Reset dedup-flagget slik at samme feilmelding kan vises på nytt
+            # hvis spilleren senere forsøker og feiler igjen.
+            self._last_toast_text = None
+            return
+        # bought == 0: diagnoser hvorfor og gi feilhint via toast
+        if self._toasts is None:
+            return
+        price = self._market.buy_price(cid)
+        fee = constants.TRANSACTION_FEE
+        if self._state.gold < price + fee:
+            # Gullet rekker ikke til én enhet + gebyr
+            self._push_toast_once(
+                f"For lite gull (trenger {price + fee} d.)",
+                constants.COLOR_EMBER,
+            )
+        # Andre årsaker (cargo fullt) kommuniseres allerede via "Last: X/Y"-
+        # indikatoren og dimmet seleksjonsramme – ingen toast nødvendig.
 
     def _sell(self, amount: int) -> None:
         cid = self._commodities[self._selected].id
@@ -186,6 +214,33 @@ class ExchangeOverlay:
         if sold > 0:
             self._state.gold = new_gold
             self._state.inventory = new_inv
+
+    def _push_toast_once(
+        self,
+        text: str,
+        color: tuple[int, int, int],
+    ) -> None:
+        """Push feilhint-toast hvis ikke identisk toast allerede er i køen.
+
+        Enkel dedup: hvis siste toast i køen har samme tekst og er fortsatt
+        alive, skip. Unngår at gjentatte tastetrykk spammer skjermen med
+        samme feilmelding.
+        """
+        assert self._toasts is not None
+        # Enkel sjekk: hvis siste toast er aktiv og har samme tekst, skip.
+        # Vi eier ikke privat tilstand til ToastQueue, så bruker count +
+        # en flagg-attributt for sist-visede tekst.
+        if getattr(self, "_last_toast_text", None) == text:
+            return
+        self._last_toast_text = text
+        self._toasts.push(
+            Toast(
+                font=self._font,
+                text=text,
+                color=color,
+                duration=2.0,
+            )
+        )
 
     # --- Update ---
 
@@ -335,5 +390,8 @@ class ExchangeOverlay:
             surface.blit(self._qty_surfs[c.id], (QTY_X, y))
 
         assert self._gold_surf is not None
+        # Gull-linje sammen med gebyr-info ved siden av (høyrekant av panel)
         surface.blit(self._gold_surf, (PANEL_X + 16, PANEL_Y + PANEL_H - 44))
+        fee_x = PANEL_X + PANEL_W - self._fee_surf.get_width() - 16
+        surface.blit(self._fee_surf, (fee_x, PANEL_Y + PANEL_H - 44))
         surface.blit(self._hint, (PANEL_X + 16, PANEL_Y + PANEL_H - 22))

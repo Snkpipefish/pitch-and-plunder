@@ -266,7 +266,9 @@ class VillageScene(BaseScene):
         # Slipp eventuelle holdte tastetrykk slik at spilleren ikke fortsetter
         # aa gaa naar overlayet lukkes.
         self._player.press(0)
-        self._overlay = ExchangeOverlay(self._font, self._market, self._state)
+        self._overlay = ExchangeOverlay(
+            self._font, self._market, self._state, toasts=self._toasts
+        )
         # Autosave ved aapning slik at overgang til bors alltid kan trygges
         self.autosave()
 
