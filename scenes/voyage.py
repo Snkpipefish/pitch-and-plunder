@@ -36,8 +36,10 @@ import pygame
 
 import constants
 from config import port_config as _port_config
+from entities.port_marker import PortMarker
 from entities.ship_icon import ShipIcon
 from scenes.base_scene import BaseScene
+from scenes.world_map import draw_port_markers_with_labels
 from scenes.world_map_builder import build_world_map_background
 from state import GameState
 from systems import balance as _balance
@@ -88,6 +90,23 @@ class VoyageScene(BaseScene):
         self._background = build_world_map_background(
             ports, phase="noon",
         )
+
+        # Havn-markører + labels — samme rendering som WorldMapScene
+        # via felles helper. C7c-patch: labels mangler ledet til
+        # navigasjons-forvirring; spilleren trenger navne-orientering
+        # under reise selv om scenen er passiv.
+        self._port_ids = _port_config.get_all_port_ids()
+        self._port_positions: dict[str, tuple[int, int]] = {
+            pid: tuple(ports[pid].world_map_position)
+            for pid in self._port_ids
+        }
+        self._port_labels: dict[str, pygame.Surface] = {
+            pid: font.render(
+                ports[pid].name, False, constants.COLOR_MOON_HALO,
+            ).convert_alpha()
+            for pid in self._port_ids
+        }
+        self._marker = PortMarker()
 
         # Skip-sprite (gjenbrukt fra C5).
         self._ship = ShipIcon()
@@ -157,21 +176,32 @@ class VoyageScene(BaseScene):
         # Bakgrunn (pre-rendret én gang)
         surface.blit(self._background, (0, 0))
 
-        # Endepunkter — diskret markering. Ingen markør-pulsering eller
-        # focus-state; reisen handler om bevegelse, ikke valg.
-        # Tegn små prikker på from_pos og to_pos slik at spilleren ser
-        # hva de reiser FRA og TIL.
-        pygame.draw.circle(
-            surface, constants.COLOR_LANTERN, self._to_pos, 3,
+        # Havn-markører + labels via felles helper (C7c-patch).
+        # from_port får "current"-state (varm ring) — spilleren er
+        # konseptuelt fortsatt knyttet til avreise-havnen til ankomst
+        # er fullført. Andre havner (inkludert to_port) får "other"-
+        # state (kald ring); destinasjonen signaliseres tydelig nok via
+        # skip-sprite som beveger seg mot den. Pulserende fokus-state
+        # bruker vi ikke — reisen er passiv, ingen navigasjons-valg.
+        voyage = self._state.world_state.voyage
+        current_port_id = (
+            voyage.from_port if voyage is not None
+            else self._state.world_state.current_port
         )
-        pygame.draw.circle(
-            surface, constants.COLOR_FOG, self._from_pos, 2,
+        draw_port_markers_with_labels(
+            surface=surface,
+            port_ids=self._port_ids,
+            port_positions=self._port_positions,
+            port_labels=self._port_labels,
+            marker=self._marker,
+            current_port_id=current_port_id,
+            elapsed=0.0,  # ingen pulsering i VoyageScene
         )
 
         # Skip-posisjon — beregnes deterministisk fra clock-state per
         # frame. Save/load-resume fungerer trivielt fordi posisjon
-        # rekonstrueres uten scene-state.
-        voyage = self._state.world_state.voyage
+        # rekonstrueres uten scene-state. Tegnes SIST slik at skipet
+        # legger seg over markørene når det krysser dem.
         if voyage is not None:
             bal = _balance.get()
             progress = _voyage.compute_progress(

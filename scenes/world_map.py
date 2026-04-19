@@ -45,6 +45,47 @@ _DIALOG_HEIGHT = 80
 log = logging.getLogger(__name__)
 
 
+def draw_port_markers_with_labels(
+    surface: pygame.Surface,
+    port_ids: list[str],
+    port_positions: dict[str, tuple[int, int]],
+    port_labels: dict[str, pygame.Surface],
+    marker: PortMarker,
+    current_port_id: str,
+    elapsed: float,
+    skip_port_id: str | None = None,
+) -> None:
+    """Tegn havn-markører + labels for verdenskart-relaterte scener.
+
+    Brukt av WorldMapScene (med skip_port_id=focused, scenen tegner
+    fokus-markøren separat etterpå med pulserende sentrum) og
+    VoyageScene (uten skip — alle 4 markører tegnes her, ship-sprite
+    tegnes etterpå på toppen av call-site).
+
+    Markør-state per havn:
+    - `current_port_id`: "current" (varm LANTERN-ring)
+    - andre: "other" (kald STONE_LIT-ring)
+
+    Labels tegnes for ALLE port_ids uavhengig av skip_port_id —
+    fokus-markøren beholder labelen sin selv om markør-tegningen
+    deferes til caller. Per VISUELL_REFERANSE §8.3 er labels alltid
+    synlige slik at spilleren kan navne-orientere seg.
+    """
+    for pid in port_ids:
+        if pid == skip_port_id:
+            continue
+        pos = port_positions[pid]
+        state = "current" if pid == current_port_id else "other"
+        marker.draw(surface, pos, state, elapsed)
+
+    for pid in port_ids:
+        pos = port_positions[pid]
+        label = port_labels[pid]
+        label_x = pos[0] - label.get_width() // 2
+        label_y = pos[1] + MARKER_SIZE // 2 + _LABEL_PADDING
+        surface.blit(label, (label_x, label_y))
+
+
 class _VoyageConfirmDialog:
     """Modal reise-bekreftelse-dialog (Fase 2B C7c).
 
@@ -307,31 +348,26 @@ class WorldMapScene(BaseScene):
         # Tittel topp-venstre
         surface.blit(self._title_surf, (8, 4))
 
-        # Havn-markører. Rekkefølge fra _port_ids (Tortuga først); fokus-
-        # markøren tegnes SIST slik at pulserende alpha legges oppå de
-        # andre hvis overlap skulle oppstå.
-        for pid in self._port_ids:
-            pos = self._port_positions[pid]
-            if pid == self._focused_port_id:
-                continue  # tegnes til slutt
-            state = "current" if pid == self._current_port_id else "other"
-            self._marker.draw(surface, pos, state, self._elapsed)
+        # Havn-markører + labels via felles helper. Vi skipper fokus-
+        # markøren her og tegner den separat sist slik at pulserende
+        # alpha legges oppå hvis overlap skulle oppstå. Labels tegnes
+        # for ALLE havner i helperen (også fokus-havnen).
+        draw_port_markers_with_labels(
+            surface=surface,
+            port_ids=self._port_ids,
+            port_positions=self._port_positions,
+            port_labels=self._port_labels,
+            marker=self._marker,
+            current_port_id=self._current_port_id,
+            elapsed=self._elapsed,
+            skip_port_id=self._focused_port_id,
+        )
         # Fokus sist. Hvis focused == current, tegn som "current" først
         # OG "focused" oppå (gir stable varm ring + pulserende kjerne).
         focus_pos = self._port_positions[self._focused_port_id]
         if self._focused_port_id == self._current_port_id:
             self._marker.draw(surface, focus_pos, "current", self._elapsed)
         self._marker.draw(surface, focus_pos, "focused", self._elapsed)
-
-        # §8.3 — Havn-labels: sentrert under hver markør-ring
-        for pid in self._port_ids:
-            pos = self._port_positions[pid]
-            label = self._port_labels[pid]
-            # Sentrum av markør er pos; ring-bunn = pos.y + MARKER_SIZE/2.
-            # Label-topp = ring-bunn + padding.
-            label_x = pos[0] - label.get_width() // 2
-            label_y = pos[1] + MARKER_SIZE // 2 + _LABEL_PADDING
-            surface.blit(label, (label_x, label_y))
 
         # Skip-sprite ved current_port. Offset 8 px nord-ost for å unngå
         # overlapp med marker-senter. Heading "N" som nøytral C5-placeholder.

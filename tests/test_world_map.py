@@ -300,6 +300,40 @@ class TestWorldMapSceneRendering:
         scene.update(0.3)
         assert abs(scene._elapsed - 0.8) < 1e-9
 
+    def test_draw_renders_label_pixels_below_each_marker(self):
+        """Regression-vakt for C7c-patch: helper-extraction skal ikke
+        ha brutt eksisterende label-tegning i WorldMapScene. Sampler
+        COLOR_MOON_HALO under hver markør (samme metode som for
+        VoyageScene-tester).
+        """
+        from constants import COLOR_MOON_HALO
+        from entities.port_marker import MARKER_SIZE
+        from scenes.world_map import WorldMapScene
+        scene = WorldMapScene(_font(), _state())
+        surf = pygame.Surface((640, 360))
+        scene.draw(surf)
+
+        ports = port_config.get_all()
+        for pid in ("tortuga", "port_royal", "havana", "nassau"):
+            cx, cy = ports[pid].world_map_position
+            label_top_y = cy + MARKER_SIZE // 2 + 3
+            found_halo = False
+            for dy in range(0, 12):
+                y = label_top_y + dy
+                if not (0 <= y < 360):
+                    continue
+                for dx in range(-30, 31):
+                    x = cx + dx
+                    if not (0 <= x < 640):
+                        continue
+                    pix = surf.get_at((x, y))
+                    if (pix[0], pix[1], pix[2]) == COLOR_MOON_HALO:
+                        found_halo = True
+                        break
+                if found_halo:
+                    break
+            assert found_halo, f"Ingen label-piksler funnet under {pid}"
+
 
 # -----------------------------------------------------------------------------
 # PortVillageScene dock-interaksjon (C5-endring)

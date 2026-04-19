@@ -1163,4 +1163,79 @@ Ikke kjørt automatisk — anbefalt brukerverifisering på målmaskin:
     `PITCH_DEV=1`): start reise, trykk F2 → teleport til Port Royal,
     voyage clearet, clock tilbake til in_port-tempo.
 
+## Fase 2B Commit C7c-patch — Labels på VoyageScene
+
+Brukertest av C7c avdekket at VoyageScene manglet havn-labels. Uten
+navne-orientering ble det vanskelig å skjønne hvilken silhuett som
+var hvilken havn — spesielt i SEA_MID-stripa (y=36..144) som
+perseptuelt leses som "lysere sky-aktig sone" på grunn av sterk
+kontrast mot SEA_DEEP under. Labels løser dette ved å forankre hver
+silhuett som et kjent sted.
+
+WorldMapScene leverte allerede labels per VISUELL_REFERANSE §8.3;
+patchen bringer VoyageScene til samme nivå.
+
+### Endringer
+
+- `scenes/world_map.py`: ny modul-funksjon
+  `draw_port_markers_with_labels(surface, port_ids, port_positions,
+  port_labels, marker, current_port_id, elapsed, skip_port_id=None)`.
+  Ekstrahert fra `WorldMapScene.draw` slik at både kart og voyage kan
+  bruke samme rendering. WorldMapScene skipper fokus-markøren via
+  `skip_port_id` og tegner den separat (med pulsering); helperen
+  tegner labels for ALLE havner uavhengig av skip.
+- `scenes/voyage.py`: tar nå `PortMarker`, `port_positions` og
+  pre-rendrede `port_labels` for alle 4 havner i `__init__`. `draw`
+  kaller den felles helperen i stedet for de tidligere ad-hoc
+  `pygame.draw.circle`-prikkene. `from_port` får "current"-state
+  (varm LANTERN-ring) — spilleren er konseptuelt fortsatt knyttet
+  til avreise-havnen til ankomst er fullført. Andre havner får
+  "other"-state. Skip-sprite tegnes sist (over markørene).
+
+Ingen endring i koordinat-system, ingen endring i logikk. Patch er
+rent visuell.
+
+### Tester
+
+3 nye:
+- `TestVoyageSceneRendering.test_port_labels_pre_rendered_for_all_four`
+- `TestVoyageSceneRendering.test_draw_renders_label_pixels_below_each_marker`
+  (sample COLOR_MOON_HALO i label-region under hver markør)
+- `TestWorldMapSceneRendering.test_draw_renders_label_pixels_below_each_marker`
+  (regression-vakt for helper-extraction)
+
+Total 374 grønne (371 → 374).
+
+### Benchmark (målmaskin T4200)
+
+| Scene | C7c | C7c-patch | Delta |
+|-------|-----|-----------|-------|
+| Port lukket | 4.790 ms | 4.806 ms | +0.02 ms (støy) |
+| Port overlay | 5.929 ms | 6.253 ms | +0.32 ms (støy) |
+| World map | 0.966 ms | 1.104 ms | +0.14 ms (4 ekstra label-blits) |
+| **VoyageScene** | 0.814 ms | **1.122 ms** | +0.31 ms (4 PortMarker + 4 label-blits) |
+
+VoyageScene-økningen er forventet: 8 ekstra blits per frame (4
+ringer + 4 labels) der den før hadde 2 små `pygame.draw.circle`-kall.
+Fortsatt godt under 5 ms-målet (~22% av budsjettet).
+
+### Manuell smoke
+
+Brukerverifisering på målmaskin med nytt screenshot — alle 4 havn-
+labels skal nå være lesbare under sine respektive markører i
+VoyageScene, og from_port skal ha varm LANTERN-ring som matcher
+"current"-stilen fra WorldMapScene.
+
+SEA_MID-dominans og 75 sek/dag-tempo flagget for C10:
+
+- **SEA_MID for sterk** (perseptuell illusjon om sekundær horisont):
+  vurderes mørkere SEA_MID, smalere stripe, eller tykkere horisont-
+  bånd (max 6 px per VISUELL_REFERANSE §8.2). Mindre akutt nå med
+  labels på plass.
+- **75 sek/dag føltes kjedelig**: vurderes kortere tempo, eller
+  ambient-innhold (vær-toasts, dagsteller-varsel). "Skippe"-knapp
+  forkastet (bryter spec §7.5 "once committed, go"-prinsippet).
+  Tilfeldige møter på sjøen kommer i Fase 3.
+
+
 

@@ -149,6 +149,58 @@ class TestVoyageSceneRendering:
         surf = pygame.Surface((640, 360))
         scene.draw(surf)  # skal ikke krasje
 
+    def test_port_labels_pre_rendered_for_all_four(self):
+        """C7c-patch: VoyageScene må ha label-surfaces for alle 4 havner
+        slik at navigasjons-orientering ikke faller bort under reise.
+        """
+        from scenes.voyage import VoyageScene
+        state = _state_with_voyage()
+        scene = VoyageScene(_font(), state)
+        assert set(scene._port_labels.keys()) == {
+            "tortuga", "port_royal", "havana", "nassau"
+        }
+        for pid, label in scene._port_labels.items():
+            assert label.get_width() > 0
+            assert label.get_height() > 0
+
+    def test_draw_renders_label_pixels_below_each_marker(self):
+        """C7c-patch: verifiser at draw faktisk maler label-tekst på
+        skjermen ved å sample piksler i forventet label-region under
+        hver markør. Bruker COLOR_MOON_HALO som signatur — ingen annen
+        bakgrunns-rendering bruker den fargen.
+        """
+        from config import port_config
+        from entities.port_marker import MARKER_SIZE
+        from scenes.voyage import VoyageScene
+        state = _state_with_voyage()
+        scene = VoyageScene(_font(), state)
+        surf = pygame.Surface((640, 360))
+        scene.draw(surf)
+
+        from constants import COLOR_MOON_HALO
+        ports = port_config.get_all()
+        for pid in ("tortuga", "port_royal", "havana", "nassau"):
+            cx, cy = ports[pid].world_map_position
+            # Label sitter rett under marker-ringen, sentrert om cx.
+            # Sample en stripe 0..label_height piksler under markøren.
+            label_top_y = cy + MARKER_SIZE // 2 + 3
+            found_halo = False
+            for dy in range(0, 12):  # label er ~8 px høy + litt margin
+                y = label_top_y + dy
+                if not (0 <= y < 360):
+                    continue
+                for dx in range(-30, 31):
+                    x = cx + dx
+                    if not (0 <= x < 640):
+                        continue
+                    pix = surf.get_at((x, y))
+                    if (pix[0], pix[1], pix[2]) == COLOR_MOON_HALO:
+                        found_halo = True
+                        break
+                if found_halo:
+                    break
+            assert found_halo, f"Ingen label-piksler funnet under {pid}"
+
 
 # -----------------------------------------------------------------------------
 # WorldMapScene-dialog
