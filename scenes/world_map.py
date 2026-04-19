@@ -35,6 +35,7 @@ from state import GameState
 from systems import balance as _balance
 from systems import voyage as _voyage
 from systems.economy import Market
+from ui.toast import Toast, ToastQueue
 from ui.world_map_tooltip import WorldMapTooltip, build_tooltip_lines
 
 
@@ -42,8 +43,9 @@ from ui.world_map_tooltip import WorldMapTooltip, build_tooltip_lines
 _LABEL_PADDING = 3
 
 #: Reise-dialog modal-boks dimensjoner (sentrert på skjermen).
+#: Høyde økt fra 80 til 96 i C9 for å gi plass til kost-linjen.
 _DIALOG_WIDTH = 220
-_DIALOG_HEIGHT = 80
+_DIALOG_HEIGHT = 96
 
 
 log = logging.getLogger(__name__)
@@ -105,11 +107,16 @@ def draw_port_markers_with_labels(
 
 
 class _VoyageConfirmDialog:
-    """Modal reise-bekreftelse-dialog (Fase 2B C7c).
+    """Modal reise-bekreftelse-dialog (Fase 2B C7c, utvidet C9).
 
-    Per FASE_2B.md §6.4 viser kort rute-info og venter på bekreft/avbryt.
-    Viser KUN "Tid: N dager" — ingen kost-linje (gull-håndtering eies
-    av C9 per godkjent C7-justering).
+    Per FASE_2B.md §6.4 viser rute-info og venter på bekreft/avbryt.
+    C9 utvidet med kost-linje. Spilleren har allerede passert
+    affordability-sjekken (WorldMapScene blokkerer dialog-åpning ved
+    insufficient gull) — kost-linjen vises som faktum, ikke advarsel.
+
+    Tone: alle tre informasjons-linjer i STONE_LIT for ro. LANTERN_BRIGHT
+    er reservert for muligheter/belønninger (current-port-markør, "du
+    er her") — kost er konstant og fortjener ikke varm emfase.
     """
 
     def __init__(
@@ -117,13 +124,18 @@ class _VoyageConfirmDialog:
         font: pygame.font.Font,
         target_port_name: str,
         days: int,
+        gold: int,
     ) -> None:
         self._title_surf = font.render(
             f"Seile til {target_port_name}?",
             False, constants.COLOR_MOON_CORE,
         ).convert_alpha()
-        self._info_surf = font.render(
+        self._time_surf = font.render(
             f"Tid: {days} dager",
+            False, constants.COLOR_STONE_LIT,
+        ).convert_alpha()
+        self._cost_surf = font.render(
+            f"Kost: {gold} gull",
             False, constants.COLOR_STONE_LIT,
         ).convert_alpha()
         self._hint_surf = font.render(
@@ -155,13 +167,15 @@ class _VoyageConfirmDialog:
             surface, constants.COLOR_STONE_LIT,
             (x, y, _DIALOG_WIDTH, _DIALOG_HEIGHT), 1,
         )
-        # Tekst-stable
+        # Tekst-stable: tittel / tid / kost / hint
         title_x = x + (_DIALOG_WIDTH - self._title_surf.get_width()) // 2
-        info_x = x + (_DIALOG_WIDTH - self._info_surf.get_width()) // 2
+        time_x = x + (_DIALOG_WIDTH - self._time_surf.get_width()) // 2
+        cost_x = x + (_DIALOG_WIDTH - self._cost_surf.get_width()) // 2
         hint_x = x + (_DIALOG_WIDTH - self._hint_surf.get_width()) // 2
         surface.blit(self._title_surf, (title_x, y + 12))
-        surface.blit(self._info_surf, (info_x, y + 32))
-        surface.blit(self._hint_surf, (hint_x, y + 56))
+        surface.blit(self._time_surf, (time_x, y + 32))
+        surface.blit(self._cost_surf, (cost_x, y + 48))
+        surface.blit(self._hint_surf, (hint_x, y + 72))
 
 
 class WorldMapScene(BaseScene):
@@ -246,6 +260,13 @@ class WorldMapScene(BaseScene):
         }
         self._tooltip = WorldMapTooltip(font)
 
+        # C9: toast-kø for blokk-meldinger ("Trenger X gull") og
+        # avreise-varsler. Baseline like over hint-linja.
+        self._toasts = ToastQueue(
+            baseline_y=constants.RENDER_HEIGHT - 18,
+            center_x=constants.RENDER_WIDTH // 2,
+        )
+
         # HUD-tekst: kartets overskrift (statisk)
         self._title_surf = font.render(
             "Karibia", False, constants.COLOR_MOON_CORE,
@@ -254,6 +275,13 @@ class WorldMapScene(BaseScene):
             "\u2190\u2191\u2192\u2193 velg havn   E bekreft   Esc tilbake",
             False, constants.COLOR_STONE_LIT,
         ).convert_alpha()
+
+    @property
+    def toasts(self) -> ToastQueue:
+        """Eksponer toast-køen for eksterne systemer (F5 hot-reload-
+        handler i main.py).
+        """
+        return self._toasts
 
     # --- Input ---
 
@@ -303,8 +331,9 @@ class WorldMapScene(BaseScene):
             )
             self._dialog = None
             if voyage is None:
-                # start_voyage feilet (ukjent rute eller voyage allerede
-                # aktiv) — log og bli stående på kartet
+                # start_voyage feilet — defensivt fallback. WorldMap har
+                # pre-sjekket affordability, så dette skal ikke skje
+                # i normalflyten. Log og bli stående på kartet.
                 log.warning(
                     "start_voyage returnerte None for %s→%s",
                     self._current_port_id, target,
@@ -317,26 +346,40 @@ class WorldMapScene(BaseScene):
 
         - Hvis fokusert havn er current_port: lukk kartet, tilbake til
           PortVillageScene (samme som ESC).
-        - Hvis fokusert havn er en annen havn: åpne reise-dialog. Gull-
-          blokkering ligger i C9; C7c lar dialog åpnes uavhengig av
-          gull-balanse.
+        - Hvis fokusert havn er en annen havn: pre-sjekk gull-
+          affordability via voyage.voyage_cost. Hvis insufficient → push
+          "Trenger X gull"-toast og IKKE åpne dialog (per spec C9 og
+          tone-direktivet om at kost ikke trenger å skrike fra dialog).
+          Hvis sufficient → åpne reise-dialog som viser kost-linjen
+          som faktum.
         """
         if self._focused_port_id == self._current_port_id:
             self.next_scene = "port_village"
             return
         bal = _balance.get()
-        route = _voyage.get_route(
+        cost = _voyage.voyage_cost(
             bal, self._current_port_id, self._focused_port_id,
         )
-        if route is None:
+        if cost is None:
             log.warning(
                 "Ingen rute fra %s til %s — ingen dialog",
                 self._current_port_id, self._focused_port_id,
             )
             return
+        if self._state.player_state.gold < cost:
+            self._toasts.push(Toast(
+                font=self._font,
+                text=f"Trenger {cost} gull",
+                color=constants.COLOR_EMBER,
+            ))
+            return
+        # Affordability OK — åpne dialog med kost-linje
+        route = _voyage.get_route(
+            bal, self._current_port_id, self._focused_port_id,
+        )
         target_name = _port_config.get(self._focused_port_id).name
         self._dialog = _VoyageConfirmDialog(
-            self._font, target_name, route.days,
+            self._font, target_name, route.days, route.gold,
         )
 
     def _navigate(self, direction: tuple[int, int]) -> None:
@@ -370,6 +413,7 @@ class WorldMapScene(BaseScene):
 
     def update(self, dt: float) -> None:
         self._elapsed += dt
+        self._toasts.update(dt)
 
     # --- Rendering ---
 
@@ -421,6 +465,9 @@ class WorldMapScene(BaseScene):
             self._hint_surf,
             (8, constants.RENDER_HEIGHT - self._hint_surf.get_height() - 4),
         )
+
+        # Toasts (under hint-linje, over kart-bakgrunn)
+        self._toasts.draw(surface)
 
         # Reise-dialog (modal) tegnes sist, over alt annet
         if self._dialog is not None:

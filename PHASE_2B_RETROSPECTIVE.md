@@ -97,10 +97,43 @@ varianter før låsing av valg.
 
 ---
 
+## Brukertest-observasjoner C9 (under utvikling)
+
+### Toast-fragmentering (notert under C9-implementasjon)
+
+Tre scener eier nå hver sin ToastQueue-instans: PortVillageScene
+(fra Fase 2A), WorldMapScene (C9 — for blokk-meldinger), VoyageScene
+(C9 — for avreise-varsel). Ingen kommunikasjon mellom dem.
+
+**Konsekvenser av fragmenteringen:**
+- Avreise-toast vises på VoyageScene som umiddelbart laster etter
+  start_voyage, ikke på WorldMapScene som ble forlatt — riktig
+  visningssted, men krevde ekstra ToastQueue-instans.
+- Hvis vi ville ha "Avreise mot X" som siste melding på kartet før
+  scene-bytte, ville det krevd toast-overlevelse mellom scener.
+- F5-balance-reload-toast vises kun på scenen som var aktiv ved
+  reload; ingen historikk.
+
+**Ikke C9-fix:** scope-creep. Notert for vurdering i C10 eller Fase 3:
+
+- **Singleton-toast-system** i `ui/toast.py` med global ToastQueue.
+  Scener pusher til den globale; main.py rendrer den uavhengig av
+  scene. Krever at scene-bytte ikke clearer toaster automatisk.
+- **Toast-overlevelse via SceneManager**: pass toast-queue inn ved
+  scene-konstruksjon i factory. Mindre invasivt enn singleton.
+- **Status quo**: per-scene-toasts er enkelt og fungerer. Ulempen
+  er kun ved sjeldne overgangs-meldinger.
+
+Anbefaling for C10/Fase 3: vurder singleton hvis flere meldings-
+typer (vær-varsel, regimes, hendelser) kommer til. Hvis bare
+voyage-relaterte meldinger forblir, behold per-scene.
+
+---
+
 ## Status
 
 - C1a–C8: lukket og verifisert
-- C9: Reise-gull-kost + blokkering + polish — neste
+- C9: Reise-gull-kost + blokkering + polish — under utvikling
 - C10: Balansering + retrospektiv
 
 Endelig retrospektiv ved C10-lukking vil utvide denne fila med:

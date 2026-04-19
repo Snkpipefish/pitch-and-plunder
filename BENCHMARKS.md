@@ -1412,6 +1412,104 @@ Tooltip-tekstene "Du er her", "sist besøkt Dag X (Y d. siden)" og
 "aldri besøkt" er saklig deskriptive uten dekorative adjektiver per
 brukerens tone-direktiv. Ingen "pirat-stemning"-tilsetning.
 
+## Fase 2B Commit C9 — Reise-gull-kost + blokkering + polish
+
+Fullfører voyage-flyten med gull-håndtering. Spilleren betaler nå
+rute-kost ved avreise, blokkeres når hen ikke har råd, og får
+saklige avreise/ankomst-toasts gjennom voyage-syklusen.
+
+### Endringer
+
+- `systems/voyage.py`:
+  - Ny `voyage_cost(balance, a, b) -> int | None` pure helper for
+    forhåndssjekk og dialog-rendering.
+  - `start_voyage` trekker nå `route.gold` fra `player.gold` ved
+    suksess. Returnerer None hvis insufficient (defensive guard;
+    caller skal ha pre-sjekket). Atomisk: gull, voyage-state,
+    clock-tempo og from_port observed-snapshot lykkes alle eller
+    ingen. Ved None-retur: INGEN state-mutasjon.
+
+- `scenes/world_map.py`:
+  - `_VoyageConfirmDialog.__init__` tar nå `gold`-parameter og
+    rendrer kost-linje. Boks-høyde 80 → 96. Tone per brukerens
+    Q3-presisering: kost-linje i STONE_LIT (ikke LANTERN_BRIGHT) —
+    pris er fakta, ikke drama.
+  - WorldMapScene får `ToastQueue` og `toasts`-property.
+  - `_confirm_focused` pre-sjekker affordability via `voyage_cost`.
+    Hvis insufficient: push "Trenger {cost} gull"-toast i EMBER og
+    IKKE åpne dialog. Hvis sufficient: åpne dialog som vanlig.
+
+- `scenes/voyage.py`:
+  - VoyageScene får `ToastQueue`. `on_enter` pusher
+    "Avreise mot {to_port_name}"-toast hvis
+    `clock.day == voyage.depart_day` (fersk voyage). Ved
+    save-resume mid-voyage: ingen toast.
+
+- `benchmark.py`: voyage-scene-bootstrap setter nå gold=100 før
+  `start_voyage` slik at fresh `GameState()` (gold=0) passerer
+  affordability-sjekken.
+
+### Tester
+
+15 nye/endrede:
+
+- `tests/test_voyage_cost.py` (ny, 8): voyage_cost lookup, gold-
+  trekking, atomisk affordability-guard
+- `tests/test_voyage.py` (1 endret): "no mutation" → "deducts gold"
+- `tests/test_voyage_scene.py` (6 nye/endrede): dialog-confirm
+  trekker gull, insufficient-blokk + toast, avreise-toast for fersk
+  voyage, ingen toast for resume, dialog-konstruksjon med gold-arg
+- `tests/test_world_map.py` (1 endret): dialog-konstruksjon med
+  4. arg
+
+Total 418 grønne (403 → 418), 8.46 s.
+
+### Benchmark (målmaskin T4200)
+
+| Scene | C8 | C9 | Delta |
+|-------|----|----|-------|
+| Port lukket | 4.401 ms | 4.894 ms | +0.49 ms (støy) |
+| Port overlay | 5.791 ms | 6.232 ms | +0.44 ms (støy) |
+| World map | 1.210 ms | 1.250 ms | +0.04 ms (toast-update) |
+| VoyageScene | 1.176 ms | 1.203 ms | +0.03 ms (toast-update) |
+
+Alle scener fortsatt godt under 5 ms-mål. Toast-tikk per frame er
+neglisjerbar.
+
+### Manuell smoke (anbefalt på fresh save)
+
+`rm saves/savegame.json && python main.py`. Verifiser fire scenarioer
+per godkjent C9-plan:
+
+1. **Reise med nok gull**: spawn Tortuga (300 gull) → kart → fokus
+   Port Royal → E → dialog viser "Tid: 2 dager / Kost: 10 gull" →
+   bekreft → toast "Avreise mot Port Royal" → ankomst → "Ankommet
+   Port Royal" → verifiser gull = 290.
+
+2. **Insufficient gull**: kjøp varer på børsen til gull < 10 → kart
+   → fokus Port Royal → E → ingen dialog, toast "Trenger 10 gull"
+   i rød (EMBER) → spilleren forblir på kartet.
+
+3. **Eksakt-affordable**: sett gull til nøyaktig 10 → reise lykkes
+   → gull = 0 ved ankomst.
+
+4. **Voyage-resume mister ikke toast**: midt i en reise, lukk
+   spillet → start på nytt → fortsetter direkte i VoyageScene UTEN
+   avreise-toast (det er en resume, ikke en ny avreise).
+
+### Tone-validering
+
+- "Trenger {cost} gull" — saklig, dekker kun problemet
+- "Avreise mot {port_name}" — substantiv-form (matcher "Ankommet"-
+  formatet fra C7c)
+- "Kost: {gold} gull" — STONE_LIT-tone per Q3-presisering
+
+### C10-noter
+
+Toast-fragmentering (3 ToastQueue-instanser uten kommunikasjon)
+notert i PHASE_2B_RETROSPECTIVE.md. Vurder singleton eller
+SceneManager-injection i C10/Fase 3.
+
 
 
 

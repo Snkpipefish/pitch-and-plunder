@@ -456,7 +456,7 @@ class TestWorldMapTooltipOnFocus:
         from scenes.world_map import WorldMapScene, _VoyageConfirmDialog
         scene = WorldMapScene(_font(), _state())
         scene._focused_port_id = "havana"
-        scene._dialog = _VoyageConfirmDialog(_font(), "Havana", 3)
+        scene._dialog = _VoyageConfirmDialog(_font(), "Havana", 3, 15)
         surf = pygame.Surface((640, 360))
         scene.draw(surf)  # skal ikke krasje
         # Implisitt: ingen kontroll på tooltip — hvis koden var feil

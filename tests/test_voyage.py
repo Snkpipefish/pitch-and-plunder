@@ -185,15 +185,16 @@ class TestStartVoyage:
         voyage.start_voyage(state, bal, "tortuga", "havana")
         assert state.world_state.clock.seconds_per_day == bal.time.seconds_per_day_at_sea
 
-    def test_success_does_not_mutate_gold(self):
-        """C7-konvensjon: gull-trekking eies av C9. start_voyage rører
-        ikke gull; dialog viser kun 'Tid: N dager' uten kost-linje.
+    def test_success_deducts_route_gold(self):
+        """C9: start_voyage trekker route.gold fra player.gold ved
+        suksess. Tortuga→Port Royal er 10 gull per balance.json.
+        Atomisk med voyage-state-opprettelsen.
         """
         state = save_module.new_game_state()
         state.player_state.gold = 250
         bal = balance.get()
         voyage.start_voyage(state, bal, "tortuga", "port_royal")
-        assert state.player_state.gold == 250
+        assert state.player_state.gold == 240  # 250 - 10
 
     def test_success_writes_observed_for_from_port(self):
         """Spilleren har akkurat vært i børsen i from_port — prisene skal

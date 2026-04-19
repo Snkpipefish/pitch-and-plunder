@@ -249,14 +249,15 @@ class TestWorldMapDialog:
         bal = balance.get()
         assert state.world_state.clock.seconds_per_day == bal.time.seconds_per_day_at_sea
 
-    def test_dialog_e_does_not_mutate_gold(self):
-        """C7c-konvensjon: gull-trekking eies av C9. Bekreftelse av
-        reise rører ikke gull."""
+    def test_dialog_e_deducts_route_gold(self):
+        """C9: bekreftet dialog trekker route.gold fra player.gold.
+        Tortuga→Nassau koster 20 gull per balance.json.
+        """
         scene, state = self._scene_with_focus("nassau")
         state.player_state.gold = 200
         scene.handle_event(self._key(pygame.K_e))  # åpne dialog
         scene.handle_event(self._key(pygame.K_e))  # bekreft
-        assert state.player_state.gold == 200
+        assert state.player_state.gold == 180  # 200 - 20
 
     def test_navigation_blocked_while_dialog_open(self):
         """Dialog konsumerer all input — piltaster skal ikke flytte
@@ -266,6 +267,114 @@ class TestWorldMapDialog:
         focus_before = scene._focused_port_id
         scene.handle_event(self._key(pygame.K_LEFT))  # skal ignoreres
         assert scene._focused_port_id == focus_before
+
+
+# -----------------------------------------------------------------------------
+# C9: insufficient-gull-blokkering + avreise-toast
+# -----------------------------------------------------------------------------
+
+
+class TestInsufficientGoldBlocking:
+    def _scene(self) -> "WorldMapScene":
+        from scenes.world_map import WorldMapScene
+        state = save_module.new_game_state()
+        state.world_state.current_port = "tortuga"
+        return WorldMapScene(_font(), state), state
+
+    def _key(self, k: int) -> pygame.event.Event:
+        return pygame.event.Event(pygame.KEYDOWN, {"key": k, "mod": 0})
+
+    def test_insufficient_gold_pushes_toast_and_does_not_open_dialog(self):
+        """Per spec C9 + Q-svar: pre-confirm-toast, ikke åpne dialog.
+        Spilleren ser blokk-grunnen umiddelbart uten ekstra steg.
+        """
+        scene, state = self._scene()
+        scene._focused_port_id = "havana"  # rute kost 15 gull
+        state.player_state.gold = 5
+        # Ingen toasts før forsøk
+        assert len(scene._toasts._toasts) == 0
+        scene.handle_event(self._key(pygame.K_e))
+        # Toast pushet, dialog IKKE åpnet
+        assert len(scene._toasts._toasts) >= 1
+        assert scene._dialog is None
+        # Voyage IKKE startet, gull uendret
+        assert state.world_state.voyage is None
+        assert state.player_state.gold == 5
+
+    def test_sufficient_gold_opens_dialog_normally(self):
+        scene, state = self._scene()
+        scene._focused_port_id = "havana"
+        state.player_state.gold = 15  # nøyaktig kost
+        scene.handle_event(self._key(pygame.K_e))
+        assert scene._dialog is not None  # dialog åpnet
+        assert state.world_state.voyage is None  # ikke startet ennå
+        assert state.player_state.gold == 15  # ikke trukket før bekreft
+
+    def test_insufficient_gold_via_dialog_e_is_defensive_noop(self):
+        """Hvis gull endres mellom dialog-åpning og confirm (edge-case),
+        skal start_voyage returnere None og scene ikke bytte. Defensiv
+        guard — UI-stien har normalt sjekket affordability allerede.
+        """
+        scene, state = self._scene()
+        scene._focused_port_id = "havana"
+        state.player_state.gold = 100
+        scene.handle_event(self._key(pygame.K_e))  # åpne dialog
+        assert scene._dialog is not None
+        # Spilleren mister gull mellom åpning og confirm
+        state.player_state.gold = 0
+        scene.handle_event(self._key(pygame.K_e))  # confirm
+        # Defensiv: dialog lukket, ingen scene-bytte, ingen voyage
+        assert scene._dialog is None
+        assert scene.next_scene is None
+        assert state.world_state.voyage is None
+
+
+class TestDepartureToast:
+    def test_fresh_voyage_pushes_departure_toast(self):
+        """clock.day == voyage.depart_day → fersk avreise → toast pushed."""
+        from scenes.voyage import VoyageScene
+        state = _state_with_voyage(from_port="tortuga", to_port="port_royal")
+        # state.world_state.clock.day == voyage.depart_day etter start_voyage
+        assert state.world_state.clock.day == state.world_state.voyage.depart_day
+
+        scene = VoyageScene(_font(), state)
+        # on_enter pusher avreise-toast
+        scene.on_enter(state, from_scene="world_map")
+        assert len(scene._toasts._toasts) >= 1
+
+    def test_voyage_resume_does_not_push_departure_toast(self):
+        """clock.day > voyage.depart_day → resume fra save → ingen toast.
+        Spilleren har allerede sett avreise-toasten i forrige sesjon.
+        """
+        from scenes.voyage import VoyageScene
+        state = _state_with_voyage(from_port="tortuga", to_port="havana")
+        # Simuler at vi er midt i reisen (en dag passert)
+        state.world_state.clock.day = state.world_state.voyage.depart_day + 1
+
+        scene = VoyageScene(_font(), state)
+        scene.on_enter(state, from_scene=None)  # save-resume
+        assert len(scene._toasts._toasts) == 0
+
+
+# -----------------------------------------------------------------------------
+# C9: dialog viser kost-linje
+# -----------------------------------------------------------------------------
+
+
+class TestDialogCostLine:
+    def test_dialog_constructed_with_gold_arg(self):
+        """_VoyageConfirmDialog.__init__ tar (font, name, days, gold).
+        Kost-linje pre-rendres ved init."""
+        from scenes.world_map import _VoyageConfirmDialog
+        dialog = _VoyageConfirmDialog(_font(), "Port Royal", 2, 10)
+        # Kost-surface eksisterer og har innhold
+        assert dialog._cost_surf.get_width() > 0
+
+    def test_dialog_draws_without_crashing(self):
+        from scenes.world_map import _VoyageConfirmDialog
+        dialog = _VoyageConfirmDialog(_font(), "Havana", 3, 15)
+        surf = pygame.Surface((640, 360))
+        dialog.draw(surf)
 
 
 # -----------------------------------------------------------------------------

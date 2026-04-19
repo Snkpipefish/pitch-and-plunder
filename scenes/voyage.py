@@ -47,6 +47,7 @@ from systems import voyage as _voyage
 from systems.economy import Market, tick_all_ports_dawn
 from systems.pitch_lake import PitchLake
 from systems.regime_manager import RegimeManager
+from ui.toast import Toast, ToastQueue
 
 
 log = logging.getLogger(__name__)
@@ -130,6 +131,19 @@ class VoyageScene(BaseScene):
             False, constants.COLOR_FOG,
         ).convert_alpha()
 
+        # C9: toast-kø for avreise-varsel ("Avreise mot Port Royal").
+        # Eksisterer kun for fersk voyage, ikke ved resume — sporing
+        # via clock.day == voyage.depart_day-sjekk i on_enter.
+        self._toasts = ToastQueue(
+            baseline_y=constants.RENDER_HEIGHT - 18,
+            center_x=constants.RENDER_WIDTH // 2,
+        )
+
+    @property
+    def toasts(self) -> ToastQueue:
+        """Eksponer toast-køen for eksterne systemer."""
+        return self._toasts
+
     # --- Input ---
 
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -143,6 +157,7 @@ class VoyageScene(BaseScene):
     def update(self, dt: float) -> None:
         # Klokken oppdateres av main.run() (felles for alle scener);
         # VoyageScene må kun reagere på dag-skift og ankomst.
+        self._toasts.update(dt)
         clock = self._state.world_state.clock
         curr_day = clock.day
 
@@ -223,6 +238,9 @@ class VoyageScene(BaseScene):
             (8, constants.RENDER_HEIGHT - self._hint_surf.get_height() - 4),
         )
 
+        # Toasts (avreise-varsel ved fersk voyage)
+        self._toasts.draw(surface)
+
     # --- Lifecycle ---
 
     def on_enter(
@@ -232,9 +250,22 @@ class VoyageScene(BaseScene):
     ) -> None:
         """Ingen state-mutasjon — voyage er allerede satt opp av
         `voyage.start_voyage` i WorldMapScene-dialogen, eller av
-        save-load (resume). VoyageScene leser kun.
+        save-load (resume).
+
+        C9: ved FERSK voyage (clock.day == voyage.depart_day) push
+        avreise-toast. Ved RESUME (clock.day > depart_day) hopper vi
+        over toasten — spilleren restartet midt-i-reise og trenger
+        ikke en "Avreise"-melding for noe som allerede skjedde.
         """
-        return
+        voyage = game_state.world_state.voyage
+        if voyage is None:
+            return
+        if game_state.world_state.clock.day == voyage.depart_day:
+            self._toasts.push(Toast(
+                font=self._font,
+                text=f"Avreise mot {self._to_port_name}",
+                color=constants.COLOR_MOON_CORE,
+            ))
 
     def on_exit(self, to_scene: str | None = None) -> None:
         """Ingen autosave her — clock + voyage + economy persistere

@@ -52,8 +52,11 @@ def _build_scene(name: str, font: pygame.font.Font, state: GameState):
     if name == "voyage":
         # VoyageScene krever aktiv voyage. Bootstrap en typisk reise
         # (Tortuga → Port Royal, 2 dager) før scene-init slik at
-        # benchmarken måler en realistisk runtime-tilstand.
+        # benchmarken måler en realistisk runtime-tilstand. Gir state
+        # nok gull til å passere start_voyage affordability-sjekken
+        # (C9 — fersk GameState() har gold=0).
         if state.world_state.voyage is None:
+            state.player_state.gold = 100
             voyage_module.start_voyage(
                 state, balance_module.get(), "tortuga", "port_royal",
             )

@@ -50,6 +50,19 @@ def get_route(balance: "Balance", a: str, b: str) -> "RouteInfo | None":
     return balance.travel.routes.get(route_key(a, b))
 
 
+def voyage_cost(balance: "Balance", a: str, b: str) -> int | None:
+    """Returner gull-kost for ruten, eller None hvis ruten ikke finnes.
+
+    C9: pure helper for forhåndssjekk av affordability + dialog-
+    rendering. Trekker IKKE gull selv — det gjør `start_voyage` etter
+    å ha verifisert at spilleren har råd.
+    """
+    route = get_route(balance, a, b)
+    if route is None:
+        return None
+    return route.gold
+
+
 # -----------------------------------------------------------------------------
 # Heading-beregning
 # -----------------------------------------------------------------------------
@@ -138,16 +151,23 @@ def start_voyage(
     Effekter ved suksess:
     - Snapshot av from_port observed (spilleren har akkurat vært i
       børsen, prisene er ferskt sett)
+    - Trekk `route.gold` fra `state.player_state.gold` (C9: gull-
+      håndtering er nå atomisk med voyage-state — enten begge
+      lykkes eller ingen)
     - Ny VoyageState i `state.world_state.voyage` med depart_day fra
       klokken og arrival_day = depart_day + route.days
     - Klokkens `seconds_per_day` byttes til `at_sea`-tempo
-    - **Ingen gull-trekking** (C9 eier hele gull-håndteringen)
 
     Returnerer VoyageState ved suksess, None hvis:
     - Ruten finnes ikke (ukjent (from, to)-par i balance.travel.routes)
     - En reise er allerede aktiv (defensive — caller burde ha sjekket)
+    - Spilleren har ikke råd til ruten (gold < route.gold). C9:
+      caller (WorldMapScene) skal ha pre-sjekket via `voyage_cost`
+      og blokkert med toast før dialog åpnes — dette er en
+      defensive guard for å holde state-mutasjonen atomisk.
 
-    Ved None-retur: ingen state-mutasjon.
+    Ved None-retur: INGEN state-mutasjon (gull, voyage, clock,
+    observed alle uendret).
     """
     if state.world_state.voyage is not None:
         log.warning(
@@ -163,11 +183,20 @@ def start_voyage(
             from_port, to_port,
         )
         return None
+    if state.player_state.gold < route.gold:
+        log.warning(
+            "start_voyage: insufficient gold (%d < %d) for %s→%s",
+            state.player_state.gold, route.gold, from_port, to_port,
+        )
+        return None
 
     # Snapshot from_port observed FØR mutasjon — defensivt mot at
     # write_observed-feil ikke skal etterlate halv-startet voyage.
     write_observed_for_port(state, from_port)
 
+    # Atomisk: gull-trekk + voyage-state + clock-tempo. Etter denne
+    # punktet er reisen committed.
+    state.player_state.gold -= route.gold
     depart_day = state.world_state.clock.day
     voyage = VoyageState(
         from_port=from_port,
@@ -179,8 +208,9 @@ def start_voyage(
     state.world_state.voyage = voyage
     state.world_state.clock.seconds_per_day = balance.time.seconds_per_day_at_sea
     log.info(
-        "Voyage startet: %s → %s, dag %d → %d (rute=%d dager)",
-        from_port, to_port, depart_day, voyage.arrival_day, route.days,
+        "Voyage startet: %s → %s, dag %d → %d (rute=%d dager, kost=%d gull)",
+        from_port, to_port, depart_day, voyage.arrival_day,
+        route.days, route.gold,
     )
     return voyage
 
