@@ -347,11 +347,11 @@ mot bakgrunn i hver fase:
 | Dusk | SEA_DEEP (`#0f1829`) | 1.3:1 | **KRITISK** — silhuetter smelter delvis inn |
 | Night | SEA_DEEP (`#0f1829`) | 1.3:1 | **KRITISK** |
 
-**Løsning:** om natten og dusk, tegn en 1-px ytre "skimmer-linje" i
-`COLOR_STONE_DARK` (`#1f2538`) som subtil silhuett-forsterker. Gir
-1.8:1-kontrast mot SEA_DEEP — nok til at øyene fortsatt er leselige
-selv om de er mørkere enn dagfasen. Skimmer-linjen pre-rendres som
-del av natt-bakgrunns-varianten, ikke dynamisk.
+**Løsning (oppdatert i v1.2):** §6's skimmer-linje er **erstattet** av
+§8.1 topp-kant-belysning som lagringsmekanisme for silhuett-leselighet.
+Samme implementasjons-mønster (pre-rendret per bakgrunns-variant), men
+kanten er nå kun på silhuettens topp (ikke rundt hele), og fargen
+varierer per fase per §8.5.
 
 **Ikke-løsning:** ikke gjør øy-fargene lysere om natten. Det ville
 bryte tematikken (verden blir mørkere om natten, ikke invertert).
@@ -406,7 +406,191 @@ riktig valg.
 
 ---
 
+## 8. Addendum — lagringsmekanismer for visuell lesbarhet (C5.1)
+
+Første C5-skjermbilde avdekket at dokumentets §1–§6 leverer på palett-
+disiplin, men mangler de **visuelle lagringsmekanismene** som gjør at
+spilleren faktisk skiller forgrunn fra bakgrunn, himmel fra hav, og
+funksjonelle elementer fra dekor. Uten disse mekanismene kollapser
+kartet til flate tonede områder uten dybde.
+
+Denne seksjonen er **bindende for C5.1-patch** og overordnet §1–§6 der
+de kolliderer. Senere polish i C10 bygger på dette grunnlaget.
+
+### 8.1 Monkey Island — kontur-belysning på silhuetter
+
+**Referanse:** Monkey Island EGA/VGA (1990, LucasArts) etablerte at
+øy-silhuetter ikke er flate svarte klumper — de har **lysere kant på
+silhuettens topp** ("edges and detail picked out in blue to denote
+starlight"). Dette gir tydelig kontur mot natt-himmel selv når både
+silhuett og bakgrunn er i mørke toner.
+
+**Implementering på verdenskartet:**
+
+- Hver øy-silhuett tegnes først i `COLOR_STONE_DARKEST` som hovedform.
+- Deretter tegnes en **1-px lysere kant kun på topp-siden** av
+  silhuetten, i `COLOR_STONE_DARK` (`#1f2538`) som "stjernelys" eller i
+  `COLOR_MOON_HALO` (`#f5e6b3`) for faser der månen er synlig.
+- Kanten er IKKE rundt hele silhuetten — kun toppen (der lyset treffer).
+  Sider og bunn forblir i hovedfargen.
+- Kant-fargens valg avhenger av dag-fase (se §8.5).
+
+**Implementasjons-note:** kantene pre-rendres som del av bakgrunns-
+varianten per fase, ikke dynamisk. Kantene er deterministiske — samme
+silhuett-form gir samme kant hver gang.
+
+### 8.2 Kingdom Two Crowns — atmosfære-gradient ved horisontlinjen
+
+**Referanse:** Kingdom Two Crowns' sidescrolling-scener har konsistent
+**varm horisont mot kjølig forgrunn/bakgrunn**, uansett tid på døgnet.
+Selv i nattscener har horisonten en subtil varm understrek (disappearing
+sun/approaching dawn) som gir atmosfærisk dybde. Det er ikke et
+kontinuerlig vertikalt fargeskift — det er en tydelig horisontal
+"belt-zone" der himmel møter jord/hav.
+
+**Implementering på verdenskartet:**
+
+- I den horisontale overgangen mellom himmel-region og hav-region,
+  introduser et **horisont-bånd på 4 pixler høyde** (startverdi —
+  kan justeres opp til 6 hvis 4 viser seg for subtilt, men ikke
+  høyere; 8+ gir konstant skumring og underminerer Kingdom-
+  effekten som fungerer fordi den er subtil).
+- Glatt interpolering mellom hav-farge og himmel-farge via
+  alpha-blend, ikke hard gradient. Ingen dithering nødvendig hvis
+  glatt alpha fungerer.
+- Tre tilnærminger, én per fase-gruppe:
+  - **Dawn/dusk:** horisont-bånd med varmetilting i `COLOR_EMBER`
+    (`#d96c2e`) eller tematisk alias `COLOR_SUN_DAWN`
+    (`COLOR_LANTERN` = `#ffb347`). Direkte lagringsmekanisme for
+    varm/kjølig-kontrasten spec'en antydet.
+  - **Noon:** horisont-bånd i `COLOR_STONE_BRIGHT` (`#8ba8d6`) som
+    fremhever horisont-linjen uten fargedramatikk. Lagringsmekanismen
+    er kontrast i luminans, ikke hue.
+  - **Night:** horisont-bånd i `COLOR_MOON_HALO` (`#f5e6b3`) — subtil
+    måne-refleksjon langs horisonten. Lav intensitet (alpha-blending
+    til 30–40%).
+- Båndet er **ikke** et jevnt horisontalt stripe; det er 4 px høyt
+  med alpha-gradient fra 100% ved horisont-linjen til 0% ved øvre/nedre
+  ende. Gir "glød"-effekt uten hard kant.
+
+**Kalibreringsnotat:** lettere å øke høyden til 6 senere enn å redusere
+hvis 8+ viser seg feil. Start konservativt.
+
+**Implementasjons-note:** alpha-gradient innenfor pre-rendret
+bakgrunns-variant gir ingen ekstra runtime-kostnad. Gradient lages én
+gang per fase-variant ved scene-init.
+
+### 8.3 Havn-identifikasjon — tekstlabel under hver markør
+
+**Referanse:** Sid Meier's Pirates! (alle versjoner) har alltid hatt
+synlige havn-navn på kartet. Anonyme markører fungerer kun når
+spilleren har ekstern kontekst (tutorial, minimap-legend). 2B har ingen
+av delene.
+
+**Implementering:**
+
+- Under hver havn-markør tegnes et tekstlabel med havnens navn fra
+  `port_config.name` (`"Tortuga"`, `"Port Royal"`, `"Havana"`,
+  `"Nassau"`).
+- Font: Public Pixel 8px (konsistent med HUD).
+- Sentrert under markøren, 2–3 px padding mellom ring-bunn og label-topp.
+- Label-bakgrunn: ingen (tekst rendret direkte på havgradient).
+
+**Farger per tilstand:**
+
+| Tilstand | Label-farge | Rasjonal |
+|----------|------------|----------|
+| Current port | `COLOR_MOON_HALO` (`#f5e6b3`) | Dempet gul, nøytral — signaliserer "merket sted uten politisk tilhørighet". Ring-fargen (varm LANTERN) bærer "her vs der"-signalet, ikke label. |
+| Fokusert | `COLOR_MOON_HALO` (`#f5e6b3`) | Samme som current — fokus-differensiering skjer via ring-pulsering + lys sentrum-prikk. Label forblir uendret for å unngå visuell støy på allerede tett element. |
+| Andre havner | `COLOR_MOON_HALO` (`#f5e6b3`) | Samme som current. Forskjell mellom "current/fokusert/andre" leses kun fra ring-farge/pulsering. |
+| Aldri besøkt (C8+) | `COLOR_FOG` (`#3a3a4a`) | Dempet, konsistent med "kart-hull"-estetikken fra §3. Eneste unntak fra ensfarget regel. |
+
+**Designprinsipp:** én bærer per signal. Ring bærer "her vs der" og
+"fokusert vs ikke-fokusert". Label bærer kun identifikasjon.
+Differensiert label-farge i tillegg til ring-tilstand ville gi redundant
+signal og visuell støy på et 14-px element.
+
+**Fase 3-plan (ikke implementert):** label-farge kan senere reflektere
+fraksjons-tilhørighet (rød=engelsk, gul=spansk, blå=fransk, grå=pirat).
+I 2B er alle havner nøytrale MOON_HALO.
+
+### 8.4 Skyggedybde på hav — valgfri fjerde lagringsmekanisme
+
+**Prinsipp:** ekte hav er **lysere nær kyster** (grunt vann reflekterer
+mer) og **mørkere i åpent hav** (dyp vann absorberer lys). Kart-
+representasjon kan speile dette uten å bryte palett-disiplinen.
+
+**Implementering:**
+
+- I en radius rundt hver øy-silhuett, bytt hav-farge fra
+  `COLOR_SEA_DEEP` til `COLOR_SEA_MID` (`#1e2a4a`) — ett hakk lysere.
+- **Test-rekkefølge for radius (bindende):**
+  1. Prøv 12 px først (midt i intervallet).
+  2. Hvis øyer overlapper visuelt: ned til 10, deretter 8.
+  3. Hvis selv 8 px skaper overlapp: drop effekten helt.
+     Bedre ingen effekt enn uklar hav-rendering.
+  4. Hvis 12 px ser tynn ut og ingen overlapp: opp til 16 px.
+- **Maksimal søkesone: 8–16 px.** Ikke eksperimenter utenfor.
+- Overgangen mellom kyst-sone og åpent hav: 1 stegs hard overgang (ikke
+  gradient) for å holde pixel-estetikken ren.
+
+**Implementasjons-krav (bindende):**
+
+1. **Pre-render ved scene-init, ikke per frame.** Én bakt surface for
+   havet, ikke dynamisk shading. Radial mask per silhuett bakes inn i
+   bakgrunns-varianten.
+2. **Fallback ved overlapp:** drop skyggedybde helt hvis 8 px radius
+   skaper visuelt overlapp mellom kyst-soner fra nærliggende øyer.
+   Dokumenter valget i commit-melding.
+
+**Rapportering:** oppgi hvilken radius-verdi som ble landet på, og
+eventuelt screenshot som støtter valget.
+
+**Valgfri i C5.1:** dette kan implementeres hvis det passer inn i
+samme patch-runde, men er ikke blokkerende. Hvis det utsettes til C10,
+dokumenter det i C5.1-commit-melding.
+
+**Rasjonal for "valgfri":** de tre første lagringsmekanismene (8.1,
+8.2, 8.3) løser lesbarhets-kritiske problemer. 8.4 er estetisk
+forsterking.
+
+### 8.5 Fase-spesifikk kontur-farge — sammenheng med §6
+
+§6's kontrast-kritiske faser (dusk/night der øyer kan smelte inn) løses
+elegant av §8.1-kant-belysningen. Skimmer-linjen som §6 opprinnelig
+foreslo er nå **erstattet av den eksplisitte topp-kant-belysningen** i
+§8.1. Resultat:
+
+- **Noon:** topp-kant i `COLOR_STONE_DARK` (`#1f2538`) — subtilt men synlig.
+- **Dawn:** topp-kant i `COLOR_STONE_DARK` (`#1f2538`) — dag-tone,
+  silhuetter er allerede rimelig leselige mot SEA_MID-bakgrunn.
+- **Dusk:** topp-kant i `COLOR_MOON_HALO` (`#f5e6b3`) — varm aksent
+  matcher horisont-båndet, leverer silhuett-leselighet mot SEA_DEEP.
+- **Night:** topp-kant i `COLOR_MOON_HALO` (`#f5e6b3`) — varm/kjølig-
+  kontrast mot SEA_DEEP gir maksimal silhuett-kontur.
+
+§6-tabellens løsnings-linje ("tegn en 1-px ytre skimmer-linje") er
+oppdatert til: "topp-kant per §8.1 erstatter skimmer-linjen; samme
+implementasjons-mønster (pre-rendret per bakgrunns-variant)".
+
+---
+
 ## CHANGELOG
+
+- **v1.2 (2026-04-19)** — Addendum (§8) etter C5-skjermbilde-review:
+  fire lagringsmekanismer (kontur-belysning per Monkey Island,
+  atmosfære-gradient per Kingdom Two Crowns, havn-identifikasjon per
+  Pirates!, valgfri skyggedybde på hav). Bindende for C5.1-patch.
+  §6 skimmer-linje-løsning erstattet av §8.1 topp-kant-belysning.
+
+  Brukerens kalibrering:
+  - §8.2 horisont-bånd: 4 px startverdi (ikke 8–12). Maks 6 px hvis 4
+    viser seg for subtilt. 8+ forkastet som konstant skumring.
+  - §8.3 label-farge: MOON_HALO for alle tilstander (inkludert
+    fokusert). Ring bærer "her vs der" og fokus-signal alene.
+  - §8.4 kyst-sone-radius: 8–16 px søkesone. Start på 12 px, test-
+    rekkefølge dokumentert. Fallback = drop effekten hvis 8 px gir
+    overlapp.
 
 - **v1.1 (2026-04-19)** — Presiseringer fra brukeren før C5-start:
   (1) §1 alias-tabell legger til dokumentasjon av tematiske
@@ -419,6 +603,7 @@ riktig valg.
   V fra Ø); (4) §5 hav-tekstur utvidet med varm-glimt-fase per tid på
   døgnet (20% EMBER-prikker ved dawn/dusk, 100% STONE_BRIGHT ved
   noon/night). Ingen semantiske endringer i §2/§6/§7.
+
 - **v1.0 (2026-04-19)** — Initial versjon etter Commit C4-lukking,
   før C5-planlegging. Kodifiserer palett-vekting, inspirasjons-
   balansering, og stub-havn-direktivet slik at C5-C6-implementering
