@@ -18,14 +18,17 @@ from typing import Callable
 import constants  # Setter env vars som MÅ være satt før pygame importeres
 import pygame
 
+from config import port_config as port_config_module
 from systems import balance as balance_module  # Må init-es før andre systemer
 from systems import dev_mode
 
 
-# Eksplisitt init ved oppstart — feiler høylydt hvis balance.json mangler
-# eller er ødelagt. Må skje FØR moduler som leser balance (economy, save,
-# pitch_lake, game_clock, exchange) importeres via scenes/systems-under.
+# Eksplisitt init ved oppstart — feiler høylydt hvis balance.json eller
+# ports.json mangler eller er ødelagt. Må skje FØR moduler som leser
+# balance/ports (economy, save, pitch_lake, game_clock, exchange, village)
+# importeres via scenes/systems-under.
 balance_module.init()
+port_config_module.init()
 
 
 from scenes.base_scene import BaseScene  # noqa: E402

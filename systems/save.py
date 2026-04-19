@@ -31,9 +31,13 @@ import os
 from dataclasses import asdict
 from typing import Any
 
+import random
+from dataclasses import asdict as _asdict
+
 import constants
+from config import port_config as _port_config
 from entities.commodity import InventoryItem
-from state.economy_state import KNOWN_PORTS, EconomyState
+from state.economy_state import EconomyState
 from state.game_state import CURRENT_SAVE_VERSION, GameState
 from state.market_state import CommodityMarket, MarketState
 from state.observed_price import ObservedPrice
@@ -43,8 +47,13 @@ from state.ship_state import ShipState
 from state.voyage_state import VoyageState
 from state.world_state import WorldState
 from systems import balance as _balance
+from systems.economy import init_market_for_port, load_base_prices
 from systems.game_clock import GameClock
-from systems.regime_manager import REGIMES, RegimeState
+from systems.regime_manager import (
+    REGIMES,
+    RegimeState,
+    sample_regimes_from_weights,
+)
 
 
 log = logging.getLogger(__name__)
@@ -194,20 +203,40 @@ def migrate_v4_to_v5(d: dict) -> dict:
     tortuga_commodities = d.get("commodities_state", {})
     if not isinstance(tortuga_commodities, dict):
         tortuga_commodities = {}
-    # markets[port_id] = MarketState-dict; Tortuga har data, andre er tomme
-    markets = {"tortuga": {"commodities": tortuga_commodities}}
-    for pid in KNOWN_PORTS:
-        if pid != "tortuga":
-            markets[pid] = {"commodities": {}}
 
-    # regimes[port_id] = dict[cid, RegimeState-dict]
+    # Laster port-config og base-priser for bias-initialisering av ikke-
+    # Tortuga-havner. Port-config må være `init()`-ed i main.py før
+    # load() kalles — ellers kaster get_all_port_ids() RuntimeError.
+    all_port_ids = _port_config.get_all_port_ids()
+    base_prices = load_base_prices(
+        os.path.join(constants.DATA_DIR, "commodities.json")
+    )
+    rng = random.Random()
+
+    # markets[port_id]: Tortuga beholder v4-data; ikke-Tortuga får
+    # base_price × price_bias for hver vare (tom price_history).
+    markets: dict[str, dict] = {
+        "tortuga": {"commodities": tortuga_commodities}
+    }
+    for pid in all_port_ids:
+        if pid == "tortuga":
+            continue
+        pcfg = _port_config.get(pid)
+        ms = init_market_for_port(pcfg, base_prices)
+        markets[pid] = _asdict(ms)
+
+    # regimes[port_id]: Tortuga beholder v4-regimer; ikke-Tortuga
+    # samples fra regime_weights.
     tortuga_regimes = d.get("regimes", {})
     if not isinstance(tortuga_regimes, dict):
         tortuga_regimes = {}
     regimes: dict[str, dict] = {"tortuga": tortuga_regimes}
-    for pid in KNOWN_PORTS:
-        if pid != "tortuga":
-            regimes[pid] = {}
+    for pid in all_port_ids:
+        if pid == "tortuga":
+            continue
+        pcfg = _port_config.get(pid)
+        sampled = sample_regimes_from_weights(pcfg, rng=rng)
+        regimes[pid] = {cid: _asdict(r) for cid, r in sampled.items()}
 
     # observed[port_id][cid] = {price, day_seen}. Kun Tortuga har oppføring.
     tortuga_observed: dict[str, dict] = {}
@@ -553,8 +582,9 @@ def parse_v5(d: dict) -> GameState:
 
 
 def new_game_state() -> GameState:
-    """Opprett en fersk v5 GameState med defaults fra balance + tomme
-    markeder for alle 4 havner (Tortuga initialiseres med placeholder).
+    """Opprett en fersk v5 GameState med defaults fra balance og bias-
+    initialiserte markeder + samplet regimer for alle 4 havner.
+
     Brukes av main.py når ingen save eksisterer.
     """
     bal = _balance.get()
@@ -577,11 +607,17 @@ def new_game_state() -> GameState:
         ),
         voyage=None,
     )
-    economy = EconomyState(
-        markets={pid: MarketState() for pid in KNOWN_PORTS},
-        regimes={pid: {} for pid in KNOWN_PORTS},
-        observed={},
+    base_prices = load_base_prices(
+        os.path.join(constants.DATA_DIR, "commodities.json")
     )
+    rng = random.Random()
+    markets: dict[str, MarketState] = {}
+    regimes: dict[str, dict[str, RegimeState]] = {}
+    for port_id in _port_config.get_all_port_ids():
+        pcfg = _port_config.get(port_id)
+        markets[port_id] = init_market_for_port(pcfg, base_prices)
+        regimes[port_id] = sample_regimes_from_weights(pcfg, rng=rng)
+    economy = EconomyState(markets=markets, regimes=regimes, observed={})
     pitch_lake = PitchLakeState.new_default()
     return GameState(
         player_state=player,
@@ -589,6 +625,51 @@ def new_game_state() -> GameState:
         economy_state=economy,
         pitch_lake_state=pitch_lake,
     )
+
+
+# -----------------------------------------------------------------------------
+# Silent rescue: v5-save fra C1b hadde tomme ikke-Tortuga-markeder.
+# C2 fyller dem via init_market_for_port + sample_regimes ved load, uten
+# versjons-bump (skjemaet er uendret, bare defaults populated).
+# -----------------------------------------------------------------------------
+
+def _rescue_empty_nontortuga_ports(state: GameState) -> None:
+    """Detekter tomme ikke-Tortuga-markeder/regimer og initialiser dem
+    med bias + regime-sampling. Muterer state in-place.
+
+    Kriterier for "tom" som utløser rescue:
+    - markets[pid].commodities er {} OG regimes[pid] er {}
+    Begge må være tomme — delvis utfylt antas å være meningsbærende
+    brukerdata som ikke skal overstyres.
+
+    Logger én INFO-linje per havn som ble rescued.
+    """
+    try:
+        port_ids = _port_config.get_all_port_ids()
+    except RuntimeError:
+        return  # port_config ikke initialisert (kun tester som ikke trenger rescue)
+
+    base_prices = load_base_prices(
+        os.path.join(constants.DATA_DIR, "commodities.json")
+    )
+    rng = random.Random()
+    markets = state.economy_state.markets
+    regimes = state.economy_state.regimes
+
+    for pid in port_ids:
+        if pid == "tortuga":
+            continue
+        market = markets.get(pid)
+        regime_dict = regimes.get(pid, {})
+        market_empty = market is None or not market.commodities
+        regimes_empty = not regime_dict
+        if market_empty and regimes_empty:
+            pcfg = _port_config.get(pid)
+            markets[pid] = init_market_for_port(pcfg, base_prices)
+            regimes[pid] = sample_regimes_from_weights(pcfg, rng=rng)
+            log.info(
+                "Initializing port %s markets with bias (was empty)", pid
+            )
 
 
 # -----------------------------------------------------------------------------
@@ -655,4 +736,8 @@ def load(path: str = constants.SAVE_PATH) -> GameState | None:
         log.warning("Migrering feilet: %s – startverdier brukes", exc)
         return None
 
-    return parse_v5(v5_data)
+    state = parse_v5(v5_data)
+    # Silent rescue: v5-saves fra C1b har tomme ikke-Tortuga-markeder.
+    # Fyll dem fra port_config uten versjons-bump.
+    _rescue_empty_nontortuga_ports(state)
+    return state

@@ -11,6 +11,7 @@ Komposisjon og verdenstall: se docstrings i `village_buildings.py`.
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 import pygame
@@ -38,11 +39,20 @@ from scenes.village_buildings import (
     build_village_gameplay_layer,
 )
 from scenes.village_renderer import VillageRenderer
+import random
+
+from config import port_config
 from state import GameState
 from state.market_state import CommodityMarket, MarketState
 from systems import save as save_module
 from systems.day_cycle import DayCycle
-from systems.economy import Market
+from systems.dev_mode import is_dev_mode as _is_dev_mode
+from systems.economy import (
+    Market,
+    apply_regime_drift_to_market_state,
+    load_base_prices,
+    sync_market_to_state,
+)
 from systems.lighting import Light, LightingSystem
 from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
 from systems.particles import ParticleSystem
@@ -171,6 +181,9 @@ class VillageScene(BaseScene):
             # fra [0.3, 3.0] til [0.5, 2.0]; eksisterende saves kan ha
             # priser utenfor nye grenser (spesielt bek rundt 120+).
             self._market.clamp_to_price_bounds(cid)
+        # Sync Market → state.markets["tortuga"] etter hydration-og-klamp
+        # slik at state speiler Market eksakt (klamp kan ha endret priser).
+        sync_market_to_state(self._market, tortuga_market)
 
         # Regime-system. Initialiser manglende regimer for Tortuga.
         self._regime_manager = RegimeManager()
@@ -185,6 +198,16 @@ class VillageScene(BaseScene):
         # Dag-skift-sporing: naar clock.day overstiger denne, varsle
         # RegimeManager for hver dag som har passert.
         self._last_seen_day = state.world_state.clock.day
+
+        # Base-priser caches for per-havn-drift av ikke-Tortuga-markeder.
+        self._base_prices = load_base_prices(
+            os.path.join(constants.DATA_DIR, "commodities.json")
+        )
+        # RNG for drift/noise på ikke-Tortuga-havner. Tortugas Market har
+        # sin egen intern RNG.
+        self._ports_rng = random.Random()
+        # Cache port_ids (stabil rekkefølge, Tortuga først).
+        self._port_ids = port_config.get_all_port_ids()
 
         # HUD (oeverst venstre: sted / gull / dag / bek-drift).
         # DEV-markør nederst til høyre aktiveres via dev-mode-flagg.
@@ -287,20 +310,21 @@ class VillageScene(BaseScene):
     # --- Logikk ---
 
     def update(self, dt: float) -> None:
-        # Dag-skift: ved daggry settes nye priser (Market.on_dawn bruker
-        # dagens regime-retning) og deretter tikker regime-klokken (kan
-        # skifte til et annet regime fra neste dag). Rekkefølgen er viktig:
-        # on_dawn først slik at "siste dag" av et regime fortsatt har sin
-        # retnings-effekt; regime_manager.on_new_day etterpå for overgang.
+        # Dag-skift: ved daggry settes nye priser for ALLE 4 havner, og
+        # regime-klokkene tikkes. Rekkefølgen er viktig: on_dawn først
+        # slik at "siste dag" av et regime fortsatt har sin retnings-
+        # effekt; regime_manager.on_new_day etterpå for overgang.
+        #
+        # Tortuga: Market.on_dawn (som holder aktiv Commodity-katalog for
+        # rendering) + sync til state.markets["tortuga"].
+        # Ikke-Tortuga: apply_regime_drift_to_market_state direkte på
+        # state.markets[pid] (ingen Market-klasse per havn — se tech-debt-
+        # note på Market i economy.py).
         curr_day = self._state.world_state.clock.day
-        tortuga_regimes = self._state.economy_state.regimes.setdefault(
-            "tortuga", {}
-        )
         if curr_day != self._last_seen_day:
             days_passed = max(0, curr_day - self._last_seen_day)
             for _ in range(days_passed):
-                self._market.on_dawn(tortuga_regimes)
-                self._regime_manager.on_new_day(tortuga_regimes)
+                self._tick_all_ports_dawn()
                 # Upkeep trekkes uansett om produksjon lykkes. Returverdien
                 # ignoreres her — HUD leser pitch_lake_state direkte for
                 # halted-detektering, og toasts er fjernet (Commit 6.1).
@@ -334,6 +358,64 @@ class VillageScene(BaseScene):
         # Kun naar overlayet er lukket kan spilleren bevege seg.
         self._player.update(dt, self._player_min_x, self._player_max_x)
         self._center_camera_on_player()
+
+    def _tick_all_ports_dawn(self) -> None:
+        """Prosesser daggry-overgang for alle 4 havner.
+
+        Tortuga:
+        - `Market.on_dawn(regimes)` oppdaterer aktiv Commodity-katalog
+          (som rendres i exchange og brukes av buy/sell).
+        - `regime_manager.on_new_day(regimes)` tikker regime-klokken.
+        - `sync_market_to_state` kopierer Market → state.markets["tortuga"]
+          slik at save/observed leser fersk data.
+
+        Ikke-Tortuga:
+        - `apply_regime_drift_to_market_state` muterer state.markets[pid]
+          direkte (ingen Market-klasse; bias-initialisert fra port_config).
+        - `regime_manager.on_new_day` på state.regimes[pid].
+
+        Dev-mode: logger én linje per havn med regime-snapshot etter
+        overgang.
+        """
+        econ = self._state.economy_state
+        regimes_tortuga = econ.regimes.setdefault("tortuga", {})
+        markets_tortuga = econ.markets.setdefault("tortuga", MarketState())
+        day = self._state.world_state.clock.day
+        dev = _is_dev_mode()
+
+        # Tortuga — via Market-klassen + sync etter mutasjon
+        self._market.on_dawn(regimes_tortuga)
+        self._regime_manager.on_new_day(regimes_tortuga)
+        sync_market_to_state(self._market, markets_tortuga)
+        if dev:
+            self._log_port_regimes("tortuga", regimes_tortuga, day)
+
+        # Ikke-Tortuga — pure drift på state
+        for port_id in self._port_ids:
+            if port_id == "tortuga":
+                continue
+            market_state = econ.markets.setdefault(port_id, MarketState())
+            port_regimes = econ.regimes.setdefault(port_id, {})
+            apply_regime_drift_to_market_state(
+                market_state, port_regimes, self._base_prices, self._ports_rng
+            )
+            self._regime_manager.on_new_day(port_regimes)
+            if dev:
+                self._log_port_regimes(port_id, port_regimes, day)
+
+    @staticmethod
+    def _log_port_regimes(port_id: str, regimes: dict, day: int) -> None:
+        """Dev-mode: logg regime-snapshot for én havn etter dawn-overgang.
+
+        Format: 'Dawn day=N <port_id> sugar=<regime> rum=... tobacco=... pitch=...'
+        """
+        parts = [
+            f"{cid}={reg.current}"
+            for cid, reg in regimes.items()
+        ]
+        logging.getLogger("ports_regime").info(
+            "Dawn day=%d %s %s", day, port_id, " ".join(parts)
+        )
 
     def _compute_pitch_halted(self) -> bool:
         """Returner True hvis Pitch Lake-produksjon har stoppet.
@@ -392,18 +474,18 @@ class VillageScene(BaseScene):
         player_state.position_x er den eneste koordinaten som lagres;
         y gjenopprettes fra scene-konstant (GROUND_TOP_Y - 20) på
         on_enter. Dette kan bli per-havn i C4.
+
+        Tortuga-markedet synkes også her som defensiv fallback — det
+        synkes allerede eksplisitt etter hver Market.on_dawn i
+        `_tick_all_ports_dawn`, men sync-på-save beskytter mot
+        scenarier der state har gått ut av synk uten dawn (bør ikke
+        skje, men billig forsikring).
         """
         self._state.player_state.position_x = float(self._player.x)
         tortuga_market = self._state.economy_state.markets.setdefault(
             "tortuga", MarketState()
         )
-        tortuga_market.commodities = {
-            c.id: CommodityMarket(
-                current_price=float(c.current_price),
-                price_history=list(c.price_history),
-            )
-            for c in self._market.commodities
-        }
+        sync_market_to_state(self._market, tortuga_market)
         # gold og inventory er allerede lagret i self._state.player_state –
         # direkte mutert av ExchangeOverlay, saa ingen ekstra sync der.
         # world_state.clock oppdateres kontinuerlig av main.run() via

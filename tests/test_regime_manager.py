@@ -161,3 +161,98 @@ class TestEmptyRegimesNoop:
         mgr = _seeded_manager()
         changed = mgr.on_new_day({})
         assert changed == []
+
+
+# -----------------------------------------------------------------------------
+# sample_regimes_from_weights (Fase 2B C2)
+# -----------------------------------------------------------------------------
+
+class TestSampleRegimesFromWeights:
+    def _port_royal(self):
+        from config import port_config
+        return port_config.get("port_royal")
+
+    def test_samples_all_four_commodities(self):
+        from systems.regime_manager import sample_regimes_from_weights
+        result = sample_regimes_from_weights(
+            self._port_royal(), rng=random.Random(1)
+        )
+        assert set(result.keys()) == {"sugar", "rum", "tobacco", "pitch"}
+
+    def test_sampled_regimes_are_valid(self):
+        from systems.regime_manager import sample_regimes_from_weights
+        result = sample_regimes_from_weights(
+            self._port_royal(), rng=random.Random(2)
+        )
+        for cid, regime in result.items():
+            assert regime.current in ("rising", "stable", "falling")
+            assert 3 <= regime.days_remaining <= 5
+            assert regime.history == []
+
+    def test_deterministic_given_seed(self):
+        from systems.regime_manager import sample_regimes_from_weights
+        port = self._port_royal()
+        a = sample_regimes_from_weights(port, rng=random.Random(42))
+        b = sample_regimes_from_weights(port, rng=random.Random(42))
+        for cid in a:
+            assert a[cid].current == b[cid].current
+            assert a[cid].days_remaining == b[cid].days_remaining
+
+    def test_different_seeds_yield_different_samples(self):
+        """Pragmatisk avhengighetstest: to ulike seeds gir ikke identiske
+        samplinger over alle 4 varer."""
+        from systems.regime_manager import sample_regimes_from_weights
+        port = self._port_royal()
+        a = sample_regimes_from_weights(port, rng=random.Random(1))
+        b = sample_regimes_from_weights(port, rng=random.Random(999))
+        identical = all(
+            a[cid].current == b[cid].current
+            and a[cid].days_remaining == b[cid].days_remaining
+            for cid in a
+        )
+        assert not identical
+
+    def test_respects_weights_distribution(self):
+        """Nassau.pitch har {rising: 0.20, stable: 0.40, falling: 0.40}.
+        Over 1000 samplinger skal rising være merkbart mindre enn begge
+        de andre.
+        """
+        from config import port_config
+        from systems.regime_manager import sample_regimes_from_weights
+        nassau = port_config.get("nassau")
+        counts = {"rising": 0, "stable": 0, "falling": 0}
+        rng = random.Random(12345)
+        for _ in range(1000):
+            result = sample_regimes_from_weights(nassau, rng=rng)
+            counts[result["pitch"].current] += 1
+        # Forventet: rising ~200, stable ~400, falling ~400. Stor margin:
+        assert counts["rising"] < 300
+        assert counts["stable"] > 300
+        assert counts["falling"] > 300
+
+
+class TestPerPortIsolation:
+    def test_on_new_day_one_port_does_not_affect_another(self):
+        from systems.regime_manager import RegimeManager
+        mgr = RegimeManager(rng=random.Random(0))
+        tortuga_regimes = {
+            "sugar": RegimeState(current="rising", days_remaining=1, history=[]),
+        }
+        port_royal_regimes = {
+            "sugar": RegimeState(current="stable", days_remaining=5, history=[]),
+        }
+        mgr.on_new_day(tortuga_regimes)
+        assert port_royal_regimes["sugar"].current == "stable"
+        assert port_royal_regimes["sugar"].days_remaining == 5
+
+    def test_sampled_regimes_distinct_instances(self):
+        from config import port_config
+        from systems.regime_manager import sample_regimes_from_weights
+        a = sample_regimes_from_weights(
+            port_config.get("port_royal"), rng=random.Random(7)
+        )
+        b = sample_regimes_from_weights(
+            port_config.get("havana"), rng=random.Random(7)
+        )
+        a["sugar"].current = "__mutated__"
+        assert b["sugar"].current != "__mutated__"

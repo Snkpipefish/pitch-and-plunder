@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "ports": {
+    "tortuga": {
+      "name": "Tortuga",
+      "world_map_position": [410, 230],
+      "scene_class": "scenes.port_village:PortVillageScene",
+      "world_width": 1600,
+      "celestial": {
+        "moon_worldx": 1350,
+        "sun_worldx_dawn": 1500,
+        "sun_worldx_dusk": 100
+      },
+      "price_bias": {"sugar": 1.10, "rum": 1.10, "tobacco": 1.05, "pitch": 1.15},
+      "regime_weights": {
+        "sugar":   {"rising": 0.33, "stable": 0.34, "falling": 0.33},
+        "rum":     {"rising": 0.33, "stable": 0.34, "falling": 0.33},
+        "tobacco": {"rising": 0.33, "stable": 0.34, "falling": 0.33},
+        "pitch":   {"rising": 0.40, "stable": 0.35, "falling": 0.25}
+      }
+    },
+    "port_royal": {
+      "name": "Port Royal",
+      "world_map_position": [180, 260],
+      "scene_class": "scenes.port_village:PortVillageScene",
+      "world_width": 1200,
+      "celestial": {
+        "moon_worldx": 950,
+        "sun_worldx_dawn": 1100,
+        "sun_worldx_dusk": 100
+      },
+      "price_bias": {"sugar": 0.80, "rum": 0.85, "tobacco": 1.00, "pitch": 1.05},
+      "regime_weights": {
+        "sugar":   {"rising": 0.25, "stable": 0.40, "falling": 0.35},
+        "rum":     {"rising": 0.30, "stable": 0.40, "falling": 0.30},
+        "tobacco": {"rising": 0.33, "stable": 0.34, "falling": 0.33},
+        "pitch":   {"rising": 0.35, "stable": 0.35, "falling": 0.30}
+      }
+    },
+    "havana": {
+      "name": "Havana",
+      "world_map_position": [140, 140],
+      "scene_class": "scenes.port_village:PortVillageScene",
+      "world_width": 1400,
+      "celestial": {
+        "moon_worldx": 1100,
+        "sun_worldx_dawn": 1300,
+        "sun_worldx_dusk": 100
+      },
+      "price_bias": {"sugar": 1.05, "rum": 1.05, "tobacco": 0.75, "pitch": 1.10},
+      "regime_weights": {
+        "sugar":   {"rising": 0.35, "stable": 0.35, "falling": 0.30},
+        "rum":     {"rising": 0.30, "stable": 0.40, "falling": 0.30},
+        "tobacco": {"rising": 0.25, "stable": 0.40, "falling": 0.35},
+        "pitch":   {"rising": 0.35, "stable": 0.40, "falling": 0.25}
+      }
+    },
+    "nassau": {
+      "name": "Nassau",
+      "world_map_position": [420, 110],
+      "scene_class": "scenes.port_village:PortVillageScene",
+      "world_width": 1200,
+      "celestial": {
+        "moon_worldx": 950,
+        "sun_worldx_dawn": 1100,
+        "sun_worldx_dusk": 100
+      },
+      "price_bias": {"sugar": 1.00, "rum": 0.95, "tobacco": 1.05, "pitch": 0.90},
+      "regime_weights": {
+        "sugar":   {"rising": 0.33, "stable": 0.34, "falling": 0.33},
+        "rum":     {"rising": 0.30, "stable": 0.40, "falling": 0.30},
+        "tobacco": {"rising": 0.33, "stable": 0.34, "falling": 0.33},
+        "pitch":   {"rising": 0.20, "stable": 0.40, "falling": 0.40}
+      }
+    }
+  }
+}

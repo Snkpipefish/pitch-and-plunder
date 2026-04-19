@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from state.economy_state import KNOWN_PORTS
+from config import port_config
 from state.game_state import CURRENT_SAVE_VERSION
 from state.market_state import MarketState
 from state.observed_price import ObservedPrice
@@ -87,25 +87,53 @@ def test_2_tortuga_data_preserved(
 
 
 # -----------------------------------------------------------------------------
-# Test 3: Andre havner har korrekt struktur (bias-init kommer i C2)
+# Test 3: Andre havner initialisert med bias og regimer (utvidet i C2)
 # -----------------------------------------------------------------------------
 
-def test_3_other_ports_have_empty_market_and_regimes(
+def test_3_other_ports_initialized_with_bias_and_regimes(
     v4_fixture_path: Path,
 ) -> None:
+    """C1b la grunnlaget (alle 4 havner som nøkler). C2 utvider:
+    ikke-Tortuga har MarketState med base_price × port.price_bias per vare
+    og regimer samplet fra port_config.regime_weights.
+    """
+    from systems.economy import load_base_prices
+
     loaded = load(str(v4_fixture_path))
     assert loaded is not None
 
-    # Alle 4 havner er nøkler i markets og regimes
-    for pid in KNOWN_PORTS:
+    # Alle 4 havner som nøkler (C1b-grunnlag, uendret)
+    for pid in port_config.get_all_port_ids():
         assert pid in loaded.economy_state.markets
         assert pid in loaded.economy_state.regimes
 
-    # Tortuga har innhold; de andre er tomme (C2 fyller med bias-initiert data)
+    # Tortuga har v4-data (uendret fra C1b)
     assert loaded.economy_state.markets["tortuga"].commodities
+
+    # Ikke-Tortuga: bias-initialisert marked + samplet regimer (C2-utvidelse)
+    base_prices = load_base_prices("data/commodities.json")
     for pid in ("port_royal", "havana", "nassau"):
-        assert loaded.economy_state.markets[pid] == MarketState()
-        assert loaded.economy_state.regimes[pid] == {}
+        port = port_config.get(pid)
+        market = loaded.economy_state.markets[pid]
+        assert set(market.commodities.keys()) == {
+            "sugar", "rum", "tobacco", "pitch"
+        }
+        for cid, cm in market.commodities.items():
+            expected = base_prices[cid] * port.price_bias[cid]
+            assert abs(cm.current_price - expected) < 0.01, (
+                f"{pid}.{cid}: {cm.current_price} != {expected}"
+            )
+            assert cm.price_history == []
+
+        # Regimer: alle 4 varer har gyldig Regime-objekt
+        port_regimes = loaded.economy_state.regimes[pid]
+        assert set(port_regimes.keys()) == {
+            "sugar", "rum", "tobacco", "pitch"
+        }
+        for cid, regime in port_regimes.items():
+            assert regime.current in ("rising", "stable", "falling")
+            assert 3 <= regime.days_remaining <= 5
+            assert regime.history == []
 
 
 # -----------------------------------------------------------------------------
@@ -195,8 +223,11 @@ def test_6_v3_migrates_through_chain_to_v5(tmp_path: Path) -> None:
     sugar = loaded.economy_state.markets["tortuga"].commodities["sugar"]
     assert sugar.current_price == 41.0
     assert sugar.price_history == [40.0, 41.0]
-    # Andre havner er tomme placeholders
-    assert loaded.economy_state.markets["port_royal"].commodities == {}
+    # Andre havner: bias-initialisert (C2-oppgradert fra C1b's "tomme").
+    # Sugar i Port Royal skal være base(40) × bias(0.80) = 32.0.
+    pr_sugar = loaded.economy_state.markets["port_royal"].commodities["sugar"]
+    assert abs(pr_sugar.current_price - 32.0) < 0.01
+    assert pr_sugar.price_history == []
     # v3-save hadde ingen cargo_capacity → v3→v4 ga balance-default
     # (40); v4→v5 bar den videre til ship.cargo_capacity.
     assert loaded.world_state.ship.cargo_capacity == 40
@@ -400,3 +431,147 @@ def test_corrupt_pitch_lake_fields_fall_back_to_defaults(
     assert loaded.pitch_lake_state.pending_units == 0
     assert loaded.pitch_lake_state.total_produced == 0
     assert loaded.pitch_lake_state.last_production_day == 0
+
+
+# -----------------------------------------------------------------------------
+# C2: v5-save fra C1b-epoken hadde tomme ikke-Tortuga-markeder. load()
+# skal stille fylle dem via init_market_for_port + sample_regimes uten
+# versjons-bump (skjemaet er uendret, bare defaults-fylt).
+# -----------------------------------------------------------------------------
+
+def test_v5_with_empty_nontortuga_markets_gets_bias_init(
+    tmp_path: Path,
+) -> None:
+    """C1b skrev v5-saves med markets[port_royal] = MarketState() osv.
+    Ved C2-load skal de tomme havnene fylles med bias + regime-sampling
+    (silent rescue). Tortuga-data skal være uendret.
+    """
+    from systems.economy import load_base_prices
+
+    v5_c1b_style = {
+        "version": 5,
+        "player_state": {
+            "position_x": 320.0,
+            "gold": 300,
+            "inventory": {
+                "sugar":   {"quantity": 0, "avg_cost": 0.0},
+                "rum":     {"quantity": 0, "avg_cost": 0.0},
+                "tobacco": {"quantity": 0, "avg_cost": 0.0},
+                "pitch":   {"quantity": 0, "avg_cost": 0.0},
+            },
+        },
+        "world_state": {
+            "current_port": "tortuga",
+            "clock": {"day": 5, "seconds_into_day": 0.0, "seconds_per_day": 180.0},
+            "ship": {"class_id": "sloop", "name": "Sjarken", "cargo_capacity": 40},
+            "voyage": None,
+        },
+        "economy_state": {
+            "markets": {
+                "tortuga": {"commodities": {
+                    "sugar": {"current_price": 42.0, "price_history": [40.0, 42.0]},
+                }},
+                "port_royal": {"commodities": {}},
+                "havana":     {"commodities": {}},
+                "nassau":     {"commodities": {}},
+            },
+            "regimes": {
+                "tortuga": {
+                    "sugar": {"current": "rising", "days_remaining": 3, "history": []},
+                },
+                "port_royal": {},
+                "havana": {},
+                "nassau": {},
+            },
+            "observed": {},
+        },
+        "pitch_lake_state": {
+            "home_port": "tortuga",
+            "production_per_day": 2,
+            "upkeep_per_day": 8,
+            "pending_units": 0,
+            "total_produced": 0,
+            "last_production_day": 0,
+        },
+    }
+    path = tmp_path / "v5_c1b.json"
+    path.write_text(json.dumps(v5_c1b_style), encoding="utf-8")
+
+    loaded = load(str(path))
+    assert loaded is not None
+
+    # Tortuga uendret
+    assert loaded.economy_state.markets["tortuga"].commodities["sugar"].current_price == 42.0
+    assert loaded.economy_state.regimes["tortuga"]["sugar"].current == "rising"
+
+    # Ikke-Tortuga: rescue har fylt bias-data og samplede regimer
+    base_prices = load_base_prices("data/commodities.json")
+    for pid in ("port_royal", "havana", "nassau"):
+        port = port_config.get(pid)
+        market = loaded.economy_state.markets[pid]
+        assert set(market.commodities.keys()) == {
+            "sugar", "rum", "tobacco", "pitch"
+        }
+        for cid, cm in market.commodities.items():
+            expected = base_prices[cid] * port.price_bias[cid]
+            assert abs(cm.current_price - expected) < 0.01
+        assert set(loaded.economy_state.regimes[pid].keys()) == {
+            "sugar", "rum", "tobacco", "pitch"
+        }
+
+
+def test_v5_with_partial_nontortuga_data_not_rescued(tmp_path: Path) -> None:
+    """Rescue-kriterium: markets[pid].commodities ER tom OG regimes[pid]
+    ER tom. Hvis EN av dem har data, antas det å være meningsbærende
+    bruker-state og skal ikke overstyres.
+    """
+    v5_partial = {
+        "version": 5,
+        "player_state": {
+            "position_x": 320.0, "gold": 300, "inventory": {
+                "sugar":   {"quantity": 0, "avg_cost": 0.0},
+                "rum":     {"quantity": 0, "avg_cost": 0.0},
+                "tobacco": {"quantity": 0, "avg_cost": 0.0},
+                "pitch":   {"quantity": 0, "avg_cost": 0.0},
+            },
+        },
+        "world_state": {
+            "current_port": "tortuga",
+            "clock": {"day": 1, "seconds_into_day": 0.0, "seconds_per_day": 180.0},
+            "ship": {"class_id": "sloop", "name": "Sjarken", "cargo_capacity": 40},
+            "voyage": None,
+        },
+        "economy_state": {
+            "markets": {
+                "tortuga": {"commodities": {}},
+                "port_royal": {"commodities": {}},  # tom
+                "havana":     {"commodities": {}},
+                "nassau":     {"commodities": {}},
+            },
+            "regimes": {
+                "tortuga": {},
+                "port_royal": {  # regimer ER satt — ikke rescue
+                    "sugar": {"current": "falling", "days_remaining": 4, "history": []},
+                },
+                "havana": {},
+                "nassau": {},
+            },
+            "observed": {},
+        },
+        "pitch_lake_state": {
+            "home_port": "tortuga", "production_per_day": 2, "upkeep_per_day": 8,
+            "pending_units": 0, "total_produced": 0, "last_production_day": 0,
+        },
+    }
+    path = tmp_path / "v5_partial.json"
+    path.write_text(json.dumps(v5_partial), encoding="utf-8")
+    loaded = load(str(path))
+    assert loaded is not None
+
+    # port_royal har regime-data → ikke rescued (market forblir tom)
+    assert loaded.economy_state.markets["port_royal"].commodities == {}
+    # regime bevart
+    assert loaded.economy_state.regimes["port_royal"]["sugar"].current == "falling"
+    # havana og nassau: begge tomme → rescued
+    assert loaded.economy_state.markets["havana"].commodities
+    assert loaded.economy_state.markets["nassau"].commodities

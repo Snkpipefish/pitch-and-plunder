@@ -543,3 +543,60 @@ ved C1b-start). Migreringen bevarer:
 Andre 3 havner får tomme placeholders (MarketState() + {}) — C2 fyller
 med bias-initiert data når PortConfig lander.
 
+## Fase 2B Commit C2 – PortConfig + ports.json + per-havn RegimeManager
+
+PortConfig-dataklasse og `data/ports.json` introduseres med alle 4
+havner. Per-havn marked initialiseres med `base_price × price_bias` og
+regimer samples fra `regime_weights`. RegimeManager-instansen er uendret
+(per-port dict), men caller (VillageScene) itererer over alle 4 havner
+ved new_day. Tortuga fortsatt eneste spillbare havn; de andre simuleres
+"under panseret".
+
+### Resultater (målmaskin T4200 / GM45)
+
+| Scene | C1b | C2 | Delta |
+|-------|-----|-----|-------|
+| Village (lukket) | 4.659 ms | 4.661 ms | +0.002 ms |
+| Village (overlay åpen) | 6.180 ms | 6.294 ms | +0.11 ms |
+| Peak RSS | 116–118 MB | 116–117 MB | stabilt |
+
+Overlay-scenen viser +0.11 ms. Usikkert om dette er signalfull
+regresjon eller run-to-run-støy; vi tar gjentatte målinger i C3 før vi
+reagerer.
+
+### Dawn-ytelse (eksplisitt direktiv)
+
+Bruker ba om at `on_dawn`-tiden ikke skal regressere > 0.5 ms med 4
+havner. Mikrobenchmark: 1000 dawn-cykluser med full 4-havns-prosessering
+(Market.on_dawn + regime_manager × 4 + apply_regime_drift × 3).
+
+    Per dawn (4 havner): 0.193 ms
+
+Langt under 0.5 ms-grensen. På dawn-frame-en betyr det ≈0.2 ms ekstra
+regnetid, helt innenfor 33.3 ms frame-budsjettet (30 FPS). Utøves én
+gang hver 180. sekund i port-tempo; frame-drop-risiko null.
+
+### Tester: 207 → 240 (+33)
+
+- `tests/test_port_config.py` (17): load-happy-path, real-fil-validering,
+  bias-sum-sanity, fail-fast på manglende felt/weights-sum/ukjent regime.
+- `tests/test_save_v5_migration.py` (+2): v5-rescue av tomme ikke-
+  Tortuga-markeder (C1b-saves); partial-data bevart uten overstyring.
+- `tests/test_regime_manager.py` (+7): sample_regimes_from_weights
+  determinisme, weights-fordeling (Nassau pitch), per-port isolasjon.
+- `tests/test_market_sync.py` (+7): Tortuga-sync-kontrakt etter on_dawn,
+  buy, sell, multiple-dawns. Inkluderer direktiv-test
+  `test_tortuga_market_syncs_to_state_on_dawn_buy_sell`.
+- Utvidet test #3 (omdøpt til `test_3_other_ports_initialized_with_bias_and_regimes`):
+  bias-beregning og regime-sampling verifiseres.
+
+### Manuell smoke
+
+Brukerens v5-save (fra C1b-kjøring) lastes; silent rescue fyller 3
+ikke-Tortuga-havner med bias-data og samples regimer. Autosave skriver
+v5 med full 4-havns-økonomi. Loggen viser:
+
+    INFO systems.save: Initializing port havana markets with bias (was empty)
+    INFO systems.save: Initializing port nassau markets with bias (was empty)
+    INFO systems.save: Initializing port port_royal markets with bias (was empty)
+

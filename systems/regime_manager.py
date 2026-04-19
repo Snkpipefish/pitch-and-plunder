@@ -29,6 +29,10 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from config.port_config import PortConfig
 
 
 #: Gyldige regime-strenger. Bruker tuple (immutable) for å tydeliggjøre
@@ -156,3 +160,35 @@ class RegimeManager:
             if roll <= cum:
                 return regime
         return "stable"  # numerisk fallback
+
+
+# -----------------------------------------------------------------------------
+# Per-havn regime-sampling fra weights (Fase 2B C2)
+# -----------------------------------------------------------------------------
+
+def sample_regimes_from_weights(
+    port_config: "PortConfig",
+    rng: random.Random | None = None,
+) -> dict[str, RegimeState]:
+    """Bygg en fersk regime-samling for alle varer i en havn.
+
+    Regime velges per vare via vektet sampling fra
+    `port_config.regime_weights[cid]`. `days_remaining` uniform i
+    `[MIN_REGIME_DAYS, MAX_REGIME_DAYS]`.
+
+    `rng=None` bruker ikke-deterministisk `random.Random()`. Tester kan
+    passere `Random(seed)` for reproduserbare resultater. Historien er
+    tom — disse er "fersk"-regimer uten fortid.
+    """
+    r = rng or random.Random()
+    result: dict[str, RegimeState] = {}
+    for cid, weights in port_config.regime_weights.items():
+        regime_names = list(weights.keys())
+        regime_weight_values = list(weights.values())
+        chosen = r.choices(regime_names, weights=regime_weight_values, k=1)[0]
+        result[cid] = RegimeState(
+            current=chosen,
+            days_remaining=r.randint(MIN_REGIME_DAYS, MAX_REGIME_DAYS),
+            history=[],
+        )
+    return result

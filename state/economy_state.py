@@ -21,9 +21,10 @@ from state.observed_price import ObservedPrice
 from systems.regime_manager import RegimeState
 
 
-#: Port-id for alle 4 havner. Tortuga først siden den er home_port og
-#: den eneste spillbare i C1b. Port Royal, Havana, Nassau aktiveres i C6.
-KNOWN_PORTS: tuple[str, ...] = ("tortuga", "port_royal", "havana", "nassau")
+# Havn-id-er kommer fra `config.port_config.get_all_port_ids()`.
+# KNOWN_PORTS-konstanten ble fjernet i C2 — ports.json er nå autoritativ,
+# og manglende konfig skal stoppe spillet ved oppstart, ikke la det kjøre
+# videre med implisitt hardkodet liste.
 
 
 @dataclass

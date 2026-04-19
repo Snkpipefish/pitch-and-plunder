@@ -34,3 +34,16 @@ def _ensure_balance_initialized():
     if not balance.is_initialized():
         balance.init(str(ROOT / "data" / "balance.json"))
     yield
+
+
+@pytest.fixture(autouse=True)
+def _ensure_port_config_initialized():
+    """Initialiser port_config-singleton fra prosjektets data/ports.json
+    hvis ikke allerede satt. test_port_config.py overstyrer med egen
+    reset-fixture for sine isolasjonstester.
+    """
+    from config import port_config
+
+    if not port_config.is_initialized():
+        port_config.init(str(ROOT / "data" / "ports.json"))
+    yield

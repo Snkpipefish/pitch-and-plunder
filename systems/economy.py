@@ -18,9 +18,11 @@ import random
 from typing import TYPE_CHECKING
 
 from entities.commodity import PRICE_HISTORY_WINDOW, Commodity, InventoryItem
+from state.market_state import CommodityMarket, MarketState
 from systems import balance as _balance
 
 if TYPE_CHECKING:
+    from config.port_config import PortConfig
     from systems.regime_manager import RegimeState
 
 
@@ -35,7 +37,27 @@ PRICE_MAX_MULT = 2.0
 
 
 class Market:
-    """Katalog over varer + tick-logikk."""
+    """Katalog over varer + tick-logikk for ÉN havn (p.t. Tortuga).
+
+    Mutasjonspunkter som endrer `self._commodities[cid].current_price`
+    eller `price_history` (og dermed trenger sync til
+    `state.economy_state.markets[port_id]` for at save skal bli konsistent):
+    - `on_dawn(regimes)`: daglig prisdrift
+    - `buy(...)`: ingen pris-endring, bare inventory/gold
+    - `sell(...)`: ingen pris-endring, bare inventory/gold
+    - `clamp_to_price_bounds(cid)`: kalles ved load, pris-rydding
+    - direkte ekstern mutasjon via `market.get(cid).current_price = ...`
+      (brukes av VillageScene.__init__ for å hydrere Market fra state)
+
+    buy/sell trenger derfor IKKE sync av MarketState, men on_dawn OG
+    ekstern mutasjon gjør det. Caller (VillageScene) må synkronisere
+    eksplisitt — se `sync_market_to_state` nedenfor.
+
+    Tech-debt: Full refactor til "Market-on-MarketState" (Market som
+    stateless logikk-klasse som opererer på MarketState-parameter)
+    tas i C4 når PortVillageScene-parameterisering uansett tvinger
+    det frem. Frem til da: dobbelt-representasjon med eksplisitt sync.
+    """
 
     def __init__(
         self,
@@ -244,3 +266,108 @@ class Market:
         )
         new_gold = gold + proceeds
         return new_gold, new_inventory, sold
+
+
+# -----------------------------------------------------------------------------
+# Per-havn initialisering og drift (Fase 2B C2)
+# -----------------------------------------------------------------------------
+
+def load_base_prices(path: str) -> dict[str, float]:
+    """Les base_price per vare fra `data/commodities.json`.
+
+    Returnerer dict[commodity_id, base_price]. Brukes av save.py
+    (migrering og new_game) og VillageScene (per-havn drift for ikke-
+    Tortuga).
+    """
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    return {
+        entry["id"]: float(entry["base_price"])
+        for entry in data["commodities"]
+    }
+
+
+def init_market_for_port(
+    port_config: "PortConfig",
+    base_prices: dict[str, float],
+) -> MarketState:
+    """Bygg en fersk `MarketState` for en havn basert på port-bias.
+
+    For hver vare: `current_price = base_price * price_bias[cid]`,
+    `price_history` tom. Brukes ved new_game og ved v4→v5-migrering
+    for ikke-Tortuga-havner (Tortuga bevarer v4-data).
+    """
+    commodities: dict[str, CommodityMarket] = {}
+    for cid, base_price in base_prices.items():
+        bias = port_config.price_bias.get(cid, 1.0)
+        commodities[cid] = CommodityMarket(
+            current_price=round(base_price * bias, 2),
+            price_history=[],
+        )
+    return MarketState(commodities=commodities)
+
+
+def apply_regime_drift_to_market_state(
+    market_state: MarketState,
+    regimes: "dict[str, RegimeState]",
+    base_prices: dict[str, float],
+    rng: random.Random,
+) -> None:
+    """Ren drift-funksjon for én havns MarketState uten Market-klasse.
+
+    Muterer `market_state.commodities[cid]` in-place etter samme formel
+    som `Market.on_dawn`: `change_pct = uniform(drift_pct_<regime>) +
+    uniform(±noise_pct)`. Klampes mot `[base * PRICE_MIN_MULT,
+    base * PRICE_MAX_MULT]`. `price_history` trunkeres til siste
+    `PRICE_HISTORY_WINDOW` dager.
+
+    Brukes for ikke-Tortuga-havner ved new_day i VillageScene (Tortuga
+    bruker Market.on_dawn fordi Market holder dens aktive Commodity-
+    katalog for rendering).
+    """
+    reg_balance = _balance.get().regimes
+    drift_by_regime: dict[str, tuple[float, float]] = {
+        "rising":  reg_balance.drift_pct_rising,
+        "stable":  reg_balance.drift_pct_stable,
+        "falling": reg_balance.drift_pct_falling,
+    }
+    noise_pct = reg_balance.noise_pct
+
+    for cid, commodity in market_state.commodities.items():
+        base_price = base_prices.get(cid)
+        if base_price is None:
+            continue
+        regime = regimes.get(cid)
+        regime_name = regime.current if regime is not None else "stable"
+        drift_range = drift_by_regime.get(regime_name, (0.0, 0.0))
+        if drift_range[0] == drift_range[1]:
+            drift_pct = drift_range[0]
+        else:
+            drift_pct = rng.uniform(*drift_range)
+        noise = rng.uniform(-noise_pct, noise_pct)
+        change = (drift_pct + noise) / 100.0
+        new_price = commodity.current_price * (1.0 + change)
+        lo = base_price * PRICE_MIN_MULT
+        hi = base_price * PRICE_MAX_MULT
+        new_price = max(lo, min(hi, new_price))
+        commodity.current_price = round(new_price, 2)
+        commodity.price_history.append(commodity.current_price)
+        if len(commodity.price_history) > PRICE_HISTORY_WINDOW:
+            del commodity.price_history[
+                : len(commodity.price_history) - PRICE_HISTORY_WINDOW
+            ]
+
+
+def sync_market_to_state(market: "Market", market_state: MarketState) -> None:
+    """Kopier Market-klassens nåværende Commodity-tilstand til MarketState.
+
+    Brukes av VillageScene etter hver Market-mutasjon (on_dawn, og etter
+    VillageScene.__init__-hydration) for at `state.economy_state.markets
+    ["tortuga"]` er autoritativt speil av Market-klassen. Autosave leser
+    direkte fra state, ikke fra Market.
+    """
+    for c in market.commodities:
+        market_state.commodities[c.id] = CommodityMarket(
+            current_price=float(c.current_price),
+            price_history=list(c.price_history),
+        )
