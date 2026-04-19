@@ -18,14 +18,14 @@ def _write_json(path: Path, data: dict) -> None:
 
 
 class TestVersionConstants:
-    def test_current_version_is_3(self):
-        assert CURRENT_SAVE_VERSION == 3
+    def test_current_version_is_4(self):
+        assert CURRENT_SAVE_VERSION == 4
 
     def test_default_state_has_current_version(self):
         assert GameState().version == CURRENT_SAVE_VERSION
 
 
-class TestV3RoundTrip:
+class TestCurrentVersionRoundTrip:
     def test_save_then_load_preserves_fields(self, tmp_path: Path):
         path = tmp_path / "save.json"
         state = GameState()
@@ -39,7 +39,7 @@ class TestV3RoundTrip:
         loaded = load(str(path))
 
         assert loaded is not None
-        assert loaded.version == 3
+        assert loaded.version == CURRENT_SAVE_VERSION
         assert loaded.gold == 432
         assert loaded.clock.day == 7
         assert loaded.clock.seconds_into_day == 23.5
@@ -56,11 +56,11 @@ class TestV3RoundTrip:
 
         with open(path) as fh:
             raw = json.load(fh)
-        assert raw["version"] == 3
+        assert raw["version"] == CURRENT_SAVE_VERSION
         assert "clock" in raw
         assert raw["clock"]["day"] == 10
         assert raw["clock"]["seconds_into_day"] == 42.0
-        assert "day" not in raw  # topp-nivå day skal ikke finnes i v3
+        assert "day" not in raw  # topp-nivå day skal ikke finnes i v3+
 
 
 class TestV2Migration:
@@ -89,7 +89,7 @@ class TestV2Migration:
         loaded = load(str(path))
 
         assert loaded is not None
-        assert loaded.version == 3
+        assert loaded.version == CURRENT_SAVE_VERSION
 
     def test_v2_day_becomes_clock_day(self, tmp_path: Path):
         path = tmp_path / "v2.json"
@@ -109,7 +109,7 @@ class TestV2Migration:
         assert loaded.inventory["sugar"].quantity == 3
         assert loaded.inventory["sugar"].avg_cost == 40.0
 
-    def test_v2_resave_writes_v3(self, tmp_path: Path):
+    def test_v2_resave_writes_current_version(self, tmp_path: Path):
         path = tmp_path / "v2.json"
         _write_json(path, self._v2_payload())
 
@@ -119,7 +119,7 @@ class TestV2Migration:
 
         with open(path) as fh:
             raw = json.load(fh)
-        assert raw["version"] == 3
+        assert raw["version"] == CURRENT_SAVE_VERSION
         assert "clock" in raw
         assert "day" not in raw
 
@@ -139,14 +139,14 @@ class TestV1Migration:
         base.update(overrides)
         return base
 
-    def test_v1_loads_as_v3(self, tmp_path: Path):
+    def test_v1_loads_as_current_version(self, tmp_path: Path):
         path = tmp_path / "v1.json"
         _write_json(path, self._v1_payload())
 
         loaded = load(str(path))
 
         assert loaded is not None
-        assert loaded.version == 3
+        assert loaded.version == CURRENT_SAVE_VERSION
         assert loaded.clock.day == 3
 
     def test_v1_int_inventory_becomes_inventory_item(self, tmp_path: Path):

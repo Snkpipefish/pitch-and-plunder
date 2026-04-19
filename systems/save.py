@@ -25,6 +25,7 @@ from dataclasses import asdict, dataclass, field
 import constants
 from entities.commodity import InventoryItem
 from systems.game_clock import GameClock
+from systems.pitch_lake import PitchLakeState
 from systems.regime_manager import REGIMES, RegimeState
 
 
@@ -33,10 +34,10 @@ log = logging.getLogger(__name__)
 #: Naaverende save-format. Bump naar schema endres; load() migrerer fra
 #: eldre versjoner hvis mulig, ellers returnerer None (kaller faller
 #: tilbake til GameState()).
-CURRENT_SAVE_VERSION = 3
+CURRENT_SAVE_VERSION = 4
 
 #: Versjoner som load() aksepterer (med migrering for ikke-current).
-ACCEPTED_VERSIONS = frozenset({1, 2, 3})
+ACCEPTED_VERSIONS = frozenset({1, 2, 3, 4})
 
 
 def _default_inventory() -> dict[str, InventoryItem]:
@@ -61,6 +62,7 @@ class GameState:
     commodities_state: dict[str, dict] = field(default_factory=dict)
     cargo_capacity: int = constants.CARGO_CAPACITY
     regimes: dict[str, RegimeState] = field(default_factory=dict)
+    pitch_lake: PitchLakeState = field(default_factory=PitchLakeState)
 
 
 def save(state: GameState, path: str = constants.SAVE_PATH) -> bool:
@@ -188,6 +190,33 @@ def _parse_clock(raw: object, fallback_day: int) -> GameClock:
     return GameClock(day=fallback_day)
 
 
+def _parse_pitch_lake(raw: object) -> PitchLakeState:
+    """Tolke lagret PitchLakeState-dict. Ukjente felt → default-verdier.
+
+    v1/v2/v3-saves har ikke feltet; kaller passerer None eller {} og vi
+    returnerer en fresh PitchLakeState().
+    """
+    if not isinstance(raw, dict):
+        return PitchLakeState()
+    try:
+        production_per_day = int(raw.get("production_per_day", 2))
+    except (TypeError, ValueError):
+        production_per_day = 2
+    try:
+        total_produced = int(raw.get("total_produced", 0))
+    except (TypeError, ValueError):
+        total_produced = 0
+    try:
+        last_production_day = int(raw.get("last_production_day", 0))
+    except (TypeError, ValueError):
+        last_production_day = 0
+    return PitchLakeState(
+        production_per_day=production_per_day,
+        total_produced=total_produced,
+        last_production_day=last_production_day,
+    )
+
+
 def load(path: str = constants.SAVE_PATH) -> GameState | None:
     """Les save fra `path`. None ved manglende eller ugyldig innhold."""
     try:
@@ -258,9 +287,10 @@ def load(path: str = constants.SAVE_PATH) -> GameState | None:
         current_scene = defaults.current_scene
 
     regimes = _parse_regimes(data.get("regimes"))
+    pitch_lake = _parse_pitch_lake(data.get("pitch_lake"))
 
     # Oppgrader version-feltet i retur-objektet til naaverende; neste save
-    # skriver i v3-format uansett.
+    # skriver i CURRENT_SAVE_VERSION-format uansett.
     return GameState(
         version=CURRENT_SAVE_VERSION,
         gold=gold,
@@ -271,4 +301,5 @@ def load(path: str = constants.SAVE_PATH) -> GameState | None:
         commodities_state=commodities_state,
         cargo_capacity=cargo_capacity,
         regimes=regimes,
+        pitch_lake=pitch_lake,
     )

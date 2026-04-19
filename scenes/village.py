@@ -40,6 +40,7 @@ from systems.economy import Market
 from systems.lighting import Light, LightingSystem
 from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
 from systems.particles import ParticleSystem
+from systems.pitch_lake import PitchLake
 from systems.regime_manager import RegimeManager
 from systems.save import GameState
 from ui.hint import HintIndicator
@@ -185,9 +186,13 @@ class VillageScene(BaseScene):
         # RegimeManager for hver dag som har passert.
         self._last_seen_day = state.clock.day
 
-        # HUD (oeverst venstre: sted / gull / dag)
+        # HUD (oeverst venstre: sted / gull / dag / bek-produksjon)
         self._hud = Hud(
-            font, place="Tortuga", gold=state.gold, day=state.clock.day
+            font,
+            place="Tortuga",
+            gold=state.gold,
+            day=state.clock.day,
+            pitch_per_day=state.pitch_lake.production_per_day,
         )
 
         # Partikler: taake paa gata + ildfluer rundt tavernaen.
@@ -274,22 +279,54 @@ class VillageScene(BaseScene):
         curr_day = self._state.clock.day
         if curr_day != self._last_seen_day:
             days_passed = max(0, curr_day - self._last_seen_day)
+            produced_today = 0
             for _ in range(days_passed):
                 self._market.on_dawn(self._state.regimes)
                 self._regime_manager.on_new_day(self._state.regimes)
-            self._last_seen_day = curr_day
-            # Varsle spilleren visuelt (toast fader ut etter 3 sek). Hvis
-            # flere dager passerte i én frame (f.eks. etter load av save
-            # med seconds_into_day nær rollover) viser vi kun én toast
-            # for den nye gjeldende dagen — ikke én per passert dag.
-            self._toasts.push(
-                Toast(
-                    font=self._font,
-                    text=f"Daggry \u2014 Dag {curr_day}",
-                    color=constants.COLOR_LANTERN_BRIGHT,
-                    duration=3.0,
+                produced_today = PitchLake.on_new_day(
+                    self._state.pitch_lake, self._state
                 )
-            )
+            self._last_seen_day = curr_day
+            # Varsle spilleren visuelt. To scenarier:
+            # 1) Produksjon gikk greit → én kombinert toast med "+X bek".
+            # 2) Lasterom fullt (produced==0 mens production_per_day>0)
+            #    → to separate toasts: daggry (varm) + advarsel (ember).
+            # Hvis flere dager passerte i én frame viser vi kun én toast
+            # for gjeldende dag (bruker siste produced-verdi).
+            per_day = self._state.pitch_lake.production_per_day
+            if per_day > 0 and produced_today == 0:
+                # Full-last: eksplisitt varsel om tapt produksjon.
+                self._toasts.push(
+                    Toast(
+                        font=self._font,
+                        text=f"Daggry \u2014 Dag {curr_day}",
+                        color=constants.COLOR_LANTERN_BRIGHT,
+                        duration=3.0,
+                    )
+                )
+                self._toasts.push(
+                    Toast(
+                        font=self._font,
+                        text="Pitch Lake: lageret fullt",
+                        color=constants.COLOR_EMBER,
+                        duration=3.0,
+                    )
+                )
+            else:
+                text = (
+                    f"Daggry \u2014 Dag {curr_day} \u2014 "
+                    f"Pitch Lake: +{produced_today} bek"
+                    if produced_today > 0
+                    else f"Daggry \u2014 Dag {curr_day}"
+                )
+                self._toasts.push(
+                    Toast(
+                        font=self._font,
+                        text=text,
+                        color=constants.COLOR_LANTERN_BRIGHT,
+                        duration=3.0,
+                    )
+                )
 
         # Lanterne-swing og andre tidsavhengige effekter gaar videre ogsaa.
         self._elapsed += dt
@@ -299,6 +336,7 @@ class VillageScene(BaseScene):
         # HUD – settere er no-ops hvis verdien ikke har endret seg
         self._hud.set_gold(self._state.gold)
         self._hud.set_day(self._state.clock.day)
+        self._hud.set_pitch_per_day(self._state.pitch_lake.production_per_day)
 
         if self._overlay is not None:
             self._overlay.update(dt)
