@@ -25,11 +25,15 @@ import pygame
 
 import constants
 from config import port_config as _port_config
-from entities.port_marker import PortMarker
+from entities.port_marker import MARKER_SIZE, PortMarker
 from entities.ship_icon import ShipIcon
 from scenes.base_scene import BaseScene
-from scenes.world_map_builder import build_world_map_background
+from scenes.world_map_builder import build_all_phase_variants
 from state import GameState
+
+
+#: §8.3 — padding mellom markør-ring-bunn og label-topp.
+_LABEL_PADDING = 3
 
 
 log = logging.getLogger(__name__)
@@ -63,9 +67,22 @@ class WorldMapScene(BaseScene):
             for pid in self._port_ids
         }
 
-        # Bakgrunn: pre-rendret ÉN gang i scene-init. C10 utvider til
-        # 4-faset cross-fade.
-        self._background = build_world_map_background(ports, phase="noon")
+        # Bakgrunn: pre-render ALLE 4 fase-varianter ved scene-init
+        # (§8-patch). C5.1 bruker "noon" ved runtime; C10 aktiverer
+        # cross-fade uten å måtte rive opp scene-init.
+        self._phase_variants = build_all_phase_variants(ports, rng_seed=0xC5C5)
+        self._active_phase = "noon"
+        self._background = self._phase_variants[self._active_phase]
+
+        # §8.3 — pre-render havn-labels. Tekst er statisk per havn i
+        # C5.1; C8 introduserer "never_visited"-fargeskifte. Én surface
+        # per havn, cachet på samme måte som HUD-tekster.
+        self._port_labels: dict[str, pygame.Surface] = {
+            pid: font.render(
+                ports[pid].name, False, constants.COLOR_MOON_HALO,
+            ).convert_alpha()
+            for pid in self._port_ids
+        }
 
         # Markør- og skip-sprites (pre-rendret inne i egne klasser)
         self._marker = PortMarker()
@@ -189,6 +206,16 @@ class WorldMapScene(BaseScene):
         if self._focused_port_id == self._current_port_id:
             self._marker.draw(surface, focus_pos, "current", self._elapsed)
         self._marker.draw(surface, focus_pos, "focused", self._elapsed)
+
+        # §8.3 — Havn-labels: sentrert under hver markør-ring
+        for pid in self._port_ids:
+            pos = self._port_positions[pid]
+            label = self._port_labels[pid]
+            # Sentrum av markør er pos; ring-bunn = pos.y + MARKER_SIZE/2.
+            # Label-topp = ring-bunn + padding.
+            label_x = pos[0] - label.get_width() // 2
+            label_y = pos[1] + MARKER_SIZE // 2 + _LABEL_PADDING
+            surface.blit(label, (label_x, label_y))
 
         # Skip-sprite ved current_port. Offset 8 px nord-ost for å unngå
         # overlapp med marker-senter. Heading "N" som nøytral C5-placeholder.

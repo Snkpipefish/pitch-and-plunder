@@ -769,3 +769,73 @@ v4-save migreres (v4→v5 + port-rescue). Spiller plassert ved x=40
 skriver v5. Scene-bytte-testing dekket av `TestPortVillageDockInteraction.
 test_e_in_dock_region_triggers_world_map` (programmatisk).
 
+## Fase 2B Commit C5.1 — WorldMap visuelle lagringsmekanismer
+
+Patch-commit etter skjermbilde-review som avdekket at §1–§6
+palett-disiplin ikke leverer tilstrekkelig dybde uten eksplisitte
+lesbarhets-mekanismer. Fire mekanismer implementert per
+FASE_2B_VISUELL_REFERANSE.md §8 (v1.2, bindende over §1–§6).
+
+### Implementert
+
+**§8.1 Topp-kant-belysning på øy-silhuetter.** Etter polygon-tegning
+iterereres bounding-box kolonne-for-kolonne; øverste STONE_DARKEST-pixel
+får en 1-px kant i `edge_color` rett over. Per-fase fargevalg per §8.5:
+STONE_DARK for noon/dawn, MOON_HALO for dusk/night. Pixel-verifisert:
+Tortuga topp ved y=213 → pixel (x=410, y=212) = (31,37,56) = STONE_DARK.
+
+**§8.2 Horisont-bånd med alpha-gradient.** 4-px bånd over/under horisont.
+SRCALPHA-surface med lineær alpha-gradient (maks ved sentrum, 0 ved
+ytterkanter) blit-es på 24-bit bakgrunnen. Per fase: STONE_BRIGHT (noon),
+EMBER (dawn/dusk), MOON_HALO ved ~39% alpha (night). Pixel-verifisert:
+
+    y=35 (topp-kant):  (139,168,214) = STONE_BRIGHT
+    y=36 (sentrum):    ( 97,119,160) = alpha-blend
+    y=38:              ( 59, 75,111) = rest-blend
+    y=40 (utenfor):    ( 30, 42, 74) = SEA_MID rent
+
+Høyde-valg: **4 px** (startverdi). Tydelig i pixel-dump; ikke behov
+for å øke til 6. 8+ forkastet per brief.
+
+**§8.3 Havn-identifikasjon.** Labels pre-rendret per havn i
+`WorldMapScene.__init__` med `port_config.name` + Public Pixel 8px +
+COLOR_MOON_HALO. Sentrert under markør (padding 3 px). 4 ekstra blits
+per frame — neglisjerbar kost.
+
+**§8.4 Skyggedybde på hav.** Coastal shading: SEA_DEEP → SEA_MID
+innenfor radius rundt hver øy, hard overgang.
+
+Radius-valg: **12 px** (default i test-rekkefølge). Nærmeste havn-par
+er Tortuga↔Nassau (120 px mellom sentra); 2×(island_r + coastal_r) =
+2×(15+12) = 54 px, altså stor margin. Ingen overlapp ved noen radius
+8–20 for faktisk havn-layout. Ikke forkastet.
+
+### Pre-rendering av alle 4 fase-varianter
+
+`build_all_phase_variants()` bygger noon/dawn/dusk/night ved scene-init.
+C5.1 bruker kun noon; C10 vil aktivere cross-fade uten å rive opp
+scene-init. Deterministisk bølge-prikke-plassering med samme seed
+(0xC5C5) over alle faser — C10 cross-fade vil ikke blinke.
+
+### Benchmark (målmaskin T4200 / GM45, SDL_VIDEODRIVER ikke satt)
+
+| Scene | C5 baseline | C5.1 (5 runder) | Delta |
+|-------|-------------|-----------------|-------|
+| World map | 1.021 ms | 1.078 ms median | +0.06 ms |
+| Port lukket | 4.692 ms | 4.690 ms | ±0 (uendret) |
+
+World_map-spenn (5 runder): 1.060–1.122 ms, spenn 0.06 ms — konsistent.
+22% av 5 ms-budsjettet, 3.9 ms headroom.
+
+Scene-init-tid (WorldMapScene, 10 kjøringer, nå med 4 fase-varianter):
+- Cold: 39.50 ms
+- Warm median: 36.49 ms (min 34.64, max 44.45)
+- C5-baseline warm: 4.92 ms → +31.5 ms pga 4 variants × ~8 ms per.
+- Under 100 ms spec-mål (36% av budsjett).
+
+### Tester: 278 → 278 (uendret)
+
+`build_all_phase_variants()` er nytt entry-point; `build_world_map_background`
+beholdt for bakoverkompat i eksisterende tester. Pixel-nivå-verifisering
+gjort via ad-hoc script (ikke committet).
+
