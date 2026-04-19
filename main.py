@@ -31,8 +31,8 @@ balance_module.init()
 from scenes.base_scene import BaseScene  # noqa: E402
 from scenes.parallax_test import ParallaxTestScene  # noqa: E402
 from scenes.village import VillageScene  # noqa: E402
+from state import GameState  # noqa: E402
 from systems import save as save_module  # noqa: E402
-from systems.save import GameState  # noqa: E402
 from ui.toast import Toast  # noqa: E402
 
 
@@ -197,9 +197,9 @@ def _handle_balance_reload(
     # Live-sync: pitch_lake-felt (upkeep og production er live per spec §4.4).
     new_bal = balance_module.get()
     if "pitch_lake.upkeep_per_day" in result.live_changes:
-        game_state.pitch_lake.daily_upkeep_cost = new_bal.pitch_lake.upkeep_per_day
+        game_state.pitch_lake_state.upkeep_per_day = new_bal.pitch_lake.upkeep_per_day
     if "pitch_lake.production_per_day" in result.live_changes:
-        game_state.pitch_lake.production_per_day = new_bal.pitch_lake.production_per_day
+        game_state.pitch_lake_state.production_per_day = new_bal.pitch_lake.production_per_day
 
     # Session-sync: hvis time-endringer, marker pending. Klokken selv
     # oppdateres ved neste new_day-event (se hovedløkka).
@@ -265,7 +265,7 @@ def run() -> int:
     # eller scene-spesifikk startposisjon, basert paa from_scene-argumentet
     # og innholdet i game_state.
     loaded = save_module.load()
-    game_state = loaded if loaded is not None else GameState()
+    game_state = loaded if loaded is not None else save_module.new_game_state()
 
     manager = SceneManager(
         factories={
@@ -296,10 +296,10 @@ def run() -> int:
         # Sentral spill-klokke – inkrementerer dag hvert seconds_per_day.
         # Ved new_day-event: hvis hot-reload har endret time.*-felt, synker
         # vi clock.seconds_per_day fra balance her (session-applicable).
-        events = game_state.clock.update(dt)
+        events = game_state.world_state.clock.update(dt)
         if pending_session_sync and "new_day" in events:
             new_spd = balance_module.get().time.seconds_per_day_in_port
-            game_state.clock.seconds_per_day = new_spd
+            game_state.world_state.clock.seconds_per_day = new_spd
             pending_session_sync = False
             log.info("Clock seconds_per_day synket til %.1f", new_spd)
 

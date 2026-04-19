@@ -497,3 +497,49 @@ innenfor normal run-to-run-variasjon.
 
 Tester: 187 → 203 (16 nye: 11 i test_balance.py, 5 i test_dev_mode.py).
 
+## Fase 2B Commit C1b – Nested GameState v5 + v4→v5-migrering
+
+Ren refactor: flat GameState → nested dataclasser (player_state /
+world_state / economy_state / pitch_lake_state). Chained migreringsfunk-
+sjoner (v1→v2→v3→v4→v5), 7 tester i `test_save_v5_migration.py` inkludert
+disk-roundtrip. Ingen gameplay- eller renderer-endring.
+
+### Resultater (målmaskin T4200 / GM45)
+
+| Scene | C1a | C1b | Delta |
+|-------|-----|-----|-------|
+| Village (lukket) | 4.489 ms | 4.659 ms | +0.17 ms |
+| Village (overlay åpen) | 6.197 ms | 6.180 ms | −0.02 ms |
+| Peak RSS | 116.50 MB | 116.00–117.86 MB | stabilt |
+
+Lukket-scenen viser +0.17 ms — innenfor normal run-to-run-variasjon
+(C1a-repetisjon viste 4.47–4.79 ms). Overlay uendret.
+
+### Vurdering
+
+Nested state-treet introduserer noen ekstra attributt-oppslag per frame
+(f.eks. `state.world_state.clock.day` i stedet for `state.clock.day`).
+Disse er Python-attribute-lookups mot dataklasse-instanser, ikke dict-
+oppslag — ~50 ns per ekstra steg, helt usynlig på frame-skala.
+
+asdict() rekurserer gjennom hele nested-treet ved save. Siden save skjer
+ved scene-bytte / overlay-åpning / QUIT (ikke per frame), har dette null
+renderer-impact.
+
+Tester: 203 → 203 (netto null endring):
+- +7 nye v5-migreringstester (`test_save_v5_migration.py`)
+- −7 v4-spesifikke pitch-lake-tester (erstattet av v5-migreringstester)
+- +1 round-trip-field-preservering i test_save_migration.py
+- −1 flat-struktur round-trip-test fjernet
+
+### v4→v5 migreringssannhet (fra brukerens save)
+
+Real fixture i `tests/fixtures/save_v4.json` (kopi av brukerens v4-save
+ved C1b-start). Migreringen bevarer:
+- gold = 224, day = 3, cargo = 40, sugar 1 @ 41.0, pitch 4
+- Tortuga-priser (sugar 39.71, price_history [40.09, 39.71])
+- regimer (alle stable), pitch_lake total_produced = 4
+
+Andre 3 havner får tomme placeholders (MarketState() + {}) — C2 fyller
+med bias-initiert data når PortConfig lander.
+

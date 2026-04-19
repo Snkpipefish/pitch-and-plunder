@@ -1,15 +1,18 @@
-"""Tester for save/load og versjonsmigrering v1 → v3 og v2 → v3."""
+"""Tester for save/load og versjonsmigrering v1/v2/v3 → v5 (Fase 2B C1b).
+
+v4→v5-migrering har egen fil: `tests/test_save_v5_migration.py` med 7 tester
+per spec §5.2, inkludert round-trip på disk.
+"""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-import pytest
-
-from entities.commodity import InventoryItem
+from state import GameState
+from state.game_state import CURRENT_SAVE_VERSION
 from systems.game_clock import GameClock
-from systems.save import CURRENT_SAVE_VERSION, GameState, load, save
+from systems.save import load, save
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -18,49 +21,49 @@ def _write_json(path: Path, data: dict) -> None:
 
 
 class TestVersionConstants:
-    def test_current_version_is_4(self):
-        assert CURRENT_SAVE_VERSION == 4
+    def test_current_version_is_5(self):
+        assert CURRENT_SAVE_VERSION == 5
 
     def test_default_state_has_current_version(self):
         assert GameState().version == CURRENT_SAVE_VERSION
 
 
 class TestCurrentVersionRoundTrip:
-    def test_save_then_load_preserves_fields(self, tmp_path: Path):
+    def test_save_emits_v5_nested_structure(self, tmp_path: Path):
         path = tmp_path / "save.json"
         state = GameState()
-        state.gold = 432
-        state.clock = GameClock(day=7, seconds_into_day=23.5)
-        state.player_position = (1234.5, 320.0)
-        state.inventory["sugar"] = InventoryItem(quantity=5, avg_cost=37.0)
-        state.commodities_state = {"rum": {"current_price": 80.5}}
+        state.world_state.clock = GameClock(day=10, seconds_into_day=42.0)
+        save(state, str(path))
+
+        with open(path) as fh:
+            raw = json.load(fh)
+        assert raw["version"] == CURRENT_SAVE_VERSION
+        assert "player_state" in raw
+        assert "world_state" in raw
+        assert "economy_state" in raw
+        assert "pitch_lake_state" in raw
+        assert raw["world_state"]["clock"]["day"] == 10
+        assert raw["world_state"]["clock"]["seconds_into_day"] == 42.0
+        # Flatt skjema skal være borte
+        assert "gold" not in raw
+        assert "clock" not in raw
+
+    def test_save_then_load_preserves_basic_fields(self, tmp_path: Path):
+        path = tmp_path / "save.json"
+        state = GameState()
+        state.player_state.gold = 432
+        state.world_state.clock = GameClock(day=7, seconds_into_day=23.5)
+        state.world_state.ship.cargo_capacity = 50
 
         assert save(state, str(path)) is True
         loaded = load(str(path))
 
         assert loaded is not None
         assert loaded.version == CURRENT_SAVE_VERSION
-        assert loaded.gold == 432
-        assert loaded.clock.day == 7
-        assert loaded.clock.seconds_into_day == 23.5
-        assert loaded.player_position == (1234.5, 320.0)
-        assert loaded.inventory["sugar"].quantity == 5
-        assert loaded.inventory["sugar"].avg_cost == 37.0
-        assert loaded.commodities_state["rum"]["current_price"] == 80.5
-
-    def test_save_emits_clock_dict_not_top_level_day(self, tmp_path: Path):
-        path = tmp_path / "save.json"
-        state = GameState()
-        state.clock = GameClock(day=10, seconds_into_day=42.0)
-        save(state, str(path))
-
-        with open(path) as fh:
-            raw = json.load(fh)
-        assert raw["version"] == CURRENT_SAVE_VERSION
-        assert "clock" in raw
-        assert raw["clock"]["day"] == 10
-        assert raw["clock"]["seconds_into_day"] == 42.0
-        assert "day" not in raw  # topp-nivå day skal ikke finnes i v3+
+        assert loaded.player_state.gold == 432
+        assert loaded.world_state.clock.day == 7
+        assert loaded.world_state.clock.seconds_into_day == 23.5
+        assert loaded.world_state.ship.cargo_capacity == 50
 
 
 class TestV2Migration:
@@ -82,45 +85,38 @@ class TestV2Migration:
         base.update(overrides)
         return base
 
-    def test_v2_loads_with_upgraded_version(self, tmp_path: Path):
+    def test_v2_loads_as_v5(self, tmp_path: Path):
         path = tmp_path / "v2.json"
         _write_json(path, self._v2_payload())
-
         loaded = load(str(path))
-
         assert loaded is not None
         assert loaded.version == CURRENT_SAVE_VERSION
 
     def test_v2_day_becomes_clock_day(self, tmp_path: Path):
         path = tmp_path / "v2.json"
         _write_json(path, self._v2_payload(day=12))
-
         loaded = load(str(path))
+        assert loaded.world_state.clock.day == 12
+        assert loaded.world_state.clock.seconds_into_day == 0.0
 
-        assert loaded.clock.day == 12
-        assert loaded.clock.seconds_into_day == 0.0
-
-    def test_v2_inventory_quantity_and_cost_preserved(self, tmp_path: Path):
+    def test_v2_inventory_preserved(self, tmp_path: Path):
         path = tmp_path / "v2.json"
         _write_json(path, self._v2_payload())
-
         loaded = load(str(path))
-
-        assert loaded.inventory["sugar"].quantity == 3
-        assert loaded.inventory["sugar"].avg_cost == 40.0
+        assert loaded.player_state.inventory["sugar"].quantity == 3
+        assert loaded.player_state.inventory["sugar"].avg_cost == 40.0
 
     def test_v2_resave_writes_current_version(self, tmp_path: Path):
         path = tmp_path / "v2.json"
         _write_json(path, self._v2_payload())
-
         loaded = load(str(path))
         assert loaded is not None
         save(loaded, str(path))
-
         with open(path) as fh:
             raw = json.load(fh)
         assert raw["version"] == CURRENT_SAVE_VERSION
-        assert "clock" in raw
+        # v5 nested-felter skal finnes; flatt day ikke
+        assert "world_state" in raw
         assert "day" not in raw
 
 
@@ -142,22 +138,18 @@ class TestV1Migration:
     def test_v1_loads_as_current_version(self, tmp_path: Path):
         path = tmp_path / "v1.json"
         _write_json(path, self._v1_payload())
-
         loaded = load(str(path))
-
         assert loaded is not None
         assert loaded.version == CURRENT_SAVE_VERSION
-        assert loaded.clock.day == 3
+        assert loaded.world_state.clock.day == 3
 
     def test_v1_int_inventory_becomes_inventory_item(self, tmp_path: Path):
         path = tmp_path / "v1.json"
         _write_json(path, self._v1_payload())
-
         loaded = load(str(path))
-
-        assert loaded.inventory["sugar"].quantity == 5
-        assert loaded.inventory["sugar"].avg_cost == 0.0
-        assert loaded.inventory["rum"].quantity == 2
+        assert loaded.player_state.inventory["sugar"].quantity == 5
+        assert loaded.player_state.inventory["sugar"].avg_cost == 0.0
+        assert loaded.player_state.inventory["rum"].quantity == 2
 
 
 class TestCorruptInput:
@@ -195,9 +187,8 @@ class TestCorruptInput:
         )
         loaded = load(str(path))
         assert loaded is not None
-        # Klokken faller tilbake til defaults (dag 1) ved ugyldige verdier
-        assert loaded.clock.day == 1
-        assert loaded.clock.seconds_into_day == 0.0
+        assert loaded.world_state.clock.day == 1
+        assert loaded.world_state.clock.seconds_into_day == 0.0
 
     def test_corrupt_player_position_falls_back(self, tmp_path: Path):
         path = tmp_path / "corrupt_pos.json"
@@ -220,5 +211,5 @@ class TestCorruptInput:
         )
         loaded = load(str(path))
         assert loaded is not None
-        # Faller tilbake til GameState-default
-        assert loaded.player_position == (320.0, 280.0)
+        # Faller tilbake til default position_x
+        assert loaded.player_state.position_x == 320.0

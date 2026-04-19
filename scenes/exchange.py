@@ -27,8 +27,8 @@ import pygame
 import constants
 from entities.commodity import InventoryItem, compute_trend
 from systems import balance as _balance
+from state import GameState
 from systems.economy import Market
-from systems.save import GameState
 from ui.toast import Toast, ToastQueue
 
 
@@ -180,13 +180,13 @@ class ExchangeOverlay:
         new_gold, new_inv, bought = self._market.buy(
             cid,
             amount,
-            self._state.gold,
-            self._state.inventory,
-            cargo_capacity=self._state.cargo_capacity,
+            self._state.player_state.gold,
+            self._state.player_state.inventory,
+            cargo_capacity=self._state.world_state.ship.cargo_capacity,
         )
         if bought > 0:
-            self._state.gold = new_gold
-            self._state.inventory = new_inv
+            self._state.player_state.gold = new_gold
+            self._state.player_state.inventory = new_inv
             # Reset dedup-flagget slik at samme feilmelding kan vises på nytt
             # hvis spilleren senere forsøker og feiler igjen.
             self._last_toast_text = None
@@ -196,7 +196,7 @@ class ExchangeOverlay:
             return
         price = self._market.buy_price(cid)
         fee = _balance.get().economy.transaction_fee
-        if self._state.gold < price + fee:
+        if self._state.player_state.gold < price + fee:
             # Gullet rekker ikke til én enhet + gebyr
             self._push_toast_once(
                 f"For lite gull (trenger {price + fee} d.)",
@@ -208,11 +208,11 @@ class ExchangeOverlay:
     def _sell(self, amount: int) -> None:
         cid = self._commodities[self._selected].id
         new_gold, new_inv, sold = self._market.sell(
-            cid, amount, self._state.gold, self._state.inventory
+            cid, amount, self._state.player_state.gold, self._state.player_state.inventory
         )
         if sold > 0:
-            self._state.gold = new_gold
-            self._state.inventory = new_inv
+            self._state.player_state.gold = new_gold
+            self._state.player_state.inventory = new_inv
 
     def _push_toast_once(
         self,
@@ -249,7 +249,7 @@ class ExchangeOverlay:
     # --- Cache-invalidering ---
 
     def _ensure_title(self) -> None:
-        day = self._state.clock.day
+        day = self._state.world_state.clock.day
         if self._title_day != day:
             self._title_day = day
             self._title_surf = self._font.render(
@@ -273,7 +273,7 @@ class ExchangeOverlay:
             ).convert_alpha()
 
     def _ensure_qty(self) -> None:
-        inv = self._state.inventory
+        inv = self._state.player_state.inventory
         # Cache-noekkel: (quantity, rounded avg_cost) per vare
         key = tuple(
             (
@@ -296,7 +296,7 @@ class ExchangeOverlay:
             ).convert_alpha()
 
     def _ensure_gold(self) -> None:
-        g = self._state.gold
+        g = self._state.player_state.gold
         if self._gold_value == g:
             return
         self._gold_value = g
@@ -324,8 +324,8 @@ class ExchangeOverlay:
             ).convert_alpha()
 
     def _ensure_cargo(self) -> None:
-        total = sum(item.quantity for item in self._state.inventory.values())
-        cap = self._state.cargo_capacity
+        total = sum(item.quantity for item in self._state.player_state.inventory.values())
+        cap = self._state.world_state.ship.cargo_capacity
         if self._cargo_total == total and self._cargo_cap == cap:
             return
         self._cargo_total = total

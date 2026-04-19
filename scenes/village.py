@@ -38,6 +38,8 @@ from scenes.village_buildings import (
     build_village_gameplay_layer,
 )
 from scenes.village_renderer import VillageRenderer
+from state import GameState
+from state.market_state import CommodityMarket, MarketState
 from systems import save as save_module
 from systems.day_cycle import DayCycle
 from systems.economy import Market
@@ -46,7 +48,6 @@ from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
 from systems.particles import ParticleSystem
 from systems.pitch_lake import PitchLake
 from systems.regime_manager import RegimeManager
-from systems.save import GameState
 from ui.hint import HintIndicator
 from ui.hud import Hud
 from ui.toast import Toast, ToastQueue
@@ -150,49 +151,40 @@ class VillageScene(BaseScene):
         self._elapsed: float = 0.0
 
         # Økonomi – Market lastes fra JSON, deretter applieres lagrede
-        # current_price og price_history per vare hvis tilgjengelig.
-        # Dag-telleren eies av state.clock (GameClock), ikke Market.
+        # current_price og price_history fra Tortugas MarketState.
+        # Dag-telleren eies av world_state.clock (GameClock), ikke Market.
         self._market = Market.from_json(
             os.path.join(constants.DATA_DIR, "commodities.json")
         )
-        for cid, saved in state.commodities_state.items():
-            if not isinstance(saved, dict):
-                continue
+        tortuga_market: MarketState = state.economy_state.markets.setdefault(
+            "tortuga", MarketState()
+        )
+        for cid, saved in tortuga_market.commodities.items():
             try:
                 commodity = self._market.get(cid)
             except KeyError:
                 continue
-            try:
-                commodity.current_price = float(saved.get("current_price"))
-            except (TypeError, ValueError):
-                pass
-            raw_history = saved.get("price_history", [])
-            if isinstance(raw_history, list):
-                try:
-                    commodity.price_history = [float(p) for p in raw_history]
-                except (TypeError, ValueError):
-                    pass
+            commodity.current_price = float(saved.current_price)
+            commodity.price_history = list(saved.price_history)
             # Klamp loaded verdier mot gjeldende pris-grenser. Fase 2A
             # Commit 5D endret bek base_price 55 → 40 og klamp-forholdet
             # fra [0.3, 3.0] til [0.5, 2.0]; eksisterende saves kan ha
             # priser utenfor nye grenser (spesielt bek rundt 120+).
             self._market.clamp_to_price_bounds(cid)
 
-        # Regime-system. Initialiser manglende regimer for kjente varer
-        # (first boot, eller save uten regime-dict).
+        # Regime-system. Initialiser manglende regimer for Tortuga.
         self._regime_manager = RegimeManager()
+        tortuga_regimes = state.economy_state.regimes.setdefault("tortuga", {})
         missing_ids = [
-            c.id
-            for c in self._market.commodities
-            if c.id not in state.regimes
+            c.id for c in self._market.commodities if c.id not in tortuga_regimes
         ]
         if missing_ids:
-            state.regimes.update(
+            tortuga_regimes.update(
                 self._regime_manager.initialize_regimes(missing_ids)
             )
-        # Dag-skift-sporing: naar state.clock.day overstiger denne, varsle
+        # Dag-skift-sporing: naar clock.day overstiger denne, varsle
         # RegimeManager for hver dag som har passert.
-        self._last_seen_day = state.clock.day
+        self._last_seen_day = state.world_state.clock.day
 
         # HUD (oeverst venstre: sted / gull / dag / bek-drift).
         # DEV-markør nederst til høyre aktiveres via dev-mode-flagg.
@@ -200,10 +192,10 @@ class VillageScene(BaseScene):
         self._hud = Hud(
             font,
             place="Tortuga",
-            gold=state.gold,
-            day=state.clock.day,
-            pitch_per_day=state.pitch_lake.production_per_day,
-            pitch_upkeep=state.pitch_lake.daily_upkeep_cost,
+            gold=state.player_state.gold,
+            day=state.world_state.clock.day,
+            pitch_per_day=state.pitch_lake_state.production_per_day,
+            pitch_upkeep=state.pitch_lake_state.upkeep_per_day,
             pitch_halted=self._compute_pitch_halted(),
             dev_mode=is_dev_mode(),
         )
@@ -300,16 +292,21 @@ class VillageScene(BaseScene):
         # skifte til et annet regime fra neste dag). Rekkefølgen er viktig:
         # on_dawn først slik at "siste dag" av et regime fortsatt har sin
         # retnings-effekt; regime_manager.on_new_day etterpå for overgang.
-        curr_day = self._state.clock.day
+        curr_day = self._state.world_state.clock.day
+        tortuga_regimes = self._state.economy_state.regimes.setdefault(
+            "tortuga", {}
+        )
         if curr_day != self._last_seen_day:
             days_passed = max(0, curr_day - self._last_seen_day)
             for _ in range(days_passed):
-                self._market.on_dawn(self._state.regimes)
-                self._regime_manager.on_new_day(self._state.regimes)
+                self._market.on_dawn(tortuga_regimes)
+                self._regime_manager.on_new_day(tortuga_regimes)
                 # Upkeep trekkes uansett om produksjon lykkes. Returverdien
-                # ignoreres her — HUD leser state.pitch_lake direkte for
+                # ignoreres her — HUD leser pitch_lake_state direkte for
                 # halted-detektering, og toasts er fjernet (Commit 6.1).
-                PitchLake.on_new_day(self._state.pitch_lake, self._state)
+                PitchLake.on_new_day(
+                    self._state.pitch_lake_state, self._state
+                )
             self._last_seen_day = curr_day
 
         # Lanterne-swing og andre tidsavhengige effekter gaar videre ogsaa.
@@ -318,11 +315,11 @@ class VillageScene(BaseScene):
         self._toasts.update(dt)
 
         # HUD – settere er no-ops hvis verdien ikke har endret seg
-        self._hud.set_gold(self._state.gold)
-        self._hud.set_day(self._state.clock.day)
+        self._hud.set_gold(self._state.player_state.gold)
+        self._hud.set_day(self._state.world_state.clock.day)
         self._hud.set_pitch_status(
-            pitch_per_day=self._state.pitch_lake.production_per_day,
-            upkeep=self._state.pitch_lake.daily_upkeep_cost,
+            pitch_per_day=self._state.pitch_lake_state.production_per_day,
+            upkeep=self._state.pitch_lake_state.upkeep_per_day,
             halted=self._compute_pitch_halted(),
         )
 
@@ -349,8 +346,8 @@ class VillageScene(BaseScene):
         faktiske daggry-forsøk.
         """
         return (
-            self._state.pitch_lake.last_production_day
-            < self._state.clock.day - 1
+            self._state.pitch_lake_state.last_production_day
+            < self._state.world_state.clock.day - 1
         )
 
     def _center_camera_on_player(self) -> None:
@@ -363,7 +360,7 @@ class VillageScene(BaseScene):
     def draw(self, surface: pygame.Surface) -> None:
         # Beregn dag-natt-snapshot én gang per frame og send til renderen.
         # DayCycle er stateless, så dette er billig (~5 μs).
-        snapshot = DayCycle.compute_snapshot(self._state.clock)
+        snapshot = DayCycle.compute_snapshot(self._state.world_state.clock)
         # Verdens-laget (bakgrunn → forgrunn) tegnes av renderen.
         self._renderer.draw(
             surface=surface,
@@ -390,22 +387,27 @@ class VillageScene(BaseScene):
     # --- Lifecycle / save ---
 
     def _sync_state(self) -> None:
-        """Kopier gjeldende scene-tilstand inn i GameState for lagring."""
-        self._state.current_scene = "village"
-        self._state.player_position = (
-            float(self._player.x),
-            float(self._player.y),
+        """Kopier gjeldende scene-tilstand inn i GameState for lagring.
+
+        player_state.position_x er den eneste koordinaten som lagres;
+        y gjenopprettes fra scene-konstant (GROUND_TOP_Y - 20) på
+        on_enter. Dette kan bli per-havn i C4.
+        """
+        self._state.player_state.position_x = float(self._player.x)
+        tortuga_market = self._state.economy_state.markets.setdefault(
+            "tortuga", MarketState()
         )
-        self._state.commodities_state = {
-            c.id: {
-                "current_price": float(c.current_price),
-                "price_history": list(c.price_history),
-            }
+        tortuga_market.commodities = {
+            c.id: CommodityMarket(
+                current_price=float(c.current_price),
+                price_history=list(c.price_history),
+            )
             for c in self._market.commodities
         }
-        # gold og inventory er allerede lagret i self._state – direkte mutert
-        # av ExchangeOverlay, saa ingen ekstra sync der. state.clock oppdateres
-        # kontinuerlig av main.run() via clock.update(dt), saa ingen sync her.
+        # gold og inventory er allerede lagret i self._state.player_state –
+        # direkte mutert av ExchangeOverlay, saa ingen ekstra sync der.
+        # world_state.clock oppdateres kontinuerlig av main.run() via
+        # clock.update(dt), saa ingen sync her.
 
     def autosave(self) -> None:
         """Synk tilstand og skriv save-fil. Kalles fra main ved QUIT og
@@ -420,19 +422,23 @@ class VillageScene(BaseScene):
     ) -> None:
         """Plasser spilleren og sentrer kamera.
 
-        - `from_scene=None` + state.player_position == GameState-default
-          (320.0, 280.0): fersk spillstart → PLAYER_START_X.
-        - Ellers: state.player_position er autoritativ (enten lagret fra
-          forrige oekt, eller synket av forrige scene ved bytte).
+        - `from_scene=None` + player_state.position_x er default (320.0):
+          fersk spillstart → PLAYER_START_X.
+        - Ellers: player_state.position_x er autoritativ (lagret fra
+          forrige oekt eller synket av forrige scene ved bytte).
+
+        Y-koordinaten gjenopprettes fra scene-konstant (GROUND_TOP_Y).
+        Per-havn bakke-høyde kan bli variabel i C4 når bygnings-
+        plasseringer flytter til data/ports.json.
         """
-        # GameState-default (tilstand uten save). Hvis player_position er
-        # dette eksakte tuplet, har state aldri blitt synket fra village –
-        # scene-spesifikk start gjelder.
-        GAMESTATE_DEFAULT_POS = (320.0, 280.0)
-        if from_scene is None and game_state.player_position == GAMESTATE_DEFAULT_POS:
+        GAMESTATE_DEFAULT_X = 320.0
+        if (
+            from_scene is None
+            and game_state.player_state.position_x == GAMESTATE_DEFAULT_X
+        ):
             self._player.x = PLAYER_START_X
         else:
-            self._player.x = float(game_state.player_position[0])
+            self._player.x = float(game_state.player_state.position_x)
         # Klamp mot lovlig intervall (guard for korrupte saves)
         if self._player.x < self._player_min_x:
             self._player.x = self._player_min_x

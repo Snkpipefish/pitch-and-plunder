@@ -1,0 +1,91 @@
+{
+  "version": 4,
+  "gold": 224,
+  "inventory": {
+    "sugar": {
+      "quantity": 1,
+      "avg_cost": 41.0
+    },
+    "rum": {
+      "quantity": 0,
+      "avg_cost": 0.0
+    },
+    "tobacco": {
+      "quantity": 0,
+      "avg_cost": 0.0
+    },
+    "pitch": {
+      "quantity": 4,
+      "avg_cost": 0.0
+    }
+  },
+  "current_scene": "village",
+  "player_position": [
+    1459.1599999999996,
+    320.0
+  ],
+  "clock": {
+    "day": 3,
+    "seconds_into_day": 25.438999999973344,
+    "seconds_per_day": 180.0
+  },
+  "commodities_state": {
+    "sugar": {
+      "current_price": 39.71,
+      "price_history": [
+        40.09,
+        39.71
+      ]
+    },
+    "rum": {
+      "current_price": 75.24,
+      "price_history": [
+        75.64,
+        75.24
+      ]
+    },
+    "tobacco": {
+      "current_price": 90.47,
+      "price_history": [
+        90.67,
+        90.47
+      ]
+    },
+    "pitch": {
+      "current_price": 39.92,
+      "price_history": [
+        40.3,
+        39.92
+      ]
+    }
+  },
+  "cargo_capacity": 40,
+  "regimes": {
+    "sugar": {
+      "current": "stable",
+      "days_remaining": 2,
+      "history": []
+    },
+    "rum": {
+      "current": "stable",
+      "days_remaining": 3,
+      "history": []
+    },
+    "tobacco": {
+      "current": "stable",
+      "days_remaining": 1,
+      "history": []
+    },
+    "pitch": {
+      "current": "stable",
+      "days_remaining": 2,
+      "history": []
+    }
+  },
+  "pitch_lake": {
+    "production_per_day": 2,
+    "daily_upkeep_cost": 8,
+    "total_produced": 4,
+    "last_production_day": 3
+  }
+}

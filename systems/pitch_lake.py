@@ -12,53 +12,31 @@ selv om drift ble betalt.
 Interaktiv utvinning med rør og pumper kommer i Fase 4 (se FASE_2A.md
 "Fremtidige utvidelser").
 
-Designvalg:
-- `PitchLakeState` er ren dataholder (dataclass) som lagres i GameState.
-  `total_produced` og `last_production_day` overlever saves for stats
-  og UI-status-detektering.
-- `PitchLake.on_new_day` er en statisk metode. Ingen instansvariabler,
-  deterministisk — men muterer både `state` og `game_state` direkte
-  (gold, inventory, total_produced, last_production_day).
-- Produsert bek får `avg_cost=0` (gratis fra spillerens synspunkt –
-  drift-kostnaden er allerede trukket separat fra gull).
+Designvalg (Fase 2B C1b):
+- `PitchLakeState` lever i `state/pitch_lake_state.py`. `upkeep_per_day`
+  erstatter `daily_upkeep_cost`-navnet fra 2A (matcher balance.json).
+- `PitchLake.on_new_day` er en statisk metode som muterer `state` og
+  `game_state` direkte (gold, inventory i `player_state`, total_produced,
+  last_production_day).
 - `last_production_day` settes kun når `produced > 0` slik at HUD kan
   detektere "ingen drift"-state via `clock.day - last_production_day > 1`.
+- `pending_units` (C1b) buffrer produksjon når spilleren er vekk fra
+  home_port — realiseres ved retur i C7 (ikke wired ennå).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from entities.commodity import InventoryItem
-from systems import balance as _balance
+from state.pitch_lake_state import PitchLakeState
 
 if TYPE_CHECKING:
-    from systems.save import GameState
+    from state.game_state import GameState
 
 
 #: Vare-id for bek i commodities.json.
 PITCH_ID = "pitch"
-
-
-@dataclass
-class PitchLakeState:
-    """Serialiserbar state for Pitch Lake-produksjonen.
-
-    Defaults leses fra `systems.balance` via `field(default_factory=...)`.
-    Ved hot-reload av balance.json leser `on_new_day` også fra balance
-    direkte (se nedenfor) slik at upkeep/production-endringer slår inn
-    fra neste dag uten å endre eksisterende state-verdi.
-    """
-
-    production_per_day: int = field(
-        default_factory=lambda: _balance.get().pitch_lake.production_per_day
-    )
-    daily_upkeep_cost: int = field(
-        default_factory=lambda: _balance.get().pitch_lake.upkeep_per_day
-    )
-    total_produced: int = 0
-    last_production_day: int = 0
 
 
 class PitchLake:
@@ -74,8 +52,9 @@ class PitchLake:
         Returnerer `(produced, paid_upkeep)`.
 
         Leser upkeep/production fra `state`. Hot-reload av balance.json
-        slår inn fordi F5-handleren (main.py) synkroniserer state.pitch_lake
-        med balance etter vellykket reload — live-applicable per spec §4.4.
+        slår inn fordi F5-handleren (main.py) synkroniserer
+        state.pitch_lake_state med balance etter vellykket reload —
+        live-applicable per spec §4.4.
 
         Flyt:
         1. Trekk upkeep fra gull. `paid_upkeep = min(upkeep, gold)`.
@@ -83,31 +62,27 @@ class PitchLake:
         2. Hvis `paid_upkeep < upkeep` (ikke råd til full lønn) → produced=0.
         3. Ellers: produced = min(production_per_day, ledig lasterom).
            Tom produksjon tapes (full last) – det gir fortsatt produced=0.
-        4. `last_production_day` oppdateres KUN hvis `produced > 0`, slik
-           at HUD kan vise "ingen drift" etter mer enn én dag uten
-           produksjon.
+        4. `last_production_day` oppdateres KUN hvis `produced > 0`.
         """
-        upkeep = max(0, state.daily_upkeep_cost)
-        paid_upkeep = min(upkeep, max(0, game_state.gold))
-        game_state.gold -= paid_upkeep
+        player = game_state.player_state
+        ship = game_state.world_state.ship
+        clock = game_state.world_state.clock
+
+        upkeep = max(0, state.upkeep_per_day)
+        paid_upkeep = min(upkeep, max(0, player.gold))
+        player.gold -= paid_upkeep
 
         if paid_upkeep < upkeep:
             # Ikke råd til full drift i dag – ingen produksjon.
             return 0, paid_upkeep
 
         # Drift betalt: forsøk produksjon begrenset av lasterom.
-        current_total = sum(
-            item.quantity for item in game_state.inventory.values()
-        )
-        available_space = max(
-            0, game_state.cargo_capacity - current_total
-        )
+        current_total = sum(item.quantity for item in player.inventory.values())
+        available_space = max(0, ship.cargo_capacity - current_total)
         produced = min(state.production_per_day, available_space)
 
         if produced > 0:
-            pitch = game_state.inventory.setdefault(
-                PITCH_ID, InventoryItem()
-            )
+            pitch = player.inventory.setdefault(PITCH_ID, InventoryItem())
             old_qty = pitch.quantity
             new_qty = old_qty + produced
             if new_qty > 0:
@@ -116,6 +91,6 @@ class PitchLake:
                 pitch.avg_cost = round(new_avg, 2)
             pitch.quantity = new_qty
             state.total_produced += produced
-            state.last_production_day = game_state.clock.day
+            state.last_production_day = clock.day
 
         return produced, paid_upkeep
