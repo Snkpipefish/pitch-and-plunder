@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING
 import constants
 
 if TYPE_CHECKING:
+    from config.port_config import CelestialConfig
     from systems.game_clock import GameClock
 
 
@@ -73,24 +74,13 @@ MOON_FADE_IN_END = 0.92
 SUN_COLOR_WARM_END = 0.25     # Slutt på varm innledning
 SUN_COLOR_DUSK_START = 0.65   # Start på orange-glidning mot dusk
 
-# --- Sol-bane (verdens-koordinater; Commit 7.2) ---
-#: Solen beveger seg gjennom verden, ikke skjermen. Ved sunrise står
-#: solen ved østre ende (worldx 1500, utenfor Børshuset). Ved sunset er
-#: den ved vestre ende (worldx 100, utenfor tavernaen). Når spilleren
-#: står stille ved tavernaen (cam_x=0) kan solen gå ned bak fjellene
-#: som ligger rundt worldx=100 — tematisk "sol ned i vest".
-SUN_WORLD_X_DAWN = 1500.0  # Sol stiger ved østre horisont
-SUN_WORLD_X_DUSK = 100.0   # Sol går ned ved vestre horisont
-SUN_Y_NOON = 0.85          # Nær topp av himmelen (parabel-topp; endene er 0)
-
-# --- Måne-plassering (verdens-koordinater; Commit 7.2) ---
-#: Månen er statisk forankret over Børshuset på worldx=1350. Når
-#: spilleren går til tavernaen (worldx ~100) er månen langt til høyre
-#: og kan helt eller delvis være utenfor skjermen. Tematisk: månen er
-#: institusjonell vokter; tavernaen er flukten. Matcher Fase 1 der
-#: månen satt bakt inn i bg_layer over samme posisjon.
+# --- Celestial y-fraksjoner (felles for alle havner) ---
+#: Y-koordinater er universelle på tvers av havner — solens bue-topp og
+#: månens høyde over horisonten er felles visuell språk. Kun x-
+#: koordinater er per-havn og lever i `config.port_config.CelestialConfig`
+#: (Fase 2B C3).
+SUN_Y_NOON = 0.85  # Nær topp av himmelen (parabel-topp; endene er 0)
 #: MOON_Y=0.65 gir screen_y ≈ 72, matcher originalen fra Fase 1.
-MOON_WORLD_X = 1350.0
 MOON_Y = 0.65
 
 
@@ -221,8 +211,11 @@ def _night_sky(
 
 def _celestial_for_fraction(
     t: float,
+    celestial_config: "CelestialConfig",
 ) -> tuple[bool, float, float, tuple[int, int, int], float]:
     """Returner (is_sun, x, y, color, alpha) for global day_fraction t.
+
+    `celestial_config` gir per-havn verdens-x for måne og sol (Fase 2B C3).
 
     Celestial-vinduer (review-spec):
     - [0.00, 0.08):         måne, full styrke
@@ -233,25 +226,26 @@ def _celestial_for_fraction(
     - [0.88, 0.92):         måne, fading inn (0.0 → 1.0)
     - [0.92, 1.00):         måne, full styrke
     """
+    moon_x = float(celestial_config.moon_worldx)
     # Måne-vinduer først (wrap-around over midnatt)
     if t < MOON_FADE_OUT_START:
         # Full måne, første del av natten-etter-midnatt
-        return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0
+        return False, moon_x, MOON_Y, constants.COLOR_MOON_CORE, 1.0
 
     if t < MOON_FADE_OUT_END:
         # Måne fader ut
         k = (t - MOON_FADE_OUT_START) / (
             MOON_FADE_OUT_END - MOON_FADE_OUT_START
         )
-        return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0 - k
+        return False, moon_x, MOON_Y, constants.COLOR_MOON_CORE, 1.0 - k
 
     if t < SUN_VISIBLE_START:
         # Gap mellom måne-set og sol-opp (ingen celestial synlig)
-        return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, 0.0
+        return False, moon_x, MOON_Y, constants.COLOR_MOON_CORE, 0.0
 
     if t < SUN_FADE_OUT_START:
         # Sol synlig, full alpha
-        is_sun, x, y, color = _sun_state(t)
+        is_sun, x, y, color = _sun_state(t, celestial_config)
         return is_sun, x, y, color, 1.0
 
     if t < SUN_FADE_OUT_END:
@@ -262,32 +256,34 @@ def _celestial_for_fraction(
         k = (t - SUN_FADE_OUT_START) / (
             SUN_FADE_OUT_END - SUN_FADE_OUT_START
         )
-        is_sun, x, y, color = _sun_state(t)
+        is_sun, x, y, color = _sun_state(t, celestial_config)
         return is_sun, x, y, color, 1.0 - k
 
     if t < MOON_FADE_IN_START:
         # Numerisk nesten-umulig (SUN_FADE_OUT_END == MOON_FADE_IN_START),
         # men defensivt: ingen celestial i denne micro-greinen.
-        return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, 0.0
+        return False, moon_x, MOON_Y, constants.COLOR_MOON_CORE, 0.0
 
     if t < MOON_FADE_IN_END:
         # Måne fader inn
         k = (t - MOON_FADE_IN_START) / (
             MOON_FADE_IN_END - MOON_FADE_IN_START
         )
-        return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, k
+        return False, moon_x, MOON_Y, constants.COLOR_MOON_CORE, k
 
     # t in [MOON_FADE_IN_END, 1.0)
-    return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0
+    return False, moon_x, MOON_Y, constants.COLOR_MOON_CORE, 1.0
 
 
 def _sun_state(
     t: float,
+    celestial_config: "CelestialConfig",
 ) -> tuple[bool, float, float, tuple[int, int, int]]:
     """Sol-posisjon og farge innenfor [SUN_VISIBLE_START, SUN_FADE_OUT_END).
 
-    - Lineær x-bane i verdens-koordinater fra SUN_WORLD_X_DAWN →
-      SUN_WORLD_X_DUSK over hele sol-vinduet (Commit 7.2).
+    - Lineær x-bane i verdens-koordinater fra `celestial_config.sun_worldx_dawn`
+      → `celestial_config.sun_worldx_dusk` over hele sol-vinduet (Commit 7.2;
+      per-havn konfig fra C3).
     - Parabolsk y-bane: y = 4f(1-f) * SUN_Y_NOON. y=0 ved f=0 og f=1
       (sunrise og sunset rører horisonten), peak SUN_Y_NOON ved f=0.5.
     - 3-stegs farge (spenner hele sol-vinduet [0.17, 0.88]):
@@ -295,11 +291,15 @@ def _sun_state(
         [0.25, 0.65):            SUN_DAY (hvit midt på dagen, konstant)
         [0.65, SUN_FADE_OUT_END): SUN_DAY → SUN_DUSK (orange mot kvelden)
     """
-    # Lineær sol-x: verdens-koordinat 1500 → 100 over hele sol-vinduet
+    # Lineær sol-x fra per-havn dawn → dusk over hele sol-vinduet
     span = SUN_FADE_OUT_END - SUN_VISIBLE_START
     f = (t - SUN_VISIBLE_START) / span  # 0 at sunrise, 1 at sunset
     f = max(0.0, min(1.0, f))  # defensivt klamp
-    x = _lerp(SUN_WORLD_X_DAWN, SUN_WORLD_X_DUSK, f)
+    x = _lerp(
+        float(celestial_config.sun_worldx_dawn),
+        float(celestial_config.sun_worldx_dusk),
+        f,
+    )
     # Parabolsk y: 4f(1-f) har topp 1.0 ved f=0.5, og 0.0 ved f=0 og f=1.
     # Solen rører altså horisonten både ved sunrise og sunset.
     parabola = 4.0 * f * (1.0 - f)
@@ -338,8 +338,15 @@ class DayCycle:
     DAY_END_FRAC: float = DAY_END
 
     @staticmethod
-    def compute_snapshot(clock: "GameClock") -> DaySnapshot:
-        """Returner DaySnapshot for klokkens nåværende posisjon."""
+    def compute_snapshot(
+        clock: "GameClock",
+        celestial_config: "CelestialConfig",
+    ) -> DaySnapshot:
+        """Returner DaySnapshot for klokkens nåværende posisjon.
+
+        `celestial_config` gir per-havn verdens-x for måne og sol (C3). Caller
+        passer `port_config.get(current_port).celestial`.
+        """
         t = clock.progress_fraction()
 
         # Himmel-farge (fase-basert)
@@ -364,7 +371,7 @@ class DayCycle:
             cel_y,
             cel_color,
             cel_alpha,
-        ) = _celestial_for_fraction(t)
+        ) = _celestial_for_fraction(t, celestial_config)
 
         return DaySnapshot(
             phase=phase,

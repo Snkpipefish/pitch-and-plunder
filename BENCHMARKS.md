@@ -600,3 +600,33 @@ v5 med full 4-havns-økonomi. Loggen viser:
     INFO systems.save: Initializing port nassau markets with bias (was empty)
     INFO systems.save: Initializing port port_royal markets with bias (was empty)
 
+## Fase 2B Commit C3a – Celestial per havn (konfig-refactor)
+
+Ren refactor: `MOON_WORLD_X`, `SUN_WORLD_X_DAWN`, `SUN_WORLD_X_DUSK`
+flyttes fra `systems/day_cycle.py` modul-konstanter til
+`config.port_config.CelestialConfig`-felt per havn. `compute_snapshot`
+tar nå `celestial_config` som eksplisitt parameter. Y-koordinater
+(SUN_Y_NOON, MOON_Y) forblir modul-konstanter (universelle på tvers av
+havner). VillageScene passer port for current_port ved draw.
+
+### Resultater (målmaskin T4200 / GM45, SDL_VIDEODRIVER ikke satt)
+
+3 kjøringer per scene, median rapportert.
+
+| Scene | C2 | C3a | Delta |
+|-------|-----|-----|-------|
+| Village (lukket) | 4.66 ms | 4.712 ms (median 3×) | +0.05 ms |
+| Village (overlay åpen) | 6.29 ms | 6.161 ms (median 3×) | −0.13 ms |
+
+Begge innenfor ±0.1 ms run-to-run-støy — ren refactor leverte som
+forventet, ingen adferdsendring.
+
+### Tester: 240 → 240 (uendret)
+
+`tests/test_day_cycle.py` oppdatert til test-lokal
+`TORTUGA_CELESTIAL = CelestialConfig(1350, 1500, 100)`. Alle 61
+`compute_snapshot`-kall nå med `(clock, TORTUGA_CELESTIAL)`-signatur.
+Kompatibilitets-aliaser `MOON_WORLD_X`/`SUN_WORLD_X_DAWN`/`SUN_WORLD_X_DUSK`
+peker på TORTUGA_CELESTIAL-felter slik at eksisterende assertions
+fortsatt refererer samme verdier.
+

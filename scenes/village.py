@@ -442,7 +442,14 @@ class VillageScene(BaseScene):
     def draw(self, surface: pygame.Surface) -> None:
         # Beregn dag-natt-snapshot én gang per frame og send til renderen.
         # DayCycle er stateless, så dette er billig (~5 μs).
-        snapshot = DayCycle.compute_snapshot(self._state.world_state.clock)
+        # Celestial-config hentes fra port_config for nåværende havn (C3a).
+        # Tortuga er eneste spillbare havn i C3; C5+ vil endre current_port.
+        celestial_cfg = port_config.get(
+            self._state.world_state.current_port
+        ).celestial
+        snapshot = DayCycle.compute_snapshot(
+            self._state.world_state.clock, celestial_cfg
+        )
         # Verdens-laget (bakgrunn → forgrunn) tegnes av renderen.
         self._renderer.draw(
             surface=surface,
