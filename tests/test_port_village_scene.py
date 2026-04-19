@@ -303,3 +303,115 @@ class TestBiasAdjustedPrices:
 
         # Priser fra forskjellige havner må IKKE kollidere
         assert pr_sugar_buy != tortuga_sugar_buy
+
+
+# -----------------------------------------------------------------------------
+# C8: write_observed_for_port-integrasjon
+# -----------------------------------------------------------------------------
+
+
+class TestObservedUpdatesOnSceneEntry:
+    def test_on_enter_writes_observed_for_initial_spawn(self):
+        """from_scene=None: initial spawn skal sikre at observed for
+        current_port er populert. new_game_state gjør dette allerede,
+        men on_enter skal være idempotent og overskrive med ferskt.
+        """
+        from scenes.port_village import PortVillageScene
+        from systems import save as save_module
+
+        state = save_module.new_game_state()
+        # Endre Tortuga-pris (innen klamp-grenser: base 40 × 0.5..2.0
+        # = [20, 80]). on_enter skal snapshotte gjeldende pris.
+        state.economy_state.markets["tortuga"].commodities["sugar"].current_price = 55.0
+        state.world_state.clock.day = 7
+
+        port = port_config.get("tortuga")
+        scene = PortVillageScene(_font(), state, port)
+        scene.on_enter(state, from_scene=None)
+
+        observed_sugar = state.economy_state.observed["tortuga"]["sugar"]
+        assert observed_sugar.price == 55.0
+        assert observed_sugar.day_seen == 7
+
+    def test_on_enter_from_world_map_writes_observed(self):
+        """from_scene='world_map': retur uten reise skal også oppdatere
+        observed (spilleren ser priser igjen).
+        """
+        from scenes.port_village import PortVillageScene
+        from systems import save as save_module
+
+        state = save_module.new_game_state()
+        # Pris innen klamp-grenser (base 40, max 80)
+        state.economy_state.markets["tortuga"].commodities["sugar"].current_price = 65.0
+        state.world_state.clock.day = 4
+
+        port = port_config.get("tortuga")
+        scene = PortVillageScene(_font(), state, port)
+        scene.on_enter(state, from_scene="world_map")
+
+        observed_sugar = state.economy_state.observed["tortuga"]["sugar"]
+        assert observed_sugar.price == 65.0
+        assert observed_sugar.day_seen == 4
+
+
+class TestObservedUpdatesAtDawn:
+    def test_dawn_tick_updates_observed_for_current_port_after_on_dawn(self):
+        """Per Q2-presisering: write_observed må kalles ETTER
+        Market.on_dawn slik at observed reflekterer dagens NYE pris,
+        ikke gårsdagens.
+        """
+        from scenes.port_village import PortVillageScene
+        from systems import save as save_module
+        from systems.economy import write_observed_for_port
+
+        state = save_module.new_game_state()
+        state.world_state.clock.day = 1
+        # Snapshot ferskt observed for tortuga
+        write_observed_for_port(state, "tortuga")
+
+        # Bygg scene og simuler at klokken har avansert til dag 2
+        port = port_config.get("tortuga")
+        scene = PortVillageScene(_font(), state, port)
+        scene._last_seen_day = 1
+        state.world_state.clock.day = 2
+        scene.update(0.0)
+
+        # Observed skal nå reflektere den NYE prisen etter Market.on_dawn
+        new_observed = state.economy_state.observed["tortuga"]["sugar"]
+        new_market_price = state.economy_state.markets["tortuga"].commodities["sugar"].current_price
+        assert new_observed.price == new_market_price
+        assert new_observed.day_seen == 2
+
+    def test_dawn_tick_during_voyage_skips_observed_update(self):
+        """Per spec §8.3: observed oppdateres KUN når spilleren er i
+        en havn. Under voyage skal tick_all_ports_dawn ikke skrive
+        observed (from_port-snapshotet ble skrevet av start_voyage).
+        """
+        from systems import balance, save as save_module
+        from systems import voyage as voyage_module
+        from systems.economy import Market, tick_all_ports_dawn
+        from systems.regime_manager import RegimeManager
+
+        state = save_module.new_game_state()
+        state.world_state.clock.day = 1
+        depart_day = state.world_state.clock.day
+        # start_voyage skriver observed for from_port (Tortuga)
+        voyage_module.start_voyage(state, balance.get(), "tortuga", "havana")
+        observed_at_voyage_start = {
+            cid: (obs.price, obs.day_seen)
+            for cid, obs in state.economy_state.observed["tortuga"].items()
+        }
+
+        # Avanser klokken og kall tick_all_ports_dawn (under voyage)
+        state.world_state.clock.day = depart_day + 1
+        market = Market.from_json("data/commodities.json")
+        tick_all_ports_dawn(state, market, RegimeManager())
+
+        # Observed for Tortuga skal IKKE være oppdatert (vi er på sjøen)
+        observed_after = state.economy_state.observed["tortuga"]
+        for cid, obs in observed_after.items():
+            assert obs.day_seen == observed_at_voyage_start[cid][1], (
+                f"{cid}: observed.day_seen oppdatert under voyage "
+                f"(start={observed_at_voyage_start[cid][1]}, "
+                f"etter={obs.day_seen})"
+            )

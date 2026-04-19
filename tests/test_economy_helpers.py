@@ -148,6 +148,33 @@ def test_write_observed_noop_for_empty_market() -> None:
     assert "atlantis" not in state.economy_state.observed
 
 
+def test_write_observed_only_affects_target_port() -> None:
+    """C8-presisering: write_observed_for_port skal IKKE røre andre
+    havners observed-data. Defensivt mot eventuell shared-mutation.
+    """
+    state = save_module.new_game_state()
+    state.world_state.clock.day = 5
+    # Snapshot to havner
+    write_observed_for_port(state, "tortuga")
+    write_observed_for_port(state, "port_royal")
+    pr_before = {
+        cid: (obs.price, obs.day_seen)
+        for cid, obs in state.economy_state.observed["port_royal"].items()
+    }
+
+    # Endre dag og snapshot bare Tortuga på nytt
+    state.world_state.clock.day = 12
+    write_observed_for_port(state, "tortuga")
+
+    # Tortuga er oppdatert til dag 12
+    for cid, obs in state.economy_state.observed["tortuga"].items():
+        assert obs.day_seen == 12
+    # Port Royal er UENDRET — fortsatt dag 5
+    for cid, obs in state.economy_state.observed["port_royal"].items():
+        assert obs.day_seen == pr_before[cid][1]
+        assert obs.price == pr_before[cid][0]
+
+
 # -----------------------------------------------------------------------------
 # new_game_state-integrasjon
 # -----------------------------------------------------------------------------

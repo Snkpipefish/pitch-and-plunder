@@ -1294,5 +1294,124 @@ sammenligningen over er tilstrekkelig dokumentasjon.
 → 300 gull, alle 4 havners markeder med bias, pitch_lake 2/8,
 observed["tortuga"] populert.
 
+## Fase 2B Commit C8 — ObservedPrice stale-UI + tooltip + UI-palett
+
+Implementerer hele observed-stale-flyten og tooltip-rendering på
+verdenskartet. Spilleren ser nå ferskhet, alder og prisanvisninger
+per havn — fundamentet for arbitrasje-beslutninger som C9-C10
+balanserer rundt.
+
+### Endringer
+
+- `state/observed_price.py`: utvidet med `days_since(current_day)`
+  (klampet til 0 ved framtidig day_seen — defensiv) og
+  `is_stale(current_day, threshold_days)` (strikt `>` per spec §8.3).
+  Serialiseringen er uendret; eksisterende v5-saves leses uten
+  migrering.
+
+- `ui/color_palette.py` (ny): sentralisert mapping fra "tillit til
+  data" → palett-farge. `DATA_FRESH = STONE_LIT`, `DATA_STALE =
+  FOG`, `DATA_NEVER = STONE_DARK`, `DATA_STALE_AGE = EMBER`. Forberedt
+  for Fase 3-rykte-system og Fase 5-hendelser som vil ha samme stale-
+  semantikk.
+
+- `entities/port_marker.py`: ny "never_visited"-state (FOG ring +
+  STONE_DARKEST sentrum). Brukes av kart-helpers for havner uten
+  observed-oppføring.
+
+- `systems/economy.py`: `tick_all_ports_dawn` kaller nå
+  `write_observed_for_port(state, current_port)` ETTER alle
+  `Market.on_dawn`-kall, og kun når `voyage is None`. Per Q2-
+  presisering: rekkefølgen sikrer at observed reflekterer dagens
+  NYE pris, ikke gårsdagens. Per spec §8.3: oppdateres kun når
+  spilleren er i en havn — under reise er from_port-snapshotet fra
+  `start_voyage` autoritativt.
+
+- `scenes/port_village.py`: `on_enter` skriver nå observed for
+  current_port på ALLE stier (initial spawn, retur fra kart, debug-
+  teleport), ikke bare voyage-ankomst. Spilleren forventer ferskt
+  observed-data ved hver scene-inngang.
+
+- `ui/world_map_tooltip.py` (ny): `TooltipLine` dataclass +
+  `build_tooltip_lines` (pure data) + `WorldMapTooltip` (rendering).
+  Fire tilstander: current/du-er-her, fersk observed, stale observed,
+  aldri besøkt. Trend-pil for fersk; `?` for stale per spec §2.3
+  ("utdatert data skal ikke lyve om retning"). Tooltip-plassering
+  klampes mot skjerm-kanter og kan flippe over markøren hvis under
+  ville kuttes.
+
+- `scenes/world_map.py`: `draw_port_markers_with_labels` utvidet med
+  `visited_port_ids`-parameter (None = backwards compat). Når satt,
+  ports ikke i settet får "never_visited"-markør. WorldMapScene
+  instansierer Market-katalog (for trend) + WorldMapTooltip og
+  tegner tooltip for fokusert havn (kun når dialog er lukket).
+
+- `scenes/voyage.py`: passer `visited_port_ids` til helperen så
+  uvisited havner også på voyage-kartet får dempet markør.
+
+### Tester
+
+29 nye (mer enn planlagt 22 — granulær oppdeling per state og
+integrasjon):
+
+`tests/test_observed_price.py` (ny, 8): days_since (4 cases), is_stale
+(4 cases including strict-gt-threshold edge).
+
+`tests/test_world_map_tooltip.py` (ny, 11): TooltipLine dataclass,
+build_tooltip_lines for 4 tilstander × 2 sjekker (linje-count, farge,
+trend/?), 3 draw-tester (alle tilstander, MOON_CORE pixel-sample,
+empty-lines defensiv).
+
+`tests/test_world_map.py` (utvid, 4): never_visited markør for
+unvisited ports (FOG-pixel-sample), other-state for visited ports,
+tooltip drawn on focus, tooltip skipped when dialog open.
+
+`tests/test_port_village_scene.py` (utvid, 5): on_enter from None
+writes observed, from world_map writes observed, dawn-tikk i havn
+oppdaterer observed etter on_dawn, dawn-tikk under voyage skipper
+observed-update.
+
+`tests/test_economy_helpers.py` (utvid, 1): write_observed_for_port
+påvirker kun target-port (defensiv mot shared mutation).
+
+Total 403 grønne (374 → 403), 8.55 s.
+
+### Benchmark (målmaskin T4200)
+
+| Scene | C7c-patch-2 | C8 | Delta |
+|-------|-------------|----|-------|
+| Port lukket | 4.806 ms | 4.401 ms | -0.41 ms (støy) |
+| Port overlay | 6.253 ms | 5.791 ms | -0.46 ms (støy) |
+| World map | 1.104 ms | 1.210 ms | +0.11 ms (tooltip-render) |
+| VoyageScene | 1.122 ms | 1.176 ms | +0.05 ms (visited-set lookup) |
+
+Tooltip-økningen på world_map er innenfor forventning (~6-7 tekst-
+blits per frame for fokusert havn). Alle scener fortsatt godt under
+5 ms-mål.
+
+### Manuell smoke (anbefalt på fresh save)
+
+`rm saves/savegame.json && python main.py`. Verifiser:
+
+1. Spawn i Tortuga → gå til dock → trykk E → kart åpnes
+2. Tortuga er fokusert ved init: tooltip viser "Tortuga / Du er her
+   / Sukker: 44 → / Rom: 76 → / Tobakk: 91 → / Bek: 46 →" (alle
+   stable-trend ved fersk start; trend dukker opp etter noen dawns)
+3. Piltast → Port Royal: tooltip oppdateres til "Port Royal / aldri
+   besøkt" (mørk dempet farge), markør for Havana/Nassau er FOG-ring
+   (knapt synlig)
+4. Trykk E → reise-dialog → bekreft → ankommer Port Royal → tilbake
+   til kart → Port Royal er nå "fersk" tilstand (Dag 3, 0 d. siden)
+5. Vent 6+ dager (eller bruk debug-teleport via F1-F4 etter å ha
+   blitt der noen dager) → naviger til en havn med stale data →
+   tooltip viser dato i rød (EMBER) og priser i grå (FOG) med "?"
+
+### Tone-validering
+
+Tooltip-tekstene "Du er her", "sist besøkt Dag X (Y d. siden)" og
+"aldri besøkt" er saklig deskriptive uten dekorative adjektiver per
+brukerens tone-direktiv. Ingen "pirat-stemning"-tilsetning.
+
+
 
 

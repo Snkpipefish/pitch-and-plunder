@@ -188,6 +188,9 @@ class VoyageScene(BaseScene):
             voyage.from_port if voyage is not None
             else self._state.world_state.current_port
         )
+        # C8: visited_port_ids fra observed — dempet markør for
+        # havner spilleren aldri har besøkt.
+        visited = set(self._state.economy_state.observed.keys())
         draw_port_markers_with_labels(
             surface=surface,
             port_ids=self._port_ids,
@@ -196,6 +199,7 @@ class VoyageScene(BaseScene):
             marker=self._marker,
             current_port_id=current_port_id,
             elapsed=0.0,  # ingen pulsering i VoyageScene
+            visited_port_ids=visited,
         )
 
         # Skip-posisjon — beregnes deterministisk fra clock-state per

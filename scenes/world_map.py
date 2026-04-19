@@ -23,6 +23,8 @@ import logging
 
 import pygame
 
+import os
+
 import constants
 from config import port_config as _port_config
 from entities.port_marker import MARKER_SIZE, PortMarker
@@ -32,6 +34,8 @@ from scenes.world_map_builder import build_all_phase_variants
 from state import GameState
 from systems import balance as _balance
 from systems import voyage as _voyage
+from systems.economy import Market
+from ui.world_map_tooltip import WorldMapTooltip, build_tooltip_lines
 
 
 #: §8.3 — padding mellom markør-ring-bunn og label-topp.
@@ -54,6 +58,7 @@ def draw_port_markers_with_labels(
     current_port_id: str,
     elapsed: float,
     skip_port_id: str | None = None,
+    visited_port_ids: set[str] | None = None,
 ) -> None:
     """Tegn havn-markører + labels for verdenskart-relaterte scener.
 
@@ -62,9 +67,17 @@ def draw_port_markers_with_labels(
     VoyageScene (uten skip — alle 4 markører tegnes her, ship-sprite
     tegnes etterpå på toppen av call-site).
 
-    Markør-state per havn:
+    Markør-state per havn (prioritert i denne rekkefølgen):
     - `current_port_id`: "current" (varm LANTERN-ring)
+    - ikke i `visited_port_ids` (når satt): "never_visited" (FOG-ring)
     - andre: "other" (kald STONE_LIT-ring)
+
+    `visited_port_ids=None` (default for backward-kompatibilitet) gir
+    samme oppførsel som C7 — alle non-current = "other". Når satt
+    (typisk `set(state.economy_state.observed.keys())`), markeres
+    ports IKKE i settet med "never_visited"-tilstand. Per spec §8.3:
+    aldri-besøkte havner har ingen observed-oppføring og skal være
+    visuelt dempet på kartet.
 
     Labels tegnes for ALLE port_ids uavhengig av skip_port_id —
     fokus-markøren beholder labelen sin selv om markør-tegningen
@@ -75,7 +88,12 @@ def draw_port_markers_with_labels(
         if pid == skip_port_id:
             continue
         pos = port_positions[pid]
-        state = "current" if pid == current_port_id else "other"
+        if pid == current_port_id:
+            state = "current"
+        elif visited_port_ids is not None and pid not in visited_port_ids:
+            state = "never_visited"
+        else:
+            state = "other"
         marker.draw(surface, pos, state, elapsed)
 
     for pid in port_ids:
@@ -215,6 +233,19 @@ class WorldMapScene(BaseScene):
         # all kart-input til den lukkes via E (bekreft) eller Esc (avbryt).
         self._dialog: _VoyageConfirmDialog | None = None
 
+        # C8: tooltip for fokusert havn. Market-katalog brukes til
+        # display-navn og price_history-trend-beregning.
+        self._market = Market.from_json(
+            os.path.join(constants.DATA_DIR, "commodities.json")
+        )
+        self._catalog_order: list[str] = [
+            c.id for c in self._market.commodities
+        ]
+        self._catalog_names: dict[str, str] = {
+            c.id: c.name for c in self._market.commodities
+        }
+        self._tooltip = WorldMapTooltip(font)
+
         # HUD-tekst: kartets overskrift (statisk)
         self._title_surf = font.render(
             "Karibia", False, constants.COLOR_MOON_CORE,
@@ -348,6 +379,10 @@ class WorldMapScene(BaseScene):
         # Tittel topp-venstre
         surface.blit(self._title_surf, (8, 4))
 
+        # C8: visited_port_ids = havner med observed-oppføringer.
+        # Ports IKKE i settet får "never_visited"-markør (FOG-ring).
+        visited = set(self._state.economy_state.observed.keys())
+
         # Havn-markører + labels via felles helper. Vi skipper fokus-
         # markøren her og tegner den separat sist slik at pulserende
         # alpha legges oppå hvis overlap skulle oppstå. Labels tegnes
@@ -361,6 +396,7 @@ class WorldMapScene(BaseScene):
             current_port_id=self._current_port_id,
             elapsed=self._elapsed,
             skip_port_id=self._focused_port_id,
+            visited_port_ids=visited,
         )
         # Fokus sist. Hvis focused == current, tegn som "current" først
         # OG "focused" oppå (gir stable varm ring + pulserende kjerne).
@@ -368,6 +404,11 @@ class WorldMapScene(BaseScene):
         if self._focused_port_id == self._current_port_id:
             self._marker.draw(surface, focus_pos, "current", self._elapsed)
         self._marker.draw(surface, focus_pos, "focused", self._elapsed)
+
+        # C8: tooltip for fokusert havn (alltid synlig på fokus per Q4).
+        # Skip når dialog er åpen — modal har all skjerm-fokus.
+        if self._dialog is None:
+            self._draw_focus_tooltip(surface)
 
         # Skip-sprite ved current_port. Offset 8 px nord-ost for å unngå
         # overlapp med marker-senter. Heading "N" som nøytral C5-placeholder.
@@ -384,6 +425,34 @@ class WorldMapScene(BaseScene):
         # Reise-dialog (modal) tegnes sist, over alt annet
         if self._dialog is not None:
             self._dialog.draw(surface)
+
+    def _draw_focus_tooltip(self, surface: pygame.Surface) -> None:
+        """C8: tegn tooltip for fokusert havn med observed-data.
+
+        Tooltip-innhold: havn-navn + ferskhet-status + per-vare priser
+        med trend (eller "?" for stale, ingen rader for aldri besøkt).
+        """
+        focused_pid = self._focused_port_id
+        port_cfg = _port_config.get(focused_pid)
+        bal = _balance.get()
+        clock = self._state.world_state.clock
+        observed_for_port = self._state.economy_state.observed.get(focused_pid)
+        market_state = self._state.economy_state.markets.get(focused_pid)
+        if market_state is None:
+            return  # defensive — burde alltid eksistere
+        is_current = focused_pid == self._current_port_id
+        lines = build_tooltip_lines(
+            port_name=port_cfg.name,
+            observed_for_port=observed_for_port,
+            market_state=market_state,
+            catalog_order=self._catalog_order,
+            catalog_names=self._catalog_names,
+            current_day=clock.day,
+            stale_threshold=bal.observed.stale_threshold_days,
+            is_current_port=is_current,
+        )
+        anchor = self._port_positions[focused_pid]
+        self._tooltip.draw(surface, lines, anchor)
 
     def on_exit(self, to_scene: str | None = None) -> None:
         """Ingen save her — WorldMapScene har ingen mutabel state som

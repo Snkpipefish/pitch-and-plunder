@@ -526,6 +526,15 @@ class PortVillageScene(BaseScene):
         # realisering og toast.
         if from_scene == "voyage":
             self._handle_voyage_arrival()
+        else:
+            # C8: snapshot observed for current_port på alle andre
+            # scene-inngangs-stier (initial spawn, retur fra kart,
+            # debug-teleport). Idempotent — overskriver eksisterende
+            # observed for current_port med dagens pris. Dette dekker
+            # tilfellet "spilleren åpner spillet og forventer å se
+            # ferskt observed-data" uten å vente på første dawn.
+            from systems.economy import write_observed_for_port
+            write_observed_for_port(self._state, self._port.id)
 
         GAMESTATE_DEFAULT_X = 320.0
         if from_scene in ("world_map", "voyage"):

@@ -82,10 +82,16 @@ def _build_marker_surface(
 
 
 class PortMarker:
-    """Ett markør-sett med pre-rendrede sprites for 3 tilstander.
+    """Ett markør-sett med pre-rendrede sprites for 4 tilstander.
 
     Deling: én PortMarker-instans per WorldMapScene, ikke én per havn.
     Scene velger riktig sprite per havn per frame.
+
+    States (per VISUELL_REFERANSE §3 marker-tabellen):
+    - current: LANTERN_BRIGHT ring + LANTERN senter (varm hjem)
+    - focused: LANTERN ring + MOON_CORE senter (varm + pulserende lys)
+    - other: STONE_LIT ring + STONE_DARK senter (kald institusjonell)
+    - never_visited: FOG ring + STONE_DARKEST senter (dempet ukjent — C8)
     """
 
     def __init__(self) -> None:
@@ -100,6 +106,12 @@ class PortMarker:
         # Other: STONE_LIT ring, STONE_DARK senter
         self._surf_other = _build_marker_surface(
             constants.COLOR_STONE_LIT, constants.COLOR_STONE_DARK,
+        )
+        # Never visited: FOG ring, STONE_DARKEST senter (C8). Lav
+        # kontrast mot mørk hav-bakgrunn — spilleren må "lete" for å
+        # se den, tematisk forsvarer at ukjente steder er usynligere.
+        self._surf_never_visited = _build_marker_surface(
+            constants.COLOR_FOG, constants.COLOR_STONE_DARKEST,
         )
         #: Logget én gang ved første fallback slik at dev-mode viser at
         #: pulsering er skrudd av. Ikke spammer logg.
@@ -162,6 +174,9 @@ class PortMarker:
                 sprite.set_alpha(int(alpha_frac * 255))
         elif state == "other":
             sprite = self._surf_other
+            sprite.set_alpha(255)
+        elif state == "never_visited":
+            sprite = self._surf_never_visited
             sprite.set_alpha(255)
         else:
             return

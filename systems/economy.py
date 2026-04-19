@@ -360,6 +360,13 @@ def tick_all_ports_dawn(
     VoyageScene under reise (C7c) — markedet i alle 4 havner skal
     utvikle seg uavhengig av hvor spilleren er, per spec §7.3.
 
+    C8: Etter alle on_dawn-kall, snapshot observed for current_port
+    med dagens NYE priser. Rekkefølgen er kritisk — kallet må komme
+    ETTER `market.on_dawn(...)` slik at observed reflekterer dagens
+    pris, ikke gårsdagens. Per spec §8.3 oppdateres observed kun når
+    spilleren ER i en havn (voyage None) — under reise er from_port
+    allerede snapshotet av start_voyage.
+
     Importeres lokalt for å unngå sirkularitet i tester som mocker
     port_config (port_config kalles ved første kall).
     """
@@ -378,6 +385,12 @@ def tick_all_ports_dawn(
         regime_manager.on_new_day(port_regimes)
         if dev:
             _log_port_regimes(port_id, port_regimes, day)
+
+    # C8: snapshot observed for current_port med dagens nye priser.
+    # Bare når i havn — under reise har spilleren ikke direkte
+    # marked-tilgang og from_port-snapshotet er fra avreise-tidspunktet.
+    if state.world_state.voyage is None:
+        write_observed_for_port(state, state.world_state.current_port)
 
 
 # -----------------------------------------------------------------------------
