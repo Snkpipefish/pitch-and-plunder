@@ -162,6 +162,11 @@ class VillageScene(BaseScene):
                     commodity.price_history = [float(p) for p in raw_history]
                 except (TypeError, ValueError):
                     pass
+            # Klamp loaded verdier mot gjeldende pris-grenser. Fase 2A
+            # Commit 5D endret bek base_price 55 → 40 og klamp-forholdet
+            # fra [0.3, 3.0] til [0.5, 2.0]; eksisterende saves kan ha
+            # priser utenfor nye grenser (spesielt bek rundt 120+).
+            self._market.clamp_to_price_bounds(cid)
 
         # Regime-system. Initialiser manglende regimer for kjente varer
         # (first boot, eller save uten regime-dict).

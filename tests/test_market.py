@@ -238,3 +238,66 @@ class TestComputeTrendEdgeCases:
     def test_just_over_threshold_is_rising(self):
         # 3.01% stigning → over terskel
         assert compute_trend([100.0, 100.0, 103.1]) == "\u2191"
+
+
+# -----------------------------------------------------------------------------
+# Commit 5D: bek base_price 40 og clamp_to_price_bounds
+# -----------------------------------------------------------------------------
+
+class TestBekBasePrice:
+    def test_fresh_market_bek_starts_at_40(self):
+        # commodities.json skal ha pitch base_price = 40 (Commit 5D).
+        import os
+        import constants
+        m = Market.from_json(
+            os.path.join(constants.DATA_DIR, "commodities.json")
+        )
+        bek = m.get("pitch")
+        assert bek.base_price == 40.0
+        assert bek.current_price == 40.0
+
+    def test_fresh_market_prices_buy_sell(self):
+        # Buy/sell spread = 2%; bek base 40 → buy 41 (40*1.02=40.8 → 41),
+        # sell 39 (40*0.98=39.2 → 39).
+        import os
+        import constants
+        m = Market.from_json(
+            os.path.join(constants.DATA_DIR, "commodities.json")
+        )
+        assert m.buy_price("pitch") == 41
+        assert m.sell_price("pitch") == 39
+
+
+class TestClampToPriceBounds:
+    def test_high_price_clamped_to_max(self):
+        # Simuler en loaded save med bek-pris 120 (fra Fase 1 base=55 × 2.18).
+        # Ny clamp: base=40, max=80 → skal klampes til 80.
+        m = _market()
+        m.get("sugar").current_price = 120.0
+        m.clamp_to_price_bounds("sugar")
+        assert m.get("sugar").current_price == 80.0  # base 40 × 2.0
+
+    def test_low_price_clamped_to_min(self):
+        m = _market()
+        m.get("sugar").current_price = 5.0
+        m.clamp_to_price_bounds("sugar")
+        assert m.get("sugar").current_price == 20.0  # base 40 × 0.5
+
+    def test_in_range_price_unchanged(self):
+        m = _market()
+        m.get("sugar").current_price = 45.0
+        m.clamp_to_price_bounds("sugar")
+        assert m.get("sugar").current_price == 45.0
+
+    def test_history_clamped(self):
+        m = _market()
+        m.get("sugar").price_history = [10.0, 120.0, 45.0, 200.0]
+        m.clamp_to_price_bounds("sugar")
+        # base 40 → [20, 80]
+        assert m.get("sugar").price_history == [20.0, 80.0, 45.0, 80.0]
+
+    def test_empty_history_stays_empty(self):
+        m = _market()
+        m.get("sugar").price_history = []
+        m.clamp_to_price_bounds("sugar")
+        assert m.get("sugar").price_history == []

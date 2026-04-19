@@ -24,7 +24,7 @@
     {
       "id": "pitch",
       "name": "Bek",
-      "base_price": 55,
+      "base_price": 40,
       "volatility": 0.25,
       "description": "Tettingsmiddel for skipsskrog."
     }

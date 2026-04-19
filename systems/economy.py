@@ -69,6 +69,23 @@ class Market:
             data = json.load(fh)
         return cls([Commodity.from_data(entry) for entry in data["commodities"]])
 
+    def clamp_to_price_bounds(self, commodity_id: str) -> None:
+        """Klamp `current_price` og `price_history` for én vare mot gjeldende
+        pris-grenser `[base * PRICE_MIN_MULT, base * PRICE_MAX_MULT]`.
+
+        Brukes ved load av gamle saves der `base_price` er justert (f.eks.
+        Fase 2A Commit 5D: bek 55 → 40). Uten clamp ville historiske priser
+        utenfor nye grenser feilinformere trend-indikatoren; current_price
+        ville først bli klampet ved neste `on_dawn`.
+        """
+        c = self._commodities[commodity_id]
+        lo = c.base_price * PRICE_MIN_MULT
+        hi = c.base_price * PRICE_MAX_MULT
+        c.current_price = round(max(lo, min(hi, c.current_price)), 2)
+        c.price_history = [
+            round(max(lo, min(hi, p)), 2) for p in c.price_history
+        ]
+
     # --- Daglig pris-drift (ved daggry) ---
 
     def on_dawn(

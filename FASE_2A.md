@@ -479,3 +479,15 @@ Etter diskusjon med bruker før Commit 1 er følgende justert fra §6:
 - **SECONDS_PER_DAY** legges som justerbar konstant i `constants.py` (default 60.0). Eksperimenteres med i Commit 8-polish.
 - **Market-tick vs GameClock:** forblir uavhengige. Market-tick hvert 10. sek. RegimeManager abonnerer på `"new_day"`-hendelser.
 - **ui/toast.py** (Commit 6): bygges generisk for gjenbruk i Fase 3 (pris-varsler) og Fase 5 (mistanke-varsler).
+
+---
+
+## Kjente issues (noteres for Commit 8-polish)
+
+- **Sol-bevegelse hakker litt** (observert i Commit 5C brukertest 2026-04-19).
+  Solens `celestial_x` oppdateres lineært fra DayCycle per frame, og sprite-
+  posisjonen konverteres til int ved blit. Resultat: sprite hopper 1 px per
+  N frames i stedet for å flyte jevnt. Mulige medvirkende årsaker: (1) int-
+  casting uten sub-pixel-rendering, (2) cross-fade mellom backdrop-varianter
+  med per-surface alpha kan gi varierende rendering-tid → dt-hikst. Fikses
+  i Commit 8-polish (dedikert undersøkelse og mål).
