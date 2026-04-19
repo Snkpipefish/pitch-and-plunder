@@ -1,4 +1,4 @@
-# Pitch & Plunder – Prosjektspesifikasjon (v2.1)
+# Pitch & Plunder – Prosjektspesifikasjon (v2.4)
 
 Et 2D pixel art pirat-spill satt til Karibien under pirattiden (sent 1600-tall / tidlig 1700-tall). Krysning mellom **Sid Meier's Pirates!** (PSP), et **Life-sim** (bo i landsby, jobb, spis, sov), og en **skjult økonomi-krigføring** der spilleren manipulerer en lokal børs gjennom ulovlig piratvirksomhet. Inkluderer et **bek-/tjære-utvinningsspill** (sideview med rør, pumper og vogner) inspirert av Pitch Lake på Trinidad. Visuell stil er en hybrid av Kingdom: Two Crowns (atmosfærisk parallax og volumetrisk lys) og Monkey Island (varm karibisk palett, lesbare karakterer).
 
@@ -375,12 +375,27 @@ Hver fase slutter med spillbart build + benchmark-måling.
 - F11 fullskjerm
 - **Benchmark-mål: 30 FPS stabilt**
 
-### Fase 2 – Verdenskart + seiling
-### Fase 3 – Piratvirksomhet + rykte
+### Fase 2 – Verdenskart + seiling (KOMPLETT — Fase 2A + 2B)
+
+**Fase 2A** (komplett v2.3): markedsdybde med daglig oppdatering og
+regimer, dag-natt-syklus, bek-produksjon med upkeep, lagerbegrensning,
+transaksjonsgebyr. Se `PHASE_2A_RETROSPECTIVE.md`.
+
+**Fase 2B** (komplett v2.4): verdenskart-scene 640×360 med 4 havner
+(Tortuga + Port Royal + Havana + Nassau), aktiv seiling med akselerert
+klokke (75 sek/dag at sea vs 180 i havn), per-havn marked med
+bias-priser og regimer som tikker parallelt under reise, ObservedPrice-
+modell med stale-UI på kart-tooltip, reise-bekreftelse-dialog med
+gull-trekk og blokkering, voyage-resume via save/load, dev-mode med
+F5 hot-reload av balance.json og F1-F4 debug-teleport. Stub-havner
+har funksjonell børs men deler Tortugas layout — distinkt karakter
+kommer i Fase 3. Se `PHASE_2B_RETROSPECTIVE.md`.
+
+### Fase 3 – Piratvirksomhet + rykte (NESTE)
 ### Fase 4 – Bek-utvinning (sideview mini-game)
 ### Fase 5 – Dyp simulering + dag/natt
 
-(Detaljer senere – disse utformes når Fase 1 er stabil.)
+(Detaljer senere – disse utformes når Fase 2 er stabil.)
 
 ---
 
@@ -757,6 +772,7 @@ Deretter, én commit per logisk enhet:
 
 ## CHANGELOG
 
+- **v2.4** – Fase 2B komplett. Verdenskart-scene (640×360 top-down med 4 havn-markører + tooltip for sist sett priser), aktiv seiling mellom 4 havner (Tortuga, Port Royal, Havana, Nassau) med akselerert klokke (75 sek/dag at sea vs 180 i havn), per-havn marked med bias-priser og regimer som tikker parallelt for alle havner under reise, ObservedPrice-modell med fersk/stale/aldri-besøkt-tilstander, reise-bekreftelse-dialog med gull-trekk + blokkering ved insufficient gold, voyage-resume via save/load (deterministisk progress fra clock-state), dev-mode med F5 hot-reload av balance.json og F1-F4 debug-teleport. Stub-havner deler Tortugas layout — distinkt karakter kommer i Fase 3. Nested GameState v5 med per-domene-felter (PlayerState/WorldState/EconomyState/PitchLakeState). PortConfig + ports.json. balance.json med live/sesjon/nytt-spill hot-reload-kategorier. 16 hovedcommits (C1a–C10) + 2 patch-commits, 418 tester grønne (+231 gjennom 2B), 4.87/6.29 ms frame time (+0.26/+0.14 ms over 2A), 1.21 ms verdenskart, 1.25 ms voyage-scene. Se `PHASE_2B_RETROSPECTIVE.md`. Brukertest-protokollen ble droppet — provisoriske tall kan ikke meningsfullt balanseres før Fase 3-mekanikker (piratinntekter, møter, rykter) gir kontekst.
 - **v2.3** – Fase 2A komplett. Markedsdybde (daglig oppdatering, regimer, trend-piler), dag-natt-syklus (6 pre-rendrede bakgrunner, sol/måne i verdenskoordinater med 1:1 kamera-offset og render-rekkefølge som gir fjell-okklusjon), bek-produksjon med daglig vedlikeholdskostnad, lagerbegrensning, transaksjonsgebyr. 18 commits (inkl. underversjoner), 187 tester grønne, 4.61-6.15 ms frame time. Se `PHASE_2A_RETROSPECTIVE.md`.
 - **v2.2** – Fase 2 reformulert fra "verdenskart + seiling" til "markedsdybde + verdenskart + seiling" basert på Fase 1-spilletesting. Spilleren observerte at den mekaniske børsen er triviell å utnytte uten friksjon (tilbud/etterspørsel, transport-risiko, guvernør-mistanke, informasjons-kost). Disse komponentene adresseres i Fase 2 parallelt med kartscenen.
 - **Fase 1 komplett.** Se Commit 9 for oppsummering og Fase 2 ikke påbegynt.

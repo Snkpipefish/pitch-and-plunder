@@ -1510,6 +1510,78 @@ Toast-fragmentering (3 ToastQueue-instanser uten kommunikasjon)
 notert i PHASE_2B_RETROSPECTIVE.md. Vurder singleton eller
 SceneManager-injection i C10/Fase 3.
 
+## Fase 2B Commit C10 — endelig benchmark + dokumentasjons-closure
+
+C10 er ikke en feature-commit. Brukertest-protokollen (20+ min
+sammenhengende, balansering-iterasjoner) ble droppet fordi 2B-
+tallene er provisoriske og kan ikke meningsfullt balanseres før
+Fase 3-mekanikker (piratinntekter, møter, rykter) gir kontekst til
+reise-friksjonen. Konsistent med PHASE_2A_RETROSPECTIVE.md sin
+flagging av samme avhengighet.
+
+Rebalansering-døren holdes eksplisitt åpen — ad-hoc-justering kan
+skje når som helst senere via `balance.json`/`ports.json` + F5
+hot-reload.
+
+### Endelig benchmark (målmaskin T4200, median av 5/3 kjøringer)
+
+| Scene | Kjøringer | Tall (ms) | **Median** | Mål | Hard grense |
+|-------|-----------|-----------|------------|-----|-------------|
+| Port-scene lukket | 5 | 4.671 / 4.833 / **4.872** / 4.905 / 4.916 | **4.872** | <5 ms ✓ | <10 ms ✓ |
+| Port-scene overlay | 5 | 6.069 / 6.164 / **6.286** / 6.318 / 6.398 | **6.286** | <7 ms ✓ | <10 ms ✓ |
+| Verdenskart-scene | 3 | 1.207 / **1.210** / 1.235 | **1.210** | <5 ms ✓ | <10 ms ✓ |
+| VoyageScene | 3 | 1.243 / **1.247** / 1.252 | **1.247** | <5 ms ✓ | <10 ms ✓ |
+
+Sammenligning mot Fase 2A-slutt:
+
+| Scene | 2A-slutt | 2B-slutt | Delta |
+|-------|----------|----------|-------|
+| Port lukket | 4.61 ms | 4.87 ms | +0.26 ms |
+| Port overlay | 6.15 ms | 6.29 ms | +0.14 ms |
+| Verdenskart-scene | (n/a) | 1.21 ms | ny |
+| VoyageScene | (n/a) | 1.25 ms | ny |
+
+Akkumulert regresjon over 18+ commits er moderat — godt under 1 ms-
+grensen som ville vært bekymring. Verdenskart og voyage leverer 4×
+headroom mot hard grense.
+
+### Save-clean-flow paranoid-verifisering
+
+Etter alle 16 baseline-benchmark-kjøringer (5 + 5 + 3 + 3) inkludert
+`--open-exchange` (som tidligere hadde autosave-bug, fikset i
+C7c-patch-2): `saves/savegame.json` forble ikke-eksisterende.
+Benchmark-isolasjonen er stabil.
+
+### Test-suite
+
+418 grønne (363 nye gjennom 2B). Distribusjon:
+
+| Modul | Antall | Tilkomst |
+|-------|--------|----------|
+| `test_balance.py` | 11 | C1a |
+| `test_dev_mode.py` | 8 | C1a |
+| `test_save_v5_migration.py` | 12 | C1b + C2 |
+| `test_port_config.py` | ~20 | C2 + C4 + C6 |
+| `test_economy_helpers.py` | 9 | C7a |
+| `test_voyage.py` | 30 | C7b |
+| `test_voyage_cost.py` | 8 | C9 |
+| `test_voyage_scene.py` | 23 | C7c + C9 |
+| `test_world_map.py` | 35 | C5 + C7c-patch + C8 |
+| `test_world_map_tooltip.py` | 11 | C8 |
+| `test_observed_price.py` | 8 | C8 |
+| `test_debug_teleport.py` | ~20 | C6 + C7b |
+| `test_pitch_lake.py` | ~18 | C7b utvidelse |
+| `test_port_village_scene.py` | ~15 | C8 utvidelse |
+| Annet (2A-arv) | ~190 | Fase 1+2A |
+
+Total kjøre-tid 8.46s (lokal venv).
+
+### Fase 2B formelt lukket
+
+Klar for Fase 3-planlegging. Se `PHASE_2B_RETROSPECTIVE.md` for
+fullstendig retrospektiv inkludert teknisk gjeld og rebalansering-
+notat.
+
 
 
 
