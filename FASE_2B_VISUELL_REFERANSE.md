@@ -40,6 +40,23 @@ bildet og havet en smal stripe; på verdenskartet er det omvendt.
 fargemiks. Hvis en farge ikke finnes i palett-listen, eksisterer den
 ikke.
 
+**Alias-kommentar:** noen "tematiske" konstanter er aliaser introdusert
+i Fase 2A Commit 5B for dag-natt-syklus:
+
+| Tematisk alias | Peker på | Hex |
+|----------------|----------|-----|
+| `COLOR_SKY_DAY_HORIZON` | `COLOR_STONE_BRIGHT` | `#8ba8d6` |
+| `COLOR_SKY_DUSK_HORIZON` | `COLOR_EMBER` | `#d96c2e` |
+| `COLOR_SKY_DAY_TOP` | `COLOR_STONE_LIT` | `#6b8bc7` |
+| `COLOR_SKY_DUSK_TOP` | `COLOR_COAT` | `#3d3548` |
+| `COLOR_SUN_DAWN` | `COLOR_LANTERN` | `#ffb347` |
+| `COLOR_SUN_DAY` | `COLOR_MOON_CORE` | `#fff8e7` |
+| `COLOR_SUN_DUSK` | `COLOR_EMBER` | `#d96c2e` |
+
+Bruk den tematiske aliasen der intent er himmel/sol-tilknyttet; bruk
+grunnkonstanten der intent er generell (stein/ember). Begge lever som
+eksisterende referanser i `constants.py`.
+
 ---
 
 ## 2. Inspirasjonskilder — eksplisitt vekting
@@ -118,9 +135,33 @@ uleselig på denne skjermen.
 | Tilstand | Ring | Senter | Rasjonale |
 |----------|------|--------|-----------|
 | Current port (hvor spiller er) | `COLOR_LANTERN_BRIGHT` (`#ffd580`) | `COLOR_LANTERN` (`#ffb347`) | Varm familie = spillerens "hjem" i øyeblikket. Bright i ytterkant gir strålingseffekt mot kjølig hav. |
-| Fokusert/hover (piltast-valg) | `COLOR_LANTERN` (`#ffb347`) | `COLOR_EMBER` (`#d96c2e`) | Dempet varm — signaliserer "under vurdering, ikke aktiv". |
+| Fokusert (piltast-valg) | `COLOR_LANTERN` (`#ffb347`) | `COLOR_MOON_CORE` (`#fff8e7`), pulserende alpha | Varm ring + lys kjerne signaliserer "under vurdering". Pulsering leverer bevegelse uten å bryte stillhetstemaet. |
 | Andre havner | `COLOR_STONE_LIT` (`#6b8bc7`) | `COLOR_STONE_DARK` (`#1f2538`) | Kald familie = institusjonelt kjent men ikke aktivt. |
 | Aldri besøkt | `COLOR_FOG` (`#3a3a4a`) | `COLOR_STONE_DARKEST` (`#151a2a`) | Dempet grå, lav kontrast mot hav — må "lete" for å se den. Forsvarer tematisk at ukjente steder er usynligere. |
+
+**Fokusert-tilstand: pulserende sentrum-prikk**
+
+Sentrum-prikken på fokusert markør moduleres med sinus-kurve mellom
+alpha 0.7 og 1.0 over 1 sekund (2π rad / 1 s = 2π rad/s vinkelhastighet).
+Ring-fargen er statisk; kun sentrum-prikken pulserer — det gir bevegelse
+uten å overgå current-port-markørens stabile glød.
+
+Formel:
+```python
+t = scene_elapsed_seconds
+alpha = 0.7 + 0.15 * (1.0 + math.sin(2 * math.pi * t))
+# Sinus-rekkevidde [-1, 1] → shift+scale gir [0.7, 1.0]
+```
+
+**Implementasjon:** pre-render sentrum-prikken i COLOR_MOON_CORE én gang
+(som del av `PortMarker`-init), bruk `set_alpha(int(alpha * 255))` per
+frame. `set_alpha` på colorkey-surfaces er billig (målt ~0.01 ms per
+sprite på målmaskinen i 2A-perioden).
+
+**Ytelseskrav:** pulsasjon må ikke regressere world_map-scenen under
+5 ms-målet. Én ekstra `set_alpha` + én ekstra `blit` per frame for
+fokus-markøren — forventet kost <0.1 ms. Hvis benchmark viser ellers,
+flagg og fall tilbake til ikke-pulserende (statisk alpha 1.0).
 
 **Tooltip-integrasjon (spec §6.2):** tooltip flyttes inn under markøren
 (høyrehav-side) med 2 px padding. Fersk-data i `COLOR_STONE_LIT`, stale
@@ -134,15 +175,45 @@ i `COLOR_FOG`, aldri-besøkt-tekst i `COLOR_STONE_DARKEST` (knapt synlig
 **Dimensjon:** 12×12 placeholder. Skipet er et punkt på kartet, ikke
 en detaljert modell — mindre plass hindrer overdetaljering.
 
+**Perspektiv: RENT TOP-DOWN (fugleperspektiv).** Ikke Pirates!-stilens
+semi-top-down hybrid der skroget ligger isometrisk. Her ser man skipet
+rett ovenfra — som om man er i utkiksposten. Mast sentrert,
+skrog/seil symmetriske om baug-akkse.
+
+Rasjonal: 12×12 er for liten skala til å bære stilisert perspektiv-
+hybrid uten å bli visuelt støy. Rent top-down gir klarest leselighet.
+
 **Farge:** `COLOR_WOOD_LIGHT` (`#5c4a35`) for skrog, `COLOR_SHIRT`
 (`#e8dcc4`) for seil. **Ikke LANTERN** — varm oransje-tone ville
 trekke oppmerksomhet vekk fra havn-markøren som skal eie den rollen.
 Skip er "verktøy for navigasjon", havn er "destinasjon"; visuell
 hierarki speiler dette.
 
-**Orientering:** 4 retninger i 2B (N, S, Ø, V). Skipet peker mot
-destinasjon under voyage; stasjonær ved havn (orientert mot åpent hav,
-ikke mot havn-markøren). 4 varianter pre-rendres ved scene-init.
+**Orientering: 4 SEPARATE pre-rendrede sprites (N, S, Ø, V).**
+
+**Ikke sprite-flip.** Fire ekte sprites fordi top-down skip ser
+markant forskjellig ut i N/S kontra Ø/V — baugen peker ut av
+sprite-aksen i begge tilfeller, men retningen skroget går bred-inn-til-
+skjermen endrer seg. Speiling via `pygame.transform.flip` gir feil
+visuelt resultat for top-down siden en østvendt sprite er en 90°
+rotert versjon av nordvendt, ikke speilbilde.
+
+- **N** (nord): baug peker opp, bred side horisontal. Se skisse nedenfor.
+- **S** (sør): baug peker ned. Kan genereres via vertikal flip av
+  N-spriten siden skrog-formen er symmetrisk om x-aksen for top-down
+  — akseptabelt her *fordi* sørvendt skip ER speiling av nordvendt
+  når vi ser rett ned.
+- **Ø** (øst): baug peker høyre, bred side vertikal. **Ny rendering**,
+  ikke 90° rotasjon av N (asymmetri i seilføring ville gi feil).
+- **V** (vest): baug peker venstre. Horisontal flip av Ø-sprite OK av
+  samme symmetri-argument som S-N.
+
+Netto: **2 unike pre-renderinger** (N og Ø), 2 flips (S og V) — men
+dette er implementasjonsdetalj. Konseptuelt tenker vi fire distinkte
+sprites.
+
+Skipet peker mot destinasjon under voyage; stasjonær ved havn,
+orientert bort fra havn-markøren mot åpent hav (C5 default "N").
 
 **Tilstand:**
 
@@ -193,15 +264,43 @@ Seilene utgjør en enkel triangel/rektangulær form — leselig som
 Gradient implementeres som 3–5 horisontale striper, ikke kontinuerlig
 interpolasjon (vi vil unngå farger utenfor palett).
 
-**Bølge-indikatorer (statisk):**
+**Bølge-indikatorer (statisk, per fase):**
 
-- Sparse 1-px hvite prikker spredt ut i øvre halvdel av hav-regionen,
-  tegnet i `COLOR_STONE_BRIGHT` (`#8ba8d6`) eller
-  `COLOR_SEA_HIGHLIGHT` (`#4a5a8a`). Sjekkerbrett-lignende fordeling
-  (ikke regulær) — gir teksturfølelse uten å lese som raster.
-- Tetthet: ~50 prikker spredt over 640×360-halvdel. Pre-rendret i bake-
-  funksjonen.
+- Sparse 1-px prikker spredt ut i øvre halvdel av hav-regionen.
+  Sjekkerbrett-lignende fordeling (ikke regulær) — gir teksturfølelse
+  uten å lese som raster.
+- Tetthet: ~50 prikker spredt over 640×360-halvdel.
+- Pre-rendret inn i bakgrunns-variantene per dag-fase.
 - **Ingen animasjon i 2B.**
+
+**Fargevalg per fase — varm glimt ved dawn/dusk:**
+
+Havet må signalere solens posisjon subtilt. Ved skumring/daggry fanger
+ekte hav opp varme fra horisonten og refleksjoner fra himmelen. På
+kartet gjenskaper vi dette ved å bytte en andel prikker fra
+`COLOR_STONE_BRIGHT` til `COLOR_EMBER`:
+
+| Fase | Prikke-fordeling | Effekt |
+|------|------------------|--------|
+| Dawn (0.17) | ~80% `COLOR_STONE_BRIGHT`, **~20% `COLOR_EMBER`** | Spredt varm glimt mot horisont-retningen — holder scenen levende |
+| Noon (0.50) | 100% `COLOR_STONE_BRIGHT` | Rent kjølig glitter; ingen varm forstyrrelse midt på dagen |
+| Dusk (0.80) | ~80% `COLOR_STONE_BRIGHT`, **~20% `COLOR_EMBER`** | Speiler dawn; siste varme refleksjoner før natt |
+| Night (0.92+) | 100% `COLOR_STONE_BRIGHT` (eller reduser tetthet til 60%) | Månelys-glitter; EMBER borte uten sol |
+
+**Implementasjon:** bakefunksjonen `build_world_map_background` tar en
+`phase: str`-parameter og velger prikke-palett deretter. Alle 4 faser
+pre-rendres ved scene-init; cross-fade mellom dem skjer som på havn-
+scenen (set_alpha på påfølgende bakgrunn ved fase-skifte).
+
+Antall prikker skal være **samme** på tvers av faser (deterministisk
+sjekkerbrett) — kun fargen på ~20% av dem endres. Dette gjør cross-fade
+visuelt rolig: prikkene "blinker ikke bort og tilbake", de endrer bare
+temperatur.
+
+**Seed-kontroll:** bakefunksjonen tar `rng: random.Random | None = None`-
+parameter. Produksjon bruker default (ikke-deterministisk spredning per
+kjøring), tester bruker seedet rng for reproduserbare fordelinger.
+Plasseringen forblir konstant gjennom fasene innenfor én scene-session.
 
 **Anbefaling om palette cycling:** forkast for 2B.
 
@@ -309,6 +408,17 @@ riktig valg.
 
 ## CHANGELOG
 
+- **v1.1 (2026-04-19)** — Presiseringer fra brukeren før C5-start:
+  (1) §1 alias-tabell legger til dokumentasjon av tematiske
+  himmel/sol-aliaser for grunnkonstanter (COLOR_SKY_DAY_HORIZON →
+  COLOR_STONE_BRIGHT osv.); (2) §3 markør-spec oppdatert med pulserende
+  sentrum-prikk på fokus-tilstand (COLOR_MOON_CORE, sinus-alpha 0.7–1.0
+  over 1 sek); (3) §4 skip-sprite-perspektivet eksplisitt definert som
+  rent top-down (ikke Pirates!-hybrid), med fire separate pre-rendrede
+  sprites — 2 unike renderinger (N, Ø) + 2 symmetri-flips (S fra N,
+  V fra Ø); (4) §5 hav-tekstur utvidet med varm-glimt-fase per tid på
+  døgnet (20% EMBER-prikker ved dawn/dusk, 100% STONE_BRIGHT ved
+  noon/night). Ingen semantiske endringer i §2/§6/§7.
 - **v1.0 (2026-04-19)** — Initial versjon etter Commit C4-lukking,
   før C5-planlegging. Kodifiserer palett-vekting, inspirasjons-
   balansering, og stub-havn-direktivet slik at C5-C6-implementering
