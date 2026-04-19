@@ -73,15 +73,34 @@ class TestPortVillageSceneInit:
         )
 
     def test_scene_without_buildings_raises_value_error(self):
-        """Port Royal / Havana / Nassau har ingen buildings-felt i C4 —
-        scene-init skal kaste ValueError, ikke assertionError (per direktiv).
+        """Scene-init skal kaste ValueError (ikke assertion) hvis
+        buildings-felt mangler. Siden C6 aktiverte alle 4 havner, må
+        vi bygge en syntetisk port uten buildings for å teste banen.
         """
+        from config.port_config import (
+            CelestialConfig, PortConfig,
+        )
         from scenes.port_village import PortVillageScene
 
-        port_royal = port_config.get("port_royal")
-        assert port_royal.buildings is None  # fornuftssjekk av fixture
+        # Syntetisk PortConfig med buildings=None
+        phantom = PortConfig(
+            id="phantom",
+            name="Phantom",
+            world_map_position=(0, 0),
+            scene_class="scenes.port_village:PortVillageScene",
+            world_width=1200,
+            celestial=CelestialConfig(1000, 1100, 100),
+            price_bias={"sugar": 1.0, "rum": 1.0, "tobacco": 1.0, "pitch": 1.0},
+            regime_weights={
+                "sugar":   {"rising": 0.33, "stable": 0.34, "falling": 0.33},
+                "rum":     {"rising": 0.33, "stable": 0.34, "falling": 0.33},
+                "tobacco": {"rising": 0.33, "stable": 0.34, "falling": 0.33},
+                "pitch":   {"rising": 0.33, "stable": 0.34, "falling": 0.33},
+            },
+            buildings=None,
+        )
         with pytest.raises(ValueError, match="no buildings layout"):
-            PortVillageScene(_font(), _state_for_tortuga(), port_royal)
+            PortVillageScene(_font(), _state_for_tortuga(), phantom)
 
 
 class TestPortVillageScenePlayerPlacement:
@@ -173,3 +192,114 @@ class TestPortVillageSceneMarketAccess:
         assert ms is state.economy_state.markets["tortuga"]
         # Har commodities populert fra new_game_state
         assert ms.commodities
+
+
+# -----------------------------------------------------------------------------
+# C6: Alle 4 havner kan aktiveres som PortVillageScene
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "port_id",
+    ["tortuga", "port_royal", "havana", "nassau"],
+)
+class TestAllPortsSceneInit:
+    def test_scene_loads_without_error(self, port_id):
+        from scenes.port_village import PortVillageScene
+        port = port_config.get(port_id)
+        assert port.buildings is not None, (
+            f"{port_id} mangler buildings — C6 skulle ha lagt det til"
+        )
+        state = _state_for_tortuga()
+        state.world_state.current_port = port_id
+        scene = PortVillageScene(_font(), state, port)
+        assert scene is not None
+
+    def test_player_can_interact_with_dock(self, port_id):
+        """Dock-interaksjon (E → world_map) fungerer for alle 4 havner.
+        Player ved x=40 skal være i range [8, 80]."""
+        from scenes.port_village import PortVillageScene
+        port = port_config.get(port_id)
+        state = _state_for_tortuga()
+        state.world_state.current_port = port_id
+        scene = PortVillageScene(_font(), state, port)
+        scene._player.x = 36.0  # center = 40
+        assert scene._player_can_interact_with_dock()
+
+    def test_exchange_interaction_works(self, port_id):
+        """Exchange-interaksjon fungerer ved havnens exchange-sentrum."""
+        from scenes.port_village import PortVillageScene
+        port = port_config.get(port_id)
+        state = _state_for_tortuga()
+        state.world_state.current_port = port_id
+        scene = PortVillageScene(_font(), state, port)
+        # Exchange senter = x + w/2
+        exchange_center = port.buildings.exchange.x + port.buildings.exchange.w / 2
+        scene._player.x = exchange_center - scene._player.width / 2
+        assert scene._player_can_interact_with_exchange()
+
+
+# -----------------------------------------------------------------------------
+# C6: Bias-justerte priser per havn
+# -----------------------------------------------------------------------------
+
+
+class TestBiasAdjustedPrices:
+    """Verifiser at Market opererer på riktig havns MarketState — bias-
+    justerte priser reflekteres i buy_price/sell_price per spec-
+    akseptansekriterium C6.
+    """
+
+    def test_port_royal_sugar_has_bias_discount(self):
+        """Port Royal sugar bias = 0.80. base_price = 40.
+        Forventet: current_price ≈ 32.0 (i fresh market via bias-init).
+        """
+        from systems import save as save_module
+        state = save_module.new_game_state()
+        ms = state.economy_state.markets["port_royal"]
+        sugar = ms.commodities["sugar"]
+        # 40 × 0.80 = 32.0
+        assert abs(sugar.current_price - 32.0) < 0.01
+
+    def test_havana_tobacco_has_bias_discount(self):
+        """Havana tobacco bias = 0.75. base_price = 90.
+        Forventet: current_price ≈ 67.5."""
+        from systems import save as save_module
+        state = save_module.new_game_state()
+        ms = state.economy_state.markets["havana"]
+        tobacco = ms.commodities["tobacco"]
+        # 90 × 0.75 = 67.5
+        assert abs(tobacco.current_price - 67.5) < 0.01
+
+    def test_market_buy_price_reads_from_target_port_market(self):
+        """Market.buy_price(state, cid) skal reflektere havnens bias.
+        Spread = 2%, så buy_price = current_price × 1.02 avrundet.
+        """
+        import os
+        import constants
+        from systems import save as save_module
+        from systems.economy import Market
+        state = save_module.new_game_state()
+        market = Market.from_json(
+            os.path.join(constants.DATA_DIR, "commodities.json")
+        )
+        # Port Royal sugar current = 32.0 → buy = round(32 × 1.02) = 33
+        pr_sugar_buy = market.buy_price(
+            state.economy_state.markets["port_royal"], "sugar",
+        )
+        assert pr_sugar_buy == 33
+
+        # Tortuga sugar bias = 1.10 → current = 44.0 → buy = round(44 × 1.02) = 45
+        tortuga_sugar_buy = market.buy_price(
+            state.economy_state.markets["tortuga"], "sugar",
+        )
+        assert tortuga_sugar_buy == 45
+
+        # Havana tobacco current = 67.5 → buy = round(67.5 × 1.02) = round(68.85) = 69
+        havana_tobacco_buy = market.buy_price(
+            state.economy_state.markets["havana"], "tobacco",
+        )
+        assert havana_tobacco_buy == 69
+
+        # Priser fra forskjellige havner må IKKE kollidere
+        assert pr_sugar_buy != tortuga_sugar_buy

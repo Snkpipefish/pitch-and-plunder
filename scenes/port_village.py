@@ -59,15 +59,10 @@ from ui.toast import Toast, ToastQueue
 # med per-havn-justering, flytter vi denne til PortBuildings.
 _PLAYER_SPRITE_HEIGHT = 20
 
-# Havn-kant (dock) interaksjons-x-range for C5. Venstre ende av
-# verdens-bredde er "dokket"; E her åpner verdenskart. Hardkodet for
-# alle havner i C5 — dock-sprite og per-havn dock_x_range flyttes til
-# port_config.buildings i C6 per direktiv.
-_DOCK_INTERACTION_X_MIN = 8.0
-_DOCK_INTERACTION_X_MAX = 80.0
-
 # Spiller-posisjon ved retur fra verdenskart — plasseres rett innenfor
-# dock-region.
+# dock-region. Samme for alle havner siden dock er venstre verdens-kant.
+# Dock-sprite og eventuelt per-havn dock_return_x flyttes til
+# port_config.buildings i C7 sammen med voyage-arbeidet.
 _DOCK_RETURN_X = 60.0
 
 
@@ -323,11 +318,12 @@ class PortVillageScene(BaseScene):
         """True hvis spiller er i dock-region (venstre verdens-kant).
 
         Per FASE_2B.md §3.3: spilleren går til havn-kant-sprite, trykker
-        E → åpner verdenskart. C5 bruker hardkodet x-range; C6 flytter
-        til port_config.buildings.
+        E → åpner verdenskart. Range leses fra port.buildings.
+        dock_interaction_range — flyttet fra modul-konstanter i C6.
         """
         player_center_x = self._player.x + self._player.width / 2
-        return _DOCK_INTERACTION_X_MIN <= player_center_x <= _DOCK_INTERACTION_X_MAX
+        dock_min, dock_max = self._buildings.dock_interaction_range
+        return dock_min <= player_center_x <= dock_max
 
     def _open_world_map(self) -> None:
         """Åpne verdenskart (instant cut — fade kommer i C7)."""

@@ -78,8 +78,9 @@ class PortBuildings:
     """Per-havn scene-layout: bakkehøyde, bygninger, spiller-start, NPC-er.
 
     Fase 2B C4: flyttet fra hardkodede konstanter i `scenes/village_buildings.py`.
-    Tortuga har layout i C4; Port Royal, Havana, Nassau får layout i C6
-    når stub-havnene aktiveres.
+    Fase 2B C6: Port Royal, Havana, Nassau får layout + stub-havner aktiveres.
+    `dock_interaction_range` flyttet fra modul-konstanter i port_village.py
+    til per-havn buildings per direktiv (obligatorisk felt).
     """
     #: Y-pixel der bakken starter (spiller-føttene hviler på denne).
     ground_top_y: int
@@ -89,6 +90,11 @@ class PortBuildings:
     exchange: BuildingPlacement
     #: Verdens-x for hver NPC (id → x). Y utledes fra ground_top_y.
     npcs: dict[str, int]
+    #: Venstre-kant dock-region [min_x, max_x] som trigger verdenskart-
+    #: interaksjon når spilleren står i. Tortuga + stub-havnene bruker
+    #: (8, 80) — dock-sprite flyttes til buildings i C7 sammen med
+    #: voyage-arbeidet.
+    dock_interaction_range: tuple[int, int]
 
 
 @dataclass(frozen=True)
@@ -260,12 +266,34 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
             raise ValueError(
                 f"port '{port_id}': buildings.npcs[{npc_id!r}] ugyldig: {exc}"
             ) from exc
+    # dock_interaction_range er obligatorisk (fail-fast) — introdusert
+    # i C6, ikke valgfritt med fallback.
+    dock_raw = raw.get("dock_interaction_range")
+    if not isinstance(dock_raw, (list, tuple)) or len(dock_raw) != 2:
+        raise ValueError(
+            f"port '{port_id}': buildings.dock_interaction_range må være "
+            f"[min_x, max_x]-liste"
+        )
+    try:
+        dock_range = (int(dock_raw[0]), int(dock_raw[1]))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"port '{port_id}': buildings.dock_interaction_range ugyldig: "
+            f"{exc}"
+        ) from exc
+    if dock_range[0] >= dock_range[1]:
+        raise ValueError(
+            f"port '{port_id}': buildings.dock_interaction_range "
+            f"min_x ({dock_range[0]}) må være mindre enn max_x "
+            f"({dock_range[1]})"
+        )
     return PortBuildings(
         ground_top_y=ground_top_y,
         player_start_x=player_start_x,
         tavern=tavern,
         exchange=exchange,
         npcs=npcs,
+        dock_interaction_range=dock_range,
     )
 
 

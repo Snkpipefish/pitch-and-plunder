@@ -839,3 +839,79 @@ Scene-init-tid (WorldMapScene, 10 kjøringer, nå med 4 fase-varianter):
 beholdt for bakoverkompat i eksisterende tester. Pixel-nivå-verifisering
 gjort via ad-hoc script (ikke committet).
 
+## Fase 2B Commit C6 — stub-havner + debug-teleport
+
+Port Royal, Havana og Nassau aktivert som spillbare havner via
+PortVillageScene. Samme Tortuga-layout klampet til hver havns
+world_width. Debug-teleport F1-F4 aktiv i dev-mode.
+
+### Layout per havn
+
+`exchange.x = world_width - 220`, `player_start_x = exchange.x - 40`:
+
+| Havn | world_width | player_start_x | exchange.x | hawkins.x |
+|------|-------------|----------------|------------|-----------|
+| Tortuga | 1600 | 1340 | 1380 | 1470 |
+| Port Royal | 1200 | 940 | 980 | 1070 |
+| Havana | 1400 | 1140 | 1180 | 1270 |
+| Nassau | 1200 | 940 | 980 | 1070 |
+
+Alle 4 bruker `dock_interaction_range = [8, 80]` (venstre verdens-kant
+uavhengig av world_width).
+
+### Dock-sprite utsatt til C7
+
+Per C5 Q1-direktiv skulle dock-sprite + dock_interaction_range begge
+landet i C6. Brukerens siste direktiv oppdaterte: dock-sprite er
+C7-territorium (krever voyage-sprite-systemet). C6 leverer kun
+dock_interaction_range-feltet. Avvik dokumentert.
+
+### Tester: 278 → 305 (+27)
+
+- `tests/test_debug_teleport.py` (ny, 11): F1-F4-mapping, spawn-
+  posisjon fra buildings, gull/inventar/klokke bevart, ukjente keys
+  no-op, F5 treffer ikke teleport, INFO-logging, phantom-port
+  defensive avbryt, scene-bytte fra world_map.
+- `tests/test_port_village_scene.py` (+12 parametrized + nye):
+  4 havner × 3 tester (scene-init, dock, exchange). Bias-pris-tester:
+  Port Royal sugar=32, Havana tobacco=67.5, Market.buy_price per havn.
+- `tests/test_port_config.py`: eksisterende "no buildings for non-
+  Tortuga" erstattet med positiv assertion.
+
+### Kamera-verifikasjon (bruker-observasjon)
+
+Alle 4 havner tillater kamera å følge spiller fra dock til exchange-
+senter uten mid-range-klamping:
+
+| Havn | Cam ved dock (x=40) | Cam ved exchange | Bevegelse |
+|------|---------------------|-------------------|-----------|
+| Tortuga | 0 | 960 (clamp max) | 960 px |
+| Port Royal | 0 | 560 (clamp max) | 560 px |
+| Havana | 0 | 760 (clamp max) | 760 px |
+| Nassau | 0 | 560 (clamp max) | 560 px |
+
+Clamping skjer KUN ved maks-verdi ved exchange. Ingen mid-range-henging.
+Gap-forhold varierer (Tortuga 72.5%, Port Royal/Nassau 63%, Havana
+68.5%) — naturlig konsekvens av kortere gate. Rapportert ikke-blokkerende.
+
+### Benchmark (målmaskin T4200, 3 kjøringer per scene)
+
+| Scene | C5.1 | C6 median | Delta |
+|-------|------|-----------|-------|
+| Port lukket | 4.690 ms | 4.891 ms | +0.20 ms (støy) |
+| Port overlay | 6.133 ms | 6.398 ms | +0.27 ms (støy) |
+| World map | 1.078 ms | 1.107 ms | +0.03 ms |
+
+Ingen kode-regresjon (endring er attributt-lookup vs modul-konstant,
+<1 ns forskjell). Tallene innenfor normal run-to-run-støy observert
+over 2B.
+
+### Manuell smoke (dev-mode aktiv)
+
+v4-save lastes. F1-F4 bytter current_port korrekt:
+- F1 → tortuga (player.x=1340)
+- F2 → port_royal (player.x=940, PR sugar=32.0)
+- F3 → havana (player.x=1140, HV tobacco=67.5)
+- F4 → nassau (player.x=940)
+- Gull 224 bevart gjennom alle 4 teleport
+

@@ -240,6 +240,7 @@ def _valid_buildings_payload() -> dict:
         "tavern":   {"x": 20,   "y": 258, "w": 200, "h": 82},
         "exchange": {"x": 1380, "y": 248, "w": 200, "h": 92},
         "npcs": {"hawkins": 1470},
+        "dock_interaction_range": [8, 80],
     }
 
 
@@ -255,13 +256,20 @@ class TestBuildingsParsing:
         assert tortuga.buildings.exchange.x == 1380
         assert tortuga.buildings.npcs["hawkins"] == 1470
 
-    def test_real_non_tortuga_ports_have_no_buildings(self) -> None:
-        """Port Royal / Havana / Nassau får layout i C6 — None i C4."""
+    def test_real_non_tortuga_ports_have_buildings_after_c6(self) -> None:
+        """C6 aktiverte stub-havnene: Port Royal/Havana/Nassau har nå
+        buildings-felt i ports.json (kopi av Tortugas layout klampet til
+        respektiv world_width).
+        """
         ports = pc.load_ports(str(REAL_PORTS_PATH))
         for pid in ("port_royal", "havana", "nassau"):
-            assert ports[pid].buildings is None, (
-                f"{pid} skal ikke ha buildings ennå (lagt til i C6)"
+            assert ports[pid].buildings is not None, (
+                f"{pid} skal ha buildings fra C6"
             )
+            # Alle stub-havner bruker samme dock-range som Tortuga
+            assert ports[pid].buildings.dock_interaction_range == (8, 80)
+            # Player start er innenfor verdenes bredde
+            assert 0 < ports[pid].buildings.player_start_x < ports[pid].world_width
 
     def test_buildings_parsed_from_synthetic_payload(self, tmp_path: Path) -> None:
         payload = _valid_full_payload()

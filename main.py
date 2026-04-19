@@ -20,6 +20,7 @@ import pygame
 
 from config import port_config as port_config_module
 from systems import balance as balance_module  # Må init-es før andre systemer
+from systems import debug_teleport
 from systems import dev_mode
 
 
@@ -331,6 +332,25 @@ def run() -> int:
                     game_state, manager, pending_session_sync, font_small
                 )
                 continue
+            # Debug-teleport F1-F4 i dev-mode (per spec §10 C6). Fanges
+            # før scenens handle_event slik at det fungerer uansett
+            # hvilken scene spilleren er i (port_village eller world_map).
+            if (
+                dev_active
+                and event.type == pygame.KEYDOWN
+            ):
+                teleport_target = debug_teleport.handle_teleport_key(
+                    event.key, game_state,
+                )
+                if teleport_target is not None:
+                    # Scene-bytte til port_village (samme scene-id uansett
+                    # target-havn; PortVillageScene-factoryen leser
+                    # current_port ved instansiering). Gjør eksplisitt
+                    # scene-bytte framfor å la current scene fortsette —
+                    # ellers lekker scene-state (pulsering-timer, fokus)
+                    # fra world_map hvis teleport skjer derfra.
+                    manager.current.next_scene = "port_village"
+                    continue
             manager.current.handle_event(event)
 
         if manager.current.want_quit:

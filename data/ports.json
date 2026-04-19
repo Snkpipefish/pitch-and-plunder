@@ -23,7 +23,8 @@
         "player_start_x": 1340,
         "tavern":   {"x": 20,   "y": 258, "w": 200, "h": 82},
         "exchange": {"x": 1380, "y": 248, "w": 200, "h": 92},
-        "npcs": {"hawkins": 1470}
+        "npcs": {"hawkins": 1470},
+        "dock_interaction_range": [8, 80]
       }
     },
     "port_royal": {
@@ -42,6 +43,14 @@
         "rum":     {"rising": 0.30, "stable": 0.40, "falling": 0.30},
         "tobacco": {"rising": 0.33, "stable": 0.34, "falling": 0.33},
         "pitch":   {"rising": 0.35, "stable": 0.35, "falling": 0.30}
+      },
+      "buildings": {
+        "ground_top_y": 340,
+        "player_start_x": 940,
+        "tavern":   {"x": 20,  "y": 258, "w": 200, "h": 82},
+        "exchange": {"x": 980, "y": 248, "w": 200, "h": 92},
+        "npcs": {"hawkins": 1070},
+        "dock_interaction_range": [8, 80]
       }
     },
     "havana": {
@@ -60,6 +69,14 @@
         "rum":     {"rising": 0.30, "stable": 0.40, "falling": 0.30},
         "tobacco": {"rising": 0.25, "stable": 0.40, "falling": 0.35},
         "pitch":   {"rising": 0.35, "stable": 0.40, "falling": 0.25}
+      },
+      "buildings": {
+        "ground_top_y": 340,
+        "player_start_x": 1140,
+        "tavern":   {"x": 20,   "y": 258, "w": 200, "h": 82},
+        "exchange": {"x": 1180, "y": 248, "w": 200, "h": 92},
+        "npcs": {"hawkins": 1270},
+        "dock_interaction_range": [8, 80]
       }
     },
     "nassau": {
@@ -78,6 +95,14 @@
         "rum":     {"rising": 0.30, "stable": 0.40, "falling": 0.30},
         "tobacco": {"rising": 0.33, "stable": 0.34, "falling": 0.33},
         "pitch":   {"rising": 0.20, "stable": 0.40, "falling": 0.40}
+      },
+      "buildings": {
+        "ground_top_y": 340,
+        "player_start_x": 940,
+        "tavern":   {"x": 20,  "y": 258, "w": 200, "h": 82},
+        "exchange": {"x": 980, "y": 248, "w": 200, "h": 92},
+        "npcs": {"hawkins": 1070},
+        "dock_interaction_range": [8, 80]
       }
     }
   }
