@@ -22,7 +22,8 @@ from __future__ import annotations
 import pygame
 
 import constants
-from config.port_config import PortConfig
+from config.port_config import PortConfig, PortProps
+from entities import port_props as props_module
 
 
 #: Colorkey for transparente områder på gameplay-laget. Fortsatt i bruk
@@ -31,27 +32,49 @@ from config.port_config import PortConfig
 COLORKEY = (255, 0, 255)
 
 
-def _bake_ground(surface: pygame.Surface, ground_top_y: int) -> None:
-    """Mørkt tre-/brostein-belte langs hele verdens bredde."""
-    width = surface.get_width()
-    ground_bottom_y = constants.RENDER_HEIGHT
-    # Hovedstripe (mørkest)
-    pygame.draw.rect(
-        surface,
-        constants.COLOR_WOOD_DARKEST,
-        (0, ground_top_y, width, ground_bottom_y - ground_top_y),
-    )
-    # Lysere midt-stripe (litt mindre, sentrert) for variasjon
-    pygame.draw.rect(
-        surface,
-        constants.COLOR_WOOD_DARK,
-        (200, ground_top_y + 2, width - 400, ground_bottom_y - ground_top_y - 2),
-    )
-    # Små bjelke-detaljer (spare prikker)
-    for x in range(260, width - 260, 80):
-        pygame.draw.rect(
-            surface, constants.COLOR_WOOD_MID, (x, ground_top_y + 4, 8, 1)
+def _bake_ground(
+    surface: pygame.Surface,
+    ground_top_y: int,
+    texture: str = "wood_dark",
+) -> None:
+    """Gategulv med havn-spesifikk tekstur.
+
+    `texture` dispatches til `entities.port_props.bake_ground`. Default
+    "wood_dark" bevarer eksisterende Tortuga-oppførsel før C2.5-1 og
+    brukes av stub-havnene (Port Royal/Havana/Nassau) i denne commiten
+    — de får egne teksturer i C2.5-2/3/4.
+    """
+    props_module.bake_ground(surface, ground_top_y, texture)
+
+
+def _bake_props(
+    surface: pygame.Surface,
+    props: PortProps,
+    ground_top_y: int,
+) -> None:
+    """Bake rekvisita-lag (boder, tønner, lanterne-stolper) inn i gameplay-
+    surfacen.
+
+    Rekvisita-rekkefølgen per `FASE_2_5.md §2.1` rendering-lag:
+    1. Gategulv (allerede bakt av _bake_ground)
+    2. Markedsboder (bakerst — tegnes bak tønner hvis de overlapper)
+    3. Stablede tønner
+    4. Lanterne-stolper (forrest — tegnes OVER andre props)
+
+    NPC-silhuetter er ikke her; de tegnes runtime som entiteter
+    (bevarer prinsippet "NPC-er skal være sprites i samme palett
+    som spiller og Hawkins" per spec).
+    """
+    for stall in props.market_stalls:
+        props_module.bake_market_stall(
+            surface, stall.x, ground_top_y, stall.w,
         )
+    for stack in props.barrel_stacks:
+        props_module.bake_barrel_stack(
+            surface, stack.x, ground_top_y, stack.count,
+        )
+    for lantern in props.lanterns:
+        props_module.bake_lantern_post(surface, lantern.x, ground_top_y)
 
 
 def _bake_tavern(
@@ -221,7 +244,10 @@ def build_port_gameplay_layer(port_config: PortConfig) -> pygame.Surface:
         (port_config.world_width, constants.RENDER_HEIGHT)
     ).convert()
     surf.fill(COLORKEY)
-    _bake_ground(surf, b.ground_top_y)
+    # Gategulv-tekstur kommer fra props hvis den finnes; ellers eksisterende
+    # "wood_dark" (beholder backward-kompatibilitet for havner uten props).
+    texture = b.props.ground_texture if b.props is not None else "wood_dark"
+    _bake_ground(surf, b.ground_top_y, texture=texture)
     _bake_tavern(
         surf, b.tavern.x, b.tavern.y, b.tavern.w, b.tavern.h,
         b.ground_top_y,
@@ -230,5 +256,9 @@ def build_port_gameplay_layer(port_config: PortConfig) -> pygame.Surface:
         surf, b.exchange.x, b.exchange.y, b.exchange.w, b.exchange.h,
         b.ground_top_y,
     )
+    # Rekvisita bakes mellom bygninger og bakgrunnskan; NPC-silhuetter er
+    # runtime-entiteter (tegnes over gameplay-laget av PortVillageRenderer).
+    if b.props is not None:
+        _bake_props(surf, b.props, b.ground_top_y)
     surf.set_colorkey(COLORKEY)
     return surf

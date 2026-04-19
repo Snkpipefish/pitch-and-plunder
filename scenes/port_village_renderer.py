@@ -37,6 +37,7 @@ from systems.parallax import ParallaxRenderer
 if TYPE_CHECKING:
     from entities.celestial import Celestial
     from entities.npc import NPC
+    from entities.npc_silhouette import NPCSilhouette
     from entities.player import Player
     from systems.day_cycle import DaySnapshot
     from systems.lighting import Light, LightingSystem
@@ -175,6 +176,7 @@ class PortVillageRenderer:
         elapsed: float,
         particles: "ParticleSystem",
         hint_state: "bool | str" = False,
+        silhouettes: Sequence["NPCSilhouette"] = (),
     ) -> None:
         # 1) Himmel-lag (cross-fade mellom to nærmeste varianter)
         self._draw_backdrop(surface, cam_x, snapshot)
@@ -192,11 +194,19 @@ class PortVillageRenderer:
         # 4) Gameplay-lag (index 0 i denne parallax-renderen)
         self._parallax.draw(surface, cam_x, start=0, stop=1)
 
-        # 5) Entiteter (spiller og NPC-er) i verdens-koordinater.
-        # Bruk fblits for én batch; ingen overlap-sortering er nødvendig
-        # i Fase 1 siden alle står på samme gatenivå.
+        # 5) Entiteter (spiller, NPC-er, rekvisita-silhuetter) i verdens-
+        # koordinater. Bruk fblits for én batch.
+        # Render-rekkefølge (fra bakerst til forrest):
+        #   - Silhuetter (FASE_2_5 §2.1: "bak lanterne-stolper, men
+        #     lanterne-stolper er bakt inn i gameplay-laget så silhuetter
+        #     tegnes over dem — tematisk OK på natt-scener hvor
+        #     lanterne-stolpene er tynne silhuetter uten å konkurrere")
+        #   - NPC-er (Hawkins osv)
+        #   - Spiller (forrest)
         cx = int(cam_x)
         batch: list[tuple[pygame.Surface, tuple[int, int]]] = []
+        for sil in silhouettes:
+            batch.append((sil.sprite, (int(sil.x) - cx, int(sil.y))))
         for npc in npcs:
             batch.append((npc.sprite, (int(npc.x) - cx, int(npc.y))))
         batch.append(

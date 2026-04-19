@@ -24,7 +24,29 @@
         "tavern":   {"x": 20,   "y": 258, "w": 200, "h": 82},
         "exchange": {"x": 1380, "y": 248, "w": 200, "h": 92},
         "npcs": {"hawkins": 1470},
-        "dock_interaction_range": [8, 80]
+        "dock_interaction_range": [8, 80],
+        "props": {
+          "ground_texture": "cobblestone_wet",
+          "lanterns": [
+            {"x": 360},
+            {"x": 700},
+            {"x": 1040}
+          ],
+          "market_stalls": [
+            {"x": 420, "w": 80},
+            {"x": 760, "w": 80},
+            {"x": 1100, "w": 80}
+          ],
+          "barrel_stacks": [
+            {"x": 280, "count": 3},
+            {"x": 1260, "count": 2}
+          ],
+          "silhouettes": [
+            {"kind": "standing", "x": 500},
+            {"kind": "group",    "x": 830},
+            {"kind": "sitting",  "x": 1180}
+          ]
+        }
       }
     },
     "port_royal": {

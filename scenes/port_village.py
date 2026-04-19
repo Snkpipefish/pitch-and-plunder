@@ -27,6 +27,7 @@ from config import port_config
 from config.port_config import PortConfig
 from entities.celestial import Celestial
 from entities.npc import NPC
+from entities.npc_silhouette import NPCSilhouette, build_silhouette
 from entities.player import Player
 from scenes.base_scene import BaseScene
 from scenes.exchange import ExchangeOverlay
@@ -135,6 +136,21 @@ class PortVillageScene(BaseScene):
             self._npcs.append(
                 NPC.from_data(npc_db[npc_id], float(npc_x), float(player_y))
             )
+
+        # Rekvisita-silhuetter (Fase 2.5 C2.5-1). Statiske, ikke-
+        # interaktive sprites som fyller gaten mellom tavernaen og
+        # børshuset. Bakt ved init; tegnes i samme fblits-batch som
+        # NPC-er av PortVillageRenderer.
+        self._silhouettes: list[NPCSilhouette] = []
+        if self._buildings.props is not None:
+            for placement in self._buildings.props.silhouettes:
+                self._silhouettes.append(
+                    build_silhouette(
+                        placement.kind,
+                        placement.x,
+                        self._buildings.ground_top_y,
+                    )
+                )
 
         # Dynamisk lyssystem. 3 lys, 3 unike gradienter.
         self._lighting = LightingSystem()
@@ -468,6 +484,7 @@ class PortVillageScene(BaseScene):
             elapsed=self._elapsed,
             particles=self._particles,
             hint_state=self._compute_hint_state(),
+            silhouettes=self._silhouettes,
         )
         # HUD (oeverst venstre) og toasts (bunn-sentrert) tegnes over
         # verden men under bors-overlay.

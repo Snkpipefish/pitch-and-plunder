@@ -74,6 +74,55 @@ class BuildingPlacement:
 
 
 @dataclass(frozen=True)
+class LanternPost:
+    """Lanterne-stolpe-plassering (verdens-x)."""
+    x: int
+
+
+@dataclass(frozen=True)
+class MarketStall:
+    """Markedsbod-plassering (verdens-x, bredde)."""
+    x: int
+    w: int
+
+
+@dataclass(frozen=True)
+class BarrelStack:
+    """Stablede tønner (verdens-x, antall i første rad)."""
+    x: int
+    count: int
+
+
+@dataclass(frozen=True)
+class SilhouettePlacement:
+    """NPC-silhuett-plassering.
+
+    `kind` må være en gyldig silhuett-type per
+    `entities.npc_silhouette.VALID_KINDS` ("standing", "sitting",
+    "group"). Validering skjer i `_parse_silhouette`.
+    """
+    kind: str
+    x: int
+
+
+@dataclass(frozen=True)
+class PortProps:
+    """Rekvisita-lag for en havn (Fase 2.5).
+
+    `ground_texture` bestemmer hvilken bake-funksjon som brukes for
+    gategulvet. Gyldige verdier validert via
+    `entities.port_props.VALID_GROUND_TEXTURES`.
+
+    Tuples (ikke lister) for immutabilitet.
+    """
+    ground_texture: str
+    lanterns: tuple[LanternPost, ...] = ()
+    market_stalls: tuple[MarketStall, ...] = ()
+    barrel_stacks: tuple[BarrelStack, ...] = ()
+    silhouettes: tuple[SilhouettePlacement, ...] = ()
+
+
+@dataclass(frozen=True)
 class PortBuildings:
     """Per-havn scene-layout: bakkehøyde, bygninger, spiller-start, NPC-er.
 
@@ -95,6 +144,10 @@ class PortBuildings:
     #: (8, 80) — dock-sprite flyttes til buildings i C7 sammen med
     #: voyage-arbeidet.
     dock_interaction_range: tuple[int, int]
+    #: Rekvisita-lag (gategulv-tekstur, lanterner, boder, tønner, NPC-
+    #: silhuetter). `None` = ingen rekvisita ennå (ikke-Tortuga i C2.5-1).
+    #: Tortuga får props-felt i C2.5-1; andre havner i C2.5-2/3/4.
+    props: PortProps | None = None
 
 
 @dataclass(frozen=True)
@@ -232,6 +285,158 @@ def _parse_building_placement(
         ) from exc
 
 
+def _parse_lantern_posts(
+    raw: Any, port_id: str,
+) -> tuple[LanternPost, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': props.lanterns må være en liste"
+        )
+    result: list[LanternPost] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': props.lanterns[{i}] må være et objekt"
+            )
+        try:
+            result.append(LanternPost(x=int(entry["x"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.lanterns[{i}] ugyldig: {exc}"
+            ) from exc
+    return tuple(result)
+
+
+def _parse_market_stalls(
+    raw: Any, port_id: str,
+) -> tuple[MarketStall, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': props.market_stalls må være en liste"
+        )
+    result: list[MarketStall] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': props.market_stalls[{i}] må være et objekt"
+            )
+        try:
+            result.append(
+                MarketStall(x=int(entry["x"]), w=int(entry["w"]))
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.market_stalls[{i}] ugyldig: {exc}"
+            ) from exc
+    return tuple(result)
+
+
+def _parse_barrel_stacks(
+    raw: Any, port_id: str,
+) -> tuple[BarrelStack, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': props.barrel_stacks må være en liste"
+        )
+    result: list[BarrelStack] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': props.barrel_stacks[{i}] må være et objekt"
+            )
+        try:
+            count = int(entry["count"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.barrel_stacks[{i}] ugyldig: {exc}"
+            ) from exc
+        if count < 1 or count > 4:
+            raise ValueError(
+                f"port '{port_id}': props.barrel_stacks[{i}].count må være 1-4, "
+                f"fikk {count}"
+            )
+        try:
+            result.append(BarrelStack(x=int(entry["x"]), count=count))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.barrel_stacks[{i}] ugyldig: {exc}"
+            ) from exc
+    return tuple(result)
+
+
+def _parse_silhouettes(
+    raw: Any, port_id: str,
+) -> tuple[SilhouettePlacement, ...]:
+    # Valider kind mot entities.npc_silhouette.VALID_KINDS. Importer lazy
+    # for å unngå top-level-avhengighet fra config/ til entities/.
+    from entities.npc_silhouette import VALID_KINDS as _VALID_SILHOUETTE_KINDS
+
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': props.silhouettes må være en liste"
+        )
+    result: list[SilhouettePlacement] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': props.silhouettes[{i}] må være et objekt"
+            )
+        try:
+            kind = str(entry["kind"])
+            x = int(entry["x"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.silhouettes[{i}] ugyldig: {exc}"
+            ) from exc
+        if kind not in _VALID_SILHOUETTE_KINDS:
+            raise ValueError(
+                f"port '{port_id}': props.silhouettes[{i}].kind={kind!r} "
+                f"ikke gyldig (må være en av {sorted(_VALID_SILHOUETTE_KINDS)})"
+            )
+        result.append(SilhouettePlacement(kind=kind, x=x))
+    return tuple(result)
+
+
+def _parse_props(raw: Any, port_id: str) -> PortProps | None:
+    """Parse props-blokken. None hvis feltet mangler eller er null."""
+    # Lazy import for å unngå top-level-avhengighet fra config/ til
+    # entities/. VALID_GROUND_TEXTURES er en frozenset av strenger.
+    from entities.port_props import VALID_GROUND_TEXTURES
+
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"port '{port_id}': props må være et objekt eller null"
+        )
+    try:
+        ground_texture = str(raw["ground_texture"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"port '{port_id}': props.ground_texture mangler: {exc}"
+        ) from exc
+    if ground_texture not in VALID_GROUND_TEXTURES:
+        raise ValueError(
+            f"port '{port_id}': props.ground_texture={ground_texture!r} "
+            f"ikke gyldig (må være en av {sorted(VALID_GROUND_TEXTURES)})"
+        )
+    return PortProps(
+        ground_texture=ground_texture,
+        lanterns=_parse_lantern_posts(raw.get("lanterns"), port_id),
+        market_stalls=_parse_market_stalls(raw.get("market_stalls"), port_id),
+        barrel_stacks=_parse_barrel_stacks(raw.get("barrel_stacks"), port_id),
+        silhouettes=_parse_silhouettes(raw.get("silhouettes"), port_id),
+    )
+
+
 def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
     """Parse buildings-blokken. None hvis feltet mangler eller er null
     (havn uten layout ennå).
@@ -287,6 +492,7 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
             f"min_x ({dock_range[0]}) må være mindre enn max_x "
             f"({dock_range[1]})"
         )
+    props = _parse_props(raw.get("props"), port_id)
     return PortBuildings(
         ground_top_y=ground_top_y,
         player_start_x=player_start_x,
@@ -294,6 +500,7 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
         exchange=exchange,
         npcs=npcs,
         dock_interaction_range=dock_range,
+        props=props,
     )
 
 
