@@ -17,8 +17,8 @@ import json
 import random
 from typing import TYPE_CHECKING
 
-import constants
 from entities.commodity import PRICE_HISTORY_WINDOW, Commodity, InventoryItem
+from systems import balance as _balance
 
 if TYPE_CHECKING:
     from systems.regime_manager import RegimeState
@@ -27,26 +27,11 @@ if TYPE_CHECKING:
 #: Kjop/salg-margin begge veier (0.02 = 2% spread per PROSJEKT.md §6).
 DEFAULT_SPREAD = 0.02
 
-#: Daglig endring fra regime-retning (±2–4% per dag).
-DAILY_MAGNITUDE_MIN = 0.02
-DAILY_MAGNITUDE_MAX = 0.04
-
-#: Uavhengig markedsstøy per dag (±1% ≤ DAILY_MAGNITUDE_MIN slik at ren
-#: støy ikke trigger trend-indikator-terskel på 3%).
-DAILY_NOISE = 0.01
-
 #: Klamp-grenser for current_price i forhold til base_price. Strammet
 #: fra Fase 1 (0.3, 3.0) til Fase 2A (0.5, 2.0) slik at spread + gebyr
 #: blir reell friksjon uansett hvor prisen står.
 PRICE_MIN_MULT = 0.5
 PRICE_MAX_MULT = 2.0
-
-#: Regime-retning som multiplier på `magnitude`.
-_REGIME_DIRECTION: dict[str, float] = {
-    "rising": 1.0,
-    "stable": 0.0,
-    "falling": -1.0,
-}
 
 
 class Market:
@@ -104,19 +89,28 @@ class Market:
 
         `regimes` er dict fra commodity.id → RegimeState. Mangler regime
         for en vare tolkes som "stable" (ingen retnings-bias).
+
+        Drift- og støy-prosent leses fra balance.regimes hver dagstikk.
+        Formelen er `change_pct = uniform(drift_pct_<regime>) + uniform(±noise_pct)`;
+        stable har [0.0, 0.0]-range i default, så ren støy der.
         """
+        reg_balance = _balance.get().regimes
+        drift_by_regime: dict[str, tuple[float, float]] = {
+            "rising":  reg_balance.drift_pct_rising,
+            "stable":  reg_balance.drift_pct_stable,
+            "falling": reg_balance.drift_pct_falling,
+        }
+        noise_pct = reg_balance.noise_pct
         for cid, c in self._commodities.items():
             regime = regimes.get(cid) if regimes else None
-            direction = (
-                _REGIME_DIRECTION.get(regime.current, 0.0)
-                if regime is not None
-                else 0.0
-            )
-            magnitude = self._rng.uniform(
-                DAILY_MAGNITUDE_MIN, DAILY_MAGNITUDE_MAX
-            )
-            noise = self._rng.uniform(-DAILY_NOISE, DAILY_NOISE)
-            change = direction * magnitude + noise
+            regime_name = regime.current if regime is not None else "stable"
+            drift_range = drift_by_regime.get(regime_name, (0.0, 0.0))
+            if drift_range[0] == drift_range[1]:
+                drift_pct = drift_range[0]
+            else:
+                drift_pct = self._rng.uniform(*drift_range)
+            noise = self._rng.uniform(-noise_pct, noise_pct)
+            change = (drift_pct + noise) / 100.0
             new_price = c.current_price * (1.0 + change)
             lo = c.base_price * PRICE_MIN_MULT
             hi = c.base_price * PRICE_MAX_MULT
@@ -183,7 +177,7 @@ class Market:
         price = self.buy_price(commodity_id)
         if price <= 0:
             return gold, inventory, 0
-        fee = constants.TRANSACTION_FEE
+        fee = _balance.get().economy.transaction_fee
         # Må kunne dekke minst 1 enhet + gebyr for å i det hele tatt handle.
         if gold < price + fee:
             return gold, inventory, 0
@@ -237,7 +231,7 @@ class Market:
         if sold <= 0:
             return gold, inventory, 0
         price = self.sell_price(commodity_id)
-        fee = constants.TRANSACTION_FEE
+        fee = _balance.get().economy.transaction_fee
         proceeds = sold * price - fee
         if proceeds < 0:
             # Edge case: selge gir netto tap. Refuser handelen.

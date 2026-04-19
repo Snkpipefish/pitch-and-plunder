@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "economy": {
+    "starting_gold": 300,
+    "transaction_fee": 5,
+    "ship_starting_cargo_capacity": 40
+  },
+  "time": {
+    "seconds_per_day_in_port": 180.0,
+    "seconds_per_day_at_sea": 75.0
+  },
+  "pitch_lake": {
+    "production_per_day": 2,
+    "upkeep_per_day": 8
+  },
+  "travel": {
+    "routes": {
+      "port_royal-tortuga": {"days": 2, "gold": 10},
+      "havana-tortuga":     {"days": 3, "gold": 15},
+      "nassau-tortuga":     {"days": 4, "gold": 20},
+      "havana-port_royal":  {"days": 3, "gold": 15},
+      "nassau-port_royal":  {"days": 4, "gold": 20},
+      "havana-nassau":      {"days": 5, "gold": 25}
+    }
+  },
+  "regimes": {
+    "drift_pct_rising":  [2.0, 4.0],
+    "drift_pct_stable":  [0.0, 0.0],
+    "drift_pct_falling": [-4.0, -2.0],
+    "noise_pct": 1.0
+  },
+  "observed": {
+    "stale_threshold_days": 5
+  }
+}

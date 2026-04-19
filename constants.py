@@ -95,30 +95,11 @@ COLOR_SKY_DUSK_HORIZON = COLOR_EMBER         # (217, 108, 46)  brennende horison
 # Natthimmel og måne finnes allerede via COLOR_SKY_DEEP/MID/HORIZON + COLOR_MOON_CORE
 
 # --- Gameplay (tid og bevegelse) ---
-MARKET_TICK_INTERVAL_SEC = 10.0
-SECONDS_PER_DAY = 180.0  # Fase 2A Commit 5C: 180 s/dag (30 morgen + 120 dag + 30 natt).
-# MARKET_TICK_INTERVAL_SEC er ikke lenger i bruk: priser endres kun ved daggry.
-# Konstanten beholdes for at save-migreringstester og historiske kjøringer skal
-# kunne referere den; kan fjernes i Commit 8-polish hvis ingen bruker den da.
+# Økonomiske konstanter og SECONDS_PER_DAY er flyttet til data/balance.json
+# i Fase 2B Commit C1a. Les via `systems.balance.get()`.
+# MARKET_TICK_INTERVAL_SEC er dead fra Fase 2A Commit 5C; fjernet her.
 PLAYER_WALK_SPEED = 80  # px/sek
 INTERACTION_DISTANCE = 40
-
-# --- Økonomiske konstanter (under balansering) ---
-#
-# Alle tall i denne seksjonen er provisoriske. Ekte balansering kan ikke
-# gjøres før Fase 2B (seiling + flere havner), Fase 3 (piratinntekter),
-# og Fase 5 (hendelser og markedsmanipulasjon). Se FASE_2A.md
-# §"Kjente issues" → "Økonomisk balansering er midlertidig" for full
-# begrunnelse.
-#
-# Endring av et av disse tallene skal ikke kreve endringer andre steder
-# i kodebasen – alt økonomi-relatert leser fra `constants`.
-
-STARTING_GOLD = 300                        # Dubloner ved fersk spillstart
-CARGO_CAPACITY_DEFAULT = 40                # Totalt antall enheter i lasterom
-TRANSACTION_FEE = 5                        # Dubloner per kjøp/salg (Commit 7)
-PITCH_LAKE_DEFAULT_PRODUCTION = 2          # Bek per dag ved daggry
-PITCH_LAKE_DEFAULT_UPKEEP = 8              # Dubloner per dag (arbeidere, leie, transport)
 
 # --- Stier ---
 SAVE_PATH = "saves/savegame.json"
@@ -134,3 +115,4 @@ KEY_INTERACT = (pygame.K_e,)
 KEY_MENU = (pygame.K_ESCAPE,)
 KEY_CONFIRM = (pygame.K_RETURN,)
 KEY_FULLSCREEN = (pygame.K_F11,)
+KEY_DEV_RELOAD = (pygame.K_F5,)  # Dev-mode: last balance.json på nytt (Fase 2B C1a)

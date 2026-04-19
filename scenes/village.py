@@ -194,7 +194,9 @@ class VillageScene(BaseScene):
         # RegimeManager for hver dag som har passert.
         self._last_seen_day = state.clock.day
 
-        # HUD (oeverst venstre: sted / gull / dag / bek-drift)
+        # HUD (oeverst venstre: sted / gull / dag / bek-drift).
+        # DEV-markør nederst til høyre aktiveres via dev-mode-flagg.
+        from systems.dev_mode import is_dev_mode
         self._hud = Hud(
             font,
             place="Tortuga",
@@ -203,6 +205,7 @@ class VillageScene(BaseScene):
             pitch_per_day=state.pitch_lake.production_per_day,
             pitch_upkeep=state.pitch_lake.daily_upkeep_cost,
             pitch_halted=self._compute_pitch_halted(),
+            dev_mode=is_dev_mode(),
         )
 
         # Partikler: taake paa gata + ildfluer rundt tavernaen.
@@ -241,6 +244,14 @@ class VillageScene(BaseScene):
             baseline_y=constants.RENDER_HEIGHT - 18,
             center_x=constants.RENDER_WIDTH // 2,
         )
+
+    @property
+    def toasts(self) -> ToastQueue:
+        """Eksponer toast-køen slik at eksterne systemer kan pushe varsler.
+
+        Brukes av main.py sin F5-hot-reload-handler i dev-mode.
+        """
+        return self._toasts
 
     # --- Input ---
 

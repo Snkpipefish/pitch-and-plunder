@@ -34,6 +34,7 @@ class Hud:
         pitch_per_day: int = 0,
         pitch_upkeep: int = 0,
         pitch_halted: bool = False,
+        dev_mode: bool = False,
     ) -> None:
         self._font = font
         self._place: str | None = None
@@ -45,6 +46,14 @@ class Hud:
         self._day_surf: pygame.Surface | None = None
         # pitch_surf er None når produksjon er 0 OG ikke halted (skjuler linja).
         self._pitch_surf: pygame.Surface | None = None
+        # DEV-markør nederst til høyre. Rendres ÉN gang i __init__ og
+        # caches som attributt — font.render per frame er dyrt på T4200
+        # (PROSJEKT.md §14 feilmodus).
+        self._dev_surf: pygame.Surface | None = None
+        if dev_mode:
+            self._dev_surf = font.render(
+                "DEV", False, constants.COLOR_FOG
+            ).convert_alpha()
         self.set_place(place)
         self.set_gold(gold)
         self.set_day(day)
@@ -114,3 +123,7 @@ class Hud:
             surface.blit(
                 self._pitch_surf, (PADDING, PADDING + 3 * LINE_HEIGHT)
             )
+        if self._dev_surf is not None:
+            dev_x = constants.RENDER_WIDTH - self._dev_surf.get_width() - PADDING
+            dev_y = constants.RENDER_HEIGHT - self._dev_surf.get_height() - PADDING
+            surface.blit(self._dev_surf, (dev_x, dev_y))

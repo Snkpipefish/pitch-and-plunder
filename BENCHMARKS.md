@@ -467,3 +467,33 @@ bors-overlay. Vi har 8.5–11.8× headroom paa frame-budsjettet, noe som gir
 rom for Fase 2-tillegg (flere parallax-lag, flere dynamiske lys, utvidet
 partikkelbudsjett, seiling, kartscene) uten aa presse regnekraften.
 
+## Fase 2B Commit C1a – balance.json + F5 hot-reload
+
+Ingen renderer-endring. Endringer er strukturelle:
+- Økonomiske konstanter flyttet fra `constants.py` til `data/balance.json`
+- `systems/balance.py` singleton med init/get/reload
+- `systems/dev_mode.py` med `.devmode`-fil + `PITCH_DEV`-env
+- F5-binding i main.py når dev-mode aktiv
+- "DEV"-markør cached i HUD.__init__, blit per frame
+
+### Resultater (målmaskin T4200 / GM45)
+
+| Scene | Fase 2A-slutt | C1a | Delta |
+|-------|---------------|-----|-------|
+| Village (lukket) | 4.605 ms | 4.489 ms | −0.12 ms |
+| Village (overlay åpen) | 6.148 ms | 6.197 ms | +0.05 ms |
+| Peak RSS (lukket) | 116.36 MB | 116.50 MB | +0.14 MB |
+
+Begge scener innenfor spec §9-budsjettet (port lukket 4.5–5 ms, overlay
+6–7 ms, hard grense 10 ms). Endringene er netto innenfor måle-støy.
+
+### Vurdering
+
+Balansen lastes én gang ved `balance.init()` i main.py før scener
+importeres. På varme hot-paths (buy/sell, on_dawn, draw) er `balance.get()`
+et dict-oppslag mot en modul-global — ikke målbart sammenlignet med den
+tidligere `constants.TRANSACTION_FEE`-oppslaget. Overlay-åpen tall er
+innenfor normal run-to-run-variasjon.
+
+Tester: 187 → 203 (16 nye: 11 i test_balance.py, 5 i test_dev_mode.py).
+

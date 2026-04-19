@@ -18,11 +18,22 @@ from typing import Callable
 import constants  # Setter env vars som MÅ være satt før pygame importeres
 import pygame
 
-from scenes.base_scene import BaseScene
-from scenes.parallax_test import ParallaxTestScene
-from scenes.village import VillageScene
-from systems import save as save_module
-from systems.save import GameState
+from systems import balance as balance_module  # Må init-es før andre systemer
+from systems import dev_mode
+
+
+# Eksplisitt init ved oppstart — feiler høylydt hvis balance.json mangler
+# eller er ødelagt. Må skje FØR moduler som leser balance (economy, save,
+# pitch_lake, game_clock, exchange) importeres via scenes/systems-under.
+balance_module.init()
+
+
+from scenes.base_scene import BaseScene  # noqa: E402
+from scenes.parallax_test import ParallaxTestScene  # noqa: E402
+from scenes.village import VillageScene  # noqa: E402
+from systems import save as save_module  # noqa: E402
+from systems.save import GameState  # noqa: E402
+from ui.toast import Toast  # noqa: E402
 
 
 log = logging.getLogger("pitch_and_plunder")
@@ -155,6 +166,78 @@ def _load_font(size: int) -> pygame.font.Font:
         return pygame.font.SysFont(None, size)
 
 
+def _handle_balance_reload(
+    game_state: "GameState",
+    manager: "SceneManager",
+    pending_session_sync: bool,
+    font: pygame.font.Font,
+) -> bool:
+    """Kalles ved F5 i dev-mode. Returnerer ny pending_session_sync-verdi.
+
+    - Leser balance.json på nytt via balance_module.reload().
+    - Live-applicable endringer synkes umiddelbart til `game_state` felt
+      som carry-over verdier (pitch_lake upkeep/production).
+    - Session-applicable endringer (time.seconds_per_day_*) utsettes til
+      neste new_day-event — signalisert via retur-True.
+    - Newgame-only endringer ignoreres; logges via toast.
+    - Feil: toast med feilmelding, ingen state-endring.
+    """
+    result = balance_module.reload()
+    toasts = manager.current.toasts
+    if not result.success:
+        log.warning("Balance reload feilet: %s", result.error)
+        if toasts is not None:
+            toasts.push(Toast(
+                font=font,
+                text=f"Balance: {result.error}",
+                color=constants.COLOR_EMBER,
+            ))
+        return pending_session_sync
+
+    # Live-sync: pitch_lake-felt (upkeep og production er live per spec §4.4).
+    new_bal = balance_module.get()
+    if "pitch_lake.upkeep_per_day" in result.live_changes:
+        game_state.pitch_lake.daily_upkeep_cost = new_bal.pitch_lake.upkeep_per_day
+    if "pitch_lake.production_per_day" in result.live_changes:
+        game_state.pitch_lake.production_per_day = new_bal.pitch_lake.production_per_day
+
+    # Session-sync: hvis time-endringer, marker pending. Klokken selv
+    # oppdateres ved neste new_day-event (se hovedløkka).
+    if result.session_changes:
+        pending_session_sync = True
+
+    # Toast
+    if toasts is not None:
+        total = (
+            len(result.live_changes)
+            + len(result.session_changes)
+            + len(result.newgame_changes)
+        )
+        if total == 0:
+            msg = "Balance lastet på nytt (ingen endringer)"
+        elif result.session_changes and not result.live_changes:
+            msg = "Balance: tid/dag endres fra neste dawn"
+        elif result.newgame_changes and not result.live_changes and not result.session_changes:
+            msg = "Balance: krever nytt spill"
+        else:
+            bits = []
+            if result.live_changes:
+                bits.append(f"{len(result.live_changes)} live")
+            if result.session_changes:
+                bits.append(f"{len(result.session_changes)} dawn")
+            if result.newgame_changes:
+                bits.append(f"{len(result.newgame_changes)} nytt spill")
+            msg = "Balance: " + " + ".join(bits)
+        toasts.push(Toast(font=font, text=msg, color=constants.COLOR_STONE_LIT))
+    log.info(
+        "Balance reload: %d live, %d session, %d newgame",
+        len(result.live_changes),
+        len(result.session_changes),
+        len(result.newgame_changes),
+    )
+    return pending_session_sync
+
+
 def run() -> int:
     """Start hovedløkken. Returnerer exit-kode."""
     logging.basicConfig(
@@ -194,15 +277,31 @@ def run() -> int:
         game_state=game_state,
     )
 
+    # Dev-mode (F5 hot-reload av balance.json) detekteres ved oppstart.
+    # Endring krever restart.
+    dev_active = dev_mode.is_dev_mode()
+    if dev_active:
+        log.info("Dev-mode aktiv: F5 re-laster data/balance.json")
+
+    # Pending-flagg for "session-applicable"-endringer (spec §4.4):
+    # seconds_per_day_in_port kan endres via hot-reload, men klokken skal
+    # ikke hoppe midt i en dag. Vi synker ved neste new_day-event.
+    pending_session_sync = False
+
     clock = pygame.time.Clock()
     running = True
     while running:
         dt = clock.tick(constants.TARGET_FPS) / 1000.0
 
-        # Sentral spill-klokke – inkrementerer dag hvert SECONDS_PER_DAY.
-        # Retur-lista (new_day-hendelser) konsumeres av systemer i senere
-        # commits (RegimeManager i Commit 5, PitchLake i Commit 6).
-        game_state.clock.update(dt)
+        # Sentral spill-klokke – inkrementerer dag hvert seconds_per_day.
+        # Ved new_day-event: hvis hot-reload har endret time.*-felt, synker
+        # vi clock.seconds_per_day fra balance her (session-applicable).
+        events = game_state.clock.update(dt)
+        if pending_session_sync and "new_day" in events:
+            new_spd = balance_module.get().time.seconds_per_day_in_port
+            game_state.clock.seconds_per_day = new_spd
+            pending_session_sync = False
+            log.info("Clock seconds_per_day synket til %.1f", new_spd)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -213,6 +312,15 @@ def run() -> int:
                 render_surface = _create_display(fullscreen)
                 window = pygame.display.get_surface()
                 needs_manual_scale = render_surface is not window
+                continue
+            if (
+                dev_active
+                and event.type == pygame.KEYDOWN
+                and event.key in constants.KEY_DEV_RELOAD
+            ):
+                pending_session_sync = _handle_balance_reload(
+                    game_state, manager, pending_session_sync, font_small
+                )
                 continue
             manager.current.handle_event(event)
 

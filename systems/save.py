@@ -24,6 +24,7 @@ from dataclasses import asdict, dataclass, field
 
 import constants
 from entities.commodity import InventoryItem
+from systems import balance as _balance
 from systems.game_clock import GameClock
 from systems.pitch_lake import PitchLakeState
 from systems.regime_manager import REGIMES, RegimeState
@@ -49,18 +50,26 @@ def _default_inventory() -> dict[str, InventoryItem]:
     }
 
 
+def _starting_gold_default() -> int:
+    return _balance.get().economy.starting_gold
+
+
+def _starting_cargo_capacity_default() -> int:
+    return _balance.get().economy.ship_starting_cargo_capacity
+
+
 @dataclass
 class GameState:
     """Hele spillets serialiserbare tilstand."""
 
     version: int = CURRENT_SAVE_VERSION
-    gold: int = constants.STARTING_GOLD
+    gold: int = field(default_factory=_starting_gold_default)
     inventory: dict[str, InventoryItem] = field(default_factory=_default_inventory)
     current_scene: str = "village"
     player_position: tuple[float, float] = (320.0, 280.0)
     clock: GameClock = field(default_factory=GameClock)
     commodities_state: dict[str, dict] = field(default_factory=dict)
-    cargo_capacity: int = constants.CARGO_CAPACITY_DEFAULT
+    cargo_capacity: int = field(default_factory=_starting_cargo_capacity_default)
     regimes: dict[str, RegimeState] = field(default_factory=dict)
     pitch_lake: PitchLakeState = field(default_factory=PitchLakeState)
 
@@ -175,12 +184,13 @@ def _parse_clock(raw: object, fallback_day: int) -> GameClock:
             seconds_into_day = float(raw.get("seconds_into_day", 0.0))
         except (TypeError, ValueError):
             seconds_into_day = 0.0
+        default_seconds_per_day = _balance.get().time.seconds_per_day_in_port
         try:
             seconds_per_day = float(
-                raw.get("seconds_per_day", constants.SECONDS_PER_DAY)
+                raw.get("seconds_per_day", default_seconds_per_day)
             )
         except (TypeError, ValueError):
-            seconds_per_day = constants.SECONDS_PER_DAY
+            seconds_per_day = default_seconds_per_day
         return GameClock(
             day=day,
             seconds_into_day=seconds_into_day,
@@ -199,18 +209,21 @@ def _parse_pitch_lake(raw: object) -> PitchLakeState:
     """
     if not isinstance(raw, dict):
         return PitchLakeState()
+    pl_balance = _balance.get().pitch_lake
+    default_production = pl_balance.production_per_day
+    default_upkeep = pl_balance.upkeep_per_day
     try:
         production_per_day = int(
-            raw.get("production_per_day", constants.PITCH_LAKE_DEFAULT_PRODUCTION)
+            raw.get("production_per_day", default_production)
         )
     except (TypeError, ValueError):
-        production_per_day = constants.PITCH_LAKE_DEFAULT_PRODUCTION
+        production_per_day = default_production
     try:
         daily_upkeep_cost = int(
-            raw.get("daily_upkeep_cost", constants.PITCH_LAKE_DEFAULT_UPKEEP)
+            raw.get("daily_upkeep_cost", default_upkeep)
         )
     except (TypeError, ValueError):
-        daily_upkeep_cost = constants.PITCH_LAKE_DEFAULT_UPKEEP
+        daily_upkeep_cost = default_upkeep
     try:
         total_produced = int(raw.get("total_produced", 0))
     except (TypeError, ValueError):

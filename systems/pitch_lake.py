@@ -30,8 +30,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import constants
 from entities.commodity import InventoryItem
+from systems import balance as _balance
 
 if TYPE_CHECKING:
     from systems.save import GameState
@@ -45,16 +45,17 @@ PITCH_ID = "pitch"
 class PitchLakeState:
     """Serialiserbar state for Pitch Lake-produksjonen.
 
-    Defaults leses fra `constants` via `field(default_factory=...)` slik at
-    endring av en konstant umiddelbart reflekteres i nye GameStates uten
-    at koden her må endres.
+    Defaults leses fra `systems.balance` via `field(default_factory=...)`.
+    Ved hot-reload av balance.json leser `on_new_day` også fra balance
+    direkte (se nedenfor) slik at upkeep/production-endringer slår inn
+    fra neste dag uten å endre eksisterende state-verdi.
     """
 
     production_per_day: int = field(
-        default_factory=lambda: constants.PITCH_LAKE_DEFAULT_PRODUCTION
+        default_factory=lambda: _balance.get().pitch_lake.production_per_day
     )
     daily_upkeep_cost: int = field(
-        default_factory=lambda: constants.PITCH_LAKE_DEFAULT_UPKEEP
+        default_factory=lambda: _balance.get().pitch_lake.upkeep_per_day
     )
     total_produced: int = 0
     last_production_day: int = 0
@@ -71,6 +72,10 @@ class PitchLake:
         """Kalles ved daggry.
 
         Returnerer `(produced, paid_upkeep)`.
+
+        Leser upkeep/production fra `state`. Hot-reload av balance.json
+        slår inn fordi F5-handleren (main.py) synkroniserer state.pitch_lake
+        med balance etter vellykket reload — live-applicable per spec §4.4.
 
         Flyt:
         1. Trekk upkeep fra gull. `paid_upkeep = min(upkeep, gold)`.

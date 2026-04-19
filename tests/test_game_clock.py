@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import constants
+from systems import balance as _balance
 from systems.game_clock import GameClock
 
 
@@ -12,9 +12,9 @@ class TestDefaults:
         assert clock.day == 1
         assert clock.seconds_into_day == 0.0
 
-    def test_default_seconds_per_day_matches_constants(self):
+    def test_default_seconds_per_day_matches_balance(self):
         clock = GameClock()
-        assert clock.seconds_per_day == constants.SECONDS_PER_DAY
+        assert clock.seconds_per_day == _balance.get().time.seconds_per_day_in_port
 
     def test_progress_fraction_zero_at_start(self):
         assert GameClock().progress_fraction() == 0.0

@@ -26,6 +26,7 @@ import pygame
 
 import constants
 from entities.commodity import InventoryItem, compute_trend
+from systems import balance as _balance
 from systems.economy import Market
 from systems.save import GameState
 from ui.toast import Toast, ToastQueue
@@ -117,12 +118,10 @@ class ExchangeOverlay:
             False,
             constants.COLOR_STONE_LIT,
         ).convert_alpha()
-        # Statisk gebyr-linje under gull-linjen
-        self._fee_surf = font.render(
-            f"Gebyr per handel: {constants.TRANSACTION_FEE} d.",
-            False,
-            constants.COLOR_FOG,
-        ).convert_alpha()
+        # Gebyr-linje under gull-linjen. Re-rendres kun når gebyret endrer
+        # seg (F5 hot-reload av balance.json) via _ensure_fee_surf().
+        self._fee_value: int | None = None
+        self._fee_surf: pygame.Surface | None = None
 
         # Dynamisk (cached)
         self._title_day: int | None = None
@@ -196,7 +195,7 @@ class ExchangeOverlay:
         if self._toasts is None:
             return
         price = self._market.buy_price(cid)
-        fee = constants.TRANSACTION_FEE
+        fee = _balance.get().economy.transaction_fee
         if self._state.gold < price + fee:
             # Gullet rekker ikke til én enhet + gebyr
             self._push_toast_once(
@@ -392,6 +391,24 @@ class ExchangeOverlay:
         assert self._gold_surf is not None
         # Gull-linje sammen med gebyr-info ved siden av (høyrekant av panel)
         surface.blit(self._gold_surf, (PANEL_X + 16, PANEL_Y + PANEL_H - 44))
+        self._ensure_fee_surf()
+        assert self._fee_surf is not None
         fee_x = PANEL_X + PANEL_W - self._fee_surf.get_width() - 16
         surface.blit(self._fee_surf, (fee_x, PANEL_Y + PANEL_H - 44))
         surface.blit(self._hint, (PANEL_X + 16, PANEL_Y + PANEL_H - 22))
+
+    def _ensure_fee_surf(self) -> None:
+        """Re-render gebyr-linja hvis transaction_fee har endret seg.
+
+        Les fra balance.json; caches med fee-verdien som nøkkel. Hot-reload
+        via F5 i dev-mode får teksten til å oppdatere seg neste frame.
+        """
+        fee = _balance.get().economy.transaction_fee
+        if fee == self._fee_value and self._fee_surf is not None:
+            return
+        self._fee_value = fee
+        self._fee_surf = self._font.render(
+            f"Gebyr per handel: {fee} d.",
+            False,
+            constants.COLOR_FOG,
+        ).convert_alpha()

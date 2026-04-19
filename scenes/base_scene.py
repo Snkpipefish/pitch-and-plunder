@@ -80,3 +80,13 @@ class BaseScene:
         Kalles fra main ved pygame.QUIT og fra scene manager ved bytte.
         Scener som holder GameState-referanse overskriver dette.
         """
+
+    @property
+    def toasts(self):
+        """Valgfri ToastQueue-referanse. None i default BaseScene.
+
+        Scener som eier en ToastQueue overstyrer dette slik at main.py og
+        andre eksterne systemer (f.eks. F5 hot-reload i dev-mode) kan
+        pushe brukervarsler via scenen.
+        """
+        return None

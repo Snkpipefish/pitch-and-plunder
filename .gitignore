@@ -5,3 +5,4 @@ saves/savegame.json
 .vscode/
 .idea/
 .pytest_cache/
+.devmode

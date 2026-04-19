@@ -13,13 +13,18 @@ from entities.commodity import (
     Commodity,
     compute_trend,
 )
+from systems import balance as _balance
 from systems.economy import (
-    DAILY_MAGNITUDE_MAX,
     PRICE_MAX_MULT,
     PRICE_MIN_MULT,
     Market,
 )
 from systems.regime_manager import RegimeState
+
+
+def _daily_magnitude_max() -> float:
+    """Øvre grense for rising-drift som fraksjon. Leses fra balance."""
+    return _balance.get().regimes.drift_pct_rising[1] / 100.0
 
 
 def _market(seed: int = 42) -> Market:
@@ -178,7 +183,7 @@ class TestOnDawnPerCommodityMagnitude:
         end = m.get("sugar").current_price
         # Pris-ratio skal være innenfor [1 - noise_max, 1 + magnitude_max + noise_max]
         ratio = end / start
-        assert 1.0 - 0.011 < ratio < 1.0 + DAILY_MAGNITUDE_MAX + 0.011
+        assert 1.0 - 0.011 < ratio < 1.0 + _daily_magnitude_max() + 0.011
 
 
 # -----------------------------------------------------------------------------
