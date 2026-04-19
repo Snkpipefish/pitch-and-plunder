@@ -904,6 +904,11 @@ surface. Forventet ytelsesgevinst: ~1.2 ms tilbake på port-scene.
 
 **Benchmark:** port-scene 3.3–3.5 ms lukket forventet
 
+> **Endring under implementering:** Opprinnelig spec delte C3 i
+> to deler (celestial per havn + colorkey fg-optimalisering).
+> Colorkey-delen ble forkastet — se 2A-retrospektiv addendum.
+> C3 refererer derfor til kun celestial-refactor (commit 7c1def5).
+
 ### C4 – PortVillageScene (refactor Tortuga til parameterisert)
 
 **Hva:** `scenes/village.py` flyttes/refaktoreres til
@@ -1155,7 +1160,8 @@ under 10 ms hard grense, helst <7 ms for alle.
 - Dev-mode aktiveres via `.devmode` eller `PITCH_DEV=1`, F5 hot-reloader
   balance.json, toast bekrefter
 - Benchmark på målmaskin:
-  - Port-scene lukket: ~4.5 ms (forbedret fra 4.61 via colorkey)
+  - Port-scene lukket: ~4.6–4.7 ms (baseline opprettholdt; colorkey-
+    optimalisering forkastet, se 2A-retrospektiv addendum)
   - Port-scene overlay: ~6 ms
   - Verdenskart-scene: <5 ms
   - VoyageScene: <5 ms

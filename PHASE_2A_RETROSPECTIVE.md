@@ -196,6 +196,20 @@ Brukertest etter 7.2:
    Bør gi ~1.2 ms tilbake. Spares til Fase 2B når vi uansett utvider
    fg-systemet med parallax-havn-detaljer.
 
+   > **Addendum 2026-04-19 (under Fase 2B):** Denne observasjonen
+   > ble FORKASTET etter mikrobenchmark på målmaskinen. Colorkey-
+   > varianten viste seg å være 2.6× TREGERE enn SRCALPHA (11.76
+   > ms vs 4.45 ms per frame, 833×360 fg-surface, pygame-ce 2.5.7
+   > / SDL 2.32.10). Årsak: SRCALPHA-blits er hardware-akselerert
+   > via SDL2-texture-blending også på GM45, mens colorkey på ikke-
+   > native format-surface faller til CPU per-pixel-loop.
+   > Antagelsen var basert på pygame 1.x-æra-intuisjon som ikke
+   > holder i pygame-ce 2.5. SRCALPHA beholdes; +1.4 ms-kostnaden
+   > aksepteres som strukturell. Fremtidige fg-optimaliseringer bør
+   > vurdere strukturelle tilnærminger (splitt fjell-silhuett fra
+   > sjø-fargen) i sammenheng med nye scener, ikke gjenopplivning
+   > av colorkey.
+
 2. **GameState har mange felter nå – vurder gruppering før Fase 2B.**
    `GameState` er v4 med felter `commodities_state`, `player_x`,
    `inventory_items`, `cargo_capacity`, `regimes`, `clock`, `pitch_lake`.
