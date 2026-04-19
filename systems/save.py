@@ -47,7 +47,11 @@ from state.ship_state import ShipState
 from state.voyage_state import VoyageState
 from state.world_state import WorldState
 from systems import balance as _balance
-from systems.economy import init_market_for_port, load_base_prices  # noqa: F401
+from systems.economy import (  # noqa: F401
+    init_market_for_port,
+    load_base_prices,
+    write_observed_for_port,
+)
 from systems.game_clock import GameClock
 from systems.regime_manager import (
     REGIMES,
@@ -148,9 +152,9 @@ def migrate_v4_to_v5(d: dict) -> dict:
     Tortuga-markedet bevares NØYAKTIG fra v4 (spiller er alltid i Tortuga
     i v4). De andre tre havnene initialiseres som tomme MarketState-dicts
     og tomme regime-dicts; C2 fyller dem med port-bias-initiert data når
-    PortConfig lander. `observed` får kun en oppføring for Tortuga,
-    bygget fra `current_price` på migreringstidspunktet (day_seen =
-    nåværende dag).
+    PortConfig lander. `observed` settes til `{}` her — load() fyller
+    Tortuga-snapshot post-parse via `write_observed_for_port` når
+    original_version < 5 (C7a-refactor).
 
     `current_scene` i v4 droppes — scene-manager bestemmer startscene
     fra world_state.voyage (Some → VoyageScene) eller
@@ -158,13 +162,7 @@ def migrate_v4_to_v5(d: dict) -> dict:
     """
     log.info("Migrating save v%d → v%d", 4, 5)
     bal = _balance.get()
-    day = 1
     clock_raw = d.get("clock", {})
-    if isinstance(clock_raw, dict):
-        try:
-            day = int(clock_raw.get("day", 1))
-        except (TypeError, ValueError):
-            day = 1
 
     # --- player_state ---
     raw_pos = d.get("player_position", [320.0, 0.0])
@@ -238,25 +236,12 @@ def migrate_v4_to_v5(d: dict) -> dict:
         sampled = sample_regimes_from_weights(pcfg, rng=rng)
         regimes[pid] = {cid: _asdict(r) for cid, r in sampled.items()}
 
-    # observed[port_id][cid] = {price, day_seen}. Kun Tortuga har oppføring.
-    tortuga_observed: dict[str, dict] = {}
-    for cid, cdata in tortuga_commodities.items():
-        if isinstance(cdata, dict) and "current_price" in cdata:
-            try:
-                tortuga_observed[cid] = {
-                    "price": float(cdata["current_price"]),
-                    "day_seen": day,
-                }
-            except (TypeError, ValueError):
-                pass
-    observed: dict[str, dict] = {}
-    if tortuga_observed:
-        observed["tortuga"] = tortuga_observed
-
+    # observed[port_id][cid] = {price, day_seen}. Tortuga-snapshot
+    # bygges via write_observed_for_port post-parse i load() (C7a-refactor).
     economy_state = {
         "markets": markets,
         "regimes": regimes,
-        "observed": observed,
+        "observed": {},
     }
 
     # --- pitch_lake_state ---
@@ -623,12 +608,16 @@ def new_game_state() -> GameState:
         regimes[port_id] = sample_regimes_from_weights(pcfg, rng=rng)
     economy = EconomyState(markets=markets, regimes=regimes, observed={})
     pitch_lake = PitchLakeState.new_default()
-    return GameState(
+    state = GameState(
         player_state=player,
         world_state=world,
         economy_state=economy,
         pitch_lake_state=pitch_lake,
     )
+    # Tortuga-snapshot ved spillstart: spilleren spawn-er i Tortuga, så
+    # prisene der er observerte med en gang.
+    write_observed_for_port(state, "tortuga")
+    return state
 
 
 # -----------------------------------------------------------------------------
@@ -744,4 +733,9 @@ def load(path: str = constants.SAVE_PATH) -> GameState | None:
     # Silent rescue: v5-saves fra C1b har tomme ikke-Tortuga-markeder.
     # Fyll dem fra port_config uten versjons-bump.
     _rescue_empty_nontortuga_ports(state)
+    # v4-og-eldre saves: spilleren var alltid i Tortuga (eneste havn),
+    # så prisene der er det vi vil registrere som observerte. C7a-refactor
+    # erstatter inline observed-bygging i migrate_v4_to_v5.
+    if version < CURRENT_SAVE_VERSION:
+        write_observed_for_port(state, "tortuga")
     return state

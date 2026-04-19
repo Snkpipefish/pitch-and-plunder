@@ -915,3 +915,63 @@ v4-save lastes. F1-F4 bytter current_port korrekt:
 - F4 → nassau (player.x=940)
 - Gull 224 bevart gjennom alle 4 teleport
 
+## Fase 2B Commit C7a — Dawn-refactor + observed-helper
+
+Refactor-only commit i forberedelse til C7b (voyage-helpers) og C7c
+(VoyageScene). To fellesfunksjoner ekstrahert fra eksisterende
+ad-hoc-implementasjoner:
+
+- `economy.tick_all_ports_dawn(state, market, regime_manager)` —
+  flyttet fra `PortVillageScene._tick_all_ports_dawn`. Modul-funksjon
+  slik at både PortVillageScene og kommende VoyageScene kan kalle
+  samme logikk. Dev-mode-loggingen flyttet med.
+- `economy.write_observed_for_port(state, port_id)` — felles
+  observed-snapshot. Brukes nå av `save.new_game_state` (Tortuga ved
+  spillstart) og `save.load` for v4-og-eldre saves (post-parse, etter
+  at GameState-treet er bygget). C7c vil legge til kall fra
+  `voyage.start_voyage` (from_port-snapshot) og `PortVillageScene
+  .on_enter` (ankomst-snapshot).
+
+Inline observed-blokken i `migrate_v4_to_v5` (linje 241–254 før
+endring) erstattet med post-parse-funksjonskall i `load()` styrt av
+`version < CURRENT_SAVE_VERSION`-sjekk.
+
+Ingen ny brukerverifiserbar oppførsel; alle eksisterende v4→v5- og
+new_game-tester bevarer observed["tortuga"] uendret. PortVillageScene
+sin `_tick_all_ports_dawn` er nå tynn delegasjon (4 linjer mot 19).
+
+### Tester
+
+8 nye i `tests/test_economy_helpers.py`:
+
+- `test_tick_all_ports_dawn_bumps_tick_id_for_all_four_ports`
+- `test_tick_all_ports_dawn_advances_regimes_per_port`
+- `test_write_observed_writes_all_catalog_commodities`
+- `test_write_observed_overwrites_existing_entries`
+- `test_write_observed_noop_for_empty_market`
+- `test_new_game_state_has_tortuga_observed_populated`
+- `test_new_game_state_has_no_observed_for_other_ports`
+- `test_v4_migration_observed_tortuga_matches_market_prices`
+
+Total 313 grønne (305 → 313, +8 nye), 5.88 s.
+
+### Benchmark (målmaskin T4200, enkel kjøring per scene)
+
+| Scene | C6 median | C7a | Delta |
+|-------|-----------|-----|-------|
+| Port lukket | 4.891 ms | 4.687 ms | -0.20 ms (støy) |
+| Port overlay | 6.398 ms | 6.217 ms | -0.18 ms (støy) |
+| World map | 1.107 ms | 1.124 ms | +0.02 ms |
+
+Ingen kode-regresjon — refactor flytter funksjonskall fra
+`self._market.on_dawn` (instans-metode) til samme metode via en modul-
+funksjons-ekstra hopp. Forskjellen er <1 ns og fanges av run-to-run-
+støy.
+
+### Manuell smoke
+
+Ikke utført — refactor er rent intern og dekkes av eksisterende v4→v5
+round-trip og new_game-tester. C7b vil legge til
+voyage-helper-tester; C7c vil kreve manuell smoke for hele voyage-
+flyten.
+

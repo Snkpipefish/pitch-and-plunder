@@ -17,7 +17,6 @@ MarketState via eksplisitt parameter. Ingen dobbel-representasjon.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import random
 
@@ -42,8 +41,7 @@ from state import GameState
 from state.market_state import MarketState
 from systems import save as save_module
 from systems.day_cycle import DayCycle
-from systems.dev_mode import is_dev_mode as _is_dev_mode
-from systems.economy import Market, load_base_prices
+from systems.economy import Market, load_base_prices, tick_all_ports_dawn
 from systems.lighting import Light, LightingSystem
 from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
 from systems.particles import ParticleSystem
@@ -418,42 +416,12 @@ class PortVillageScene(BaseScene):
         self._center_camera_on_player()
 
     def _tick_all_ports_dawn(self) -> None:
-        """Prosesser daggry-overgang for alle 4 havner.
+        """Tynn delegasjon til `economy.tick_all_ports_dawn` (C7a-refactor).
 
-        Market er stateless (C4): samme Market-instans kjører `on_dawn`
-        mot hver havns MarketState i tur. Regime-manager oppdateres per
-        havns regime-dict.
-
-        Dev-mode: logger én linje per havn med regime-snapshot etter
-        overgang.
+        Behold som scene-metode slik at update-løkken er uendret.
+        Dev-mode-loggingen lever i modul-funksjonen.
         """
-        econ = self._state.economy_state
-        day = self._state.world_state.clock.day
-        dev = _is_dev_mode()
-
-        for port_id in self._port_ids:
-            market_state = econ.markets.setdefault(port_id, MarketState())
-            port_regimes = econ.regimes.setdefault(port_id, {})
-            # Market.on_dawn muterer market_state (inkluderer price,
-            # price_history, tick_id) og tikker regimer.
-            self._market.on_dawn(market_state, port_regimes)
-            self._regime_manager.on_new_day(port_regimes)
-            if dev:
-                self._log_port_regimes(port_id, port_regimes, day)
-
-    @staticmethod
-    def _log_port_regimes(port_id: str, regimes: dict, day: int) -> None:
-        """Dev-mode: logg regime-snapshot for én havn etter dawn-overgang.
-
-        Format: 'Dawn day=N <port_id> sugar=<regime> rum=... tobacco=... pitch=...'
-        """
-        parts = [
-            f"{cid}={reg.current}"
-            for cid, reg in regimes.items()
-        ]
-        logging.getLogger("ports_regime").info(
-            "Dawn day=%d %s %s", day, port_id, " ".join(parts)
-        )
+        tick_all_ports_dawn(self._state, self._market, self._regime_manager)
 
     def _compute_pitch_halted(self) -> bool:
         """Returner True hvis Pitch Lake-produksjon har stoppet.

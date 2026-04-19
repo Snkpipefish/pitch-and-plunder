@@ -14,16 +14,22 @@ Model (Fase 2A Commit 5C):
 from __future__ import annotations
 
 import json
+import logging
 import random
 from typing import TYPE_CHECKING
 
 from entities.commodity import PRICE_HISTORY_WINDOW, Commodity, InventoryItem
 from state.market_state import CommodityMarket, MarketState
+from state.observed_price import ObservedPrice
 from systems import balance as _balance
 
 if TYPE_CHECKING:
     from config.port_config import PortConfig
-    from systems.regime_manager import RegimeState
+    from state.game_state import GameState
+    from systems.regime_manager import RegimeManager, RegimeState
+
+
+log = logging.getLogger(__name__)
 
 
 #: Kjop/salg-margin begge veier (0.02 = 2% spread per PROSJEKT.md §6).
@@ -322,3 +328,89 @@ def init_market_for_port(
 # `sync_market_to_state` slettet i C4: Market er stateless, så ingen
 # dobbelt-representasjon å synkronisere. State.markets[port_id] er
 # eneste sannhet.
+
+
+# -----------------------------------------------------------------------------
+# Daggry-tikk for alle havner (Fase 2B C7a — flyttet fra PortVillageScene)
+# -----------------------------------------------------------------------------
+
+def _log_port_regimes(port_id: str, regimes: dict, day: int) -> None:
+    """Dev-mode: én linje per havn etter dawn-overgang.
+
+    Format: 'Dawn day=N <port_id> sugar=<regime> rum=... tobacco=... pitch=...'
+    """
+    parts = [f"{cid}={reg.current}" for cid, reg in regimes.items()]
+    logging.getLogger("ports_regime").info(
+        "Dawn day=%d %s %s", day, port_id, " ".join(parts)
+    )
+
+
+def tick_all_ports_dawn(
+    state: "GameState",
+    market: Market,
+    regime_manager: "RegimeManager",
+) -> None:
+    """Prosesser daggry-overgang for alle 4 havner.
+
+    Market er stateless (C4): samme `market`-instans kjøres mot hver
+    havns MarketState i tur. Regime-manager oppdateres per havns
+    regime-dict.
+
+    Brukes av PortVillageScene under dag-tikking i havn, og av
+    VoyageScene under reise (C7c) — markedet i alle 4 havner skal
+    utvikle seg uavhengig av hvor spilleren er, per spec §7.3.
+
+    Importeres lokalt for å unngå sirkularitet i tester som mocker
+    port_config (port_config kalles ved første kall).
+    """
+    from config import port_config as _port_config
+
+    econ = state.economy_state
+    day = state.world_state.clock.day
+    # Importer dev_mode lokalt — modulen leses ved hver kall, billig.
+    from systems.dev_mode import is_dev_mode
+    dev = is_dev_mode()
+
+    for port_id in _port_config.get_all_port_ids():
+        market_state = econ.markets.setdefault(port_id, MarketState())
+        port_regimes = econ.regimes.setdefault(port_id, {})
+        market.on_dawn(market_state, port_regimes)
+        regime_manager.on_new_day(port_regimes)
+        if dev:
+            _log_port_regimes(port_id, port_regimes, day)
+
+
+# -----------------------------------------------------------------------------
+# Observed-snapshot per havn (Fase 2B C7a — felles helper)
+# -----------------------------------------------------------------------------
+
+def write_observed_for_port(state: "GameState", port_id: str) -> None:
+    """Snapshot current_price for alle commodities i `port_id` til
+    `state.economy_state.observed[port_id]`.
+
+    Dette er den autoritative måten å registrere "spilleren har sett
+    prisene her nå":
+
+    - Ny spillstart: kalles for Tortuga (spilleren spawn-er der).
+    - Voyage-start: kalles for from_port før avreise (spilleren har
+      nettopp vært i børsen, prisene er ferske).
+    - Ankomst: kalles for to_port (spilleren ankommer og ser priser
+      umiddelbart).
+    - v4→v5-migrering: kalles for Tortuga via load() (spilleren var i
+      Tortuga i v4, prisene er observerte).
+
+    Overskriver eksisterende observed-oppføringer for `port_id`. Ingen
+    effekt hvis havnens marked er tomt (verken oppretter port-key eller
+    skriver noe).
+
+    `day_seen` er gjeldende `clock.day`. Stale-logikk i C8 sammenligner
+    mot `clock.day` ved render-tid.
+    """
+    market_state = state.economy_state.markets.get(port_id)
+    if market_state is None or not market_state.commodities:
+        return
+
+    day = state.world_state.clock.day
+    observed = state.economy_state.observed.setdefault(port_id, {})
+    for cid, cm in market_state.commodities.items():
+        observed[cid] = ObservedPrice(price=cm.current_price, day_seen=day)
