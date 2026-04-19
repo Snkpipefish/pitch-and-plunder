@@ -492,6 +492,25 @@ Etter diskusjon med bruker før Commit 1 er følgende justert fra §6:
   med per-surface alpha kan gi varierende rendering-tid → dt-hikst. Fikses
   i Commit 8-polish (dedikert undersøkelse og mål).
 
+### Økonomisk balansering er midlertidig
+
+Alle tall i Fase 2A (startgull 300, bek-produksjon 2/dag, upkeep 8/dag,
+transaksjonsgebyr i Commit 7, lagerbegrensning 40) er provisoriske.
+Ekte balansering kan ikke gjøres før:
+
+- **Fase 2B** introduserer seiling-kostnader og flere havner
+- **Fase 3** introduserer piratinntekter og skip-vedlikehold
+- **Fase 5** introduserer hendelser og markedsmanipulasjon
+
+Forvent minst to større rebalanseringer av økonomiske konstanter:
+- Etter Fase 2B: når arbitrasje mellom havner er spillbart
+- Etter Fase 3: når piratvirksomhet gir alternativ inntekt
+
+Alle økonomi-relaterte konstanter er samlet i `constants.py` under
+seksjonen "Økonomiske konstanter (under balansering)" for enkel
+justering. Endring av et tall der skal ikke kreve kodeendringer
+andre steder.
+
 ---
 
 ## Fremtidige utvidelser (utover Fase 2A-scope)

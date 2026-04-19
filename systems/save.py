@@ -60,7 +60,7 @@ class GameState:
     player_position: tuple[float, float] = (320.0, 280.0)
     clock: GameClock = field(default_factory=GameClock)
     commodities_state: dict[str, dict] = field(default_factory=dict)
-    cargo_capacity: int = constants.CARGO_CAPACITY
+    cargo_capacity: int = constants.CARGO_CAPACITY_DEFAULT
     regimes: dict[str, RegimeState] = field(default_factory=dict)
     pitch_lake: PitchLakeState = field(default_factory=PitchLakeState)
 
@@ -200,13 +200,17 @@ def _parse_pitch_lake(raw: object) -> PitchLakeState:
     if not isinstance(raw, dict):
         return PitchLakeState()
     try:
-        production_per_day = int(raw.get("production_per_day", 2))
+        production_per_day = int(
+            raw.get("production_per_day", constants.PITCH_LAKE_DEFAULT_PRODUCTION)
+        )
     except (TypeError, ValueError):
-        production_per_day = 2
+        production_per_day = constants.PITCH_LAKE_DEFAULT_PRODUCTION
     try:
-        daily_upkeep_cost = int(raw.get("daily_upkeep_cost", 8))
+        daily_upkeep_cost = int(
+            raw.get("daily_upkeep_cost", constants.PITCH_LAKE_DEFAULT_UPKEEP)
+        )
     except (TypeError, ValueError):
-        daily_upkeep_cost = 8
+        daily_upkeep_cost = constants.PITCH_LAKE_DEFAULT_UPKEEP
     try:
         total_produced = int(raw.get("total_produced", 0))
     except (TypeError, ValueError):

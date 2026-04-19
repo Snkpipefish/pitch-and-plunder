@@ -27,9 +27,10 @@ Designvalg:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+import constants
 from entities.commodity import InventoryItem
 
 if TYPE_CHECKING:
@@ -42,10 +43,19 @@ PITCH_ID = "pitch"
 
 @dataclass
 class PitchLakeState:
-    """Serialiserbar state for Pitch Lake-produksjonen."""
+    """Serialiserbar state for Pitch Lake-produksjonen.
 
-    production_per_day: int = 2
-    daily_upkeep_cost: int = 8
+    Defaults leses fra `constants` via `field(default_factory=...)` slik at
+    endring av en konstant umiddelbart reflekteres i nye GameStates uten
+    at koden her må endres.
+    """
+
+    production_per_day: int = field(
+        default_factory=lambda: constants.PITCH_LAKE_DEFAULT_PRODUCTION
+    )
+    daily_upkeep_cost: int = field(
+        default_factory=lambda: constants.PITCH_LAKE_DEFAULT_UPKEEP
+    )
     total_produced: int = 0
     last_production_day: int = 0
 
