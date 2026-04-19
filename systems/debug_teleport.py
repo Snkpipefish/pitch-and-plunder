@@ -1,4 +1,4 @@
-"""Debug-teleport (F1–F4) — aktiv kun i dev-mode (Fase 2B C6).
+"""Debug-teleport (F1–F4) — aktiv kun i dev-mode (Fase 2B C6/C7b).
 
 F1 → tortuga, F2 → port_royal, F3 → havana, F4 → nassau.
 
@@ -12,8 +12,11 @@ Caller (main.py) er ansvarlig for å:
    WorldMapScene) avsluttes ryddig og ikke lekker scene-state som
    pulsering-timer eller fokus-havn.
 
-Teleport avbryter IKKE en aktiv voyage i C6 — voyage eksisterer ikke
-ennå. C7+ må håndtere voyage-avbryt eller avvise teleport under seiling.
+Voyage-håndtering (C7b): hvis en reise er aktiv når teleport trykkes,
+kalles `voyage.complete_voyage(state, balance)` FØR teleport. Dette
+sikrer at clock-tempo, voyage-state og current_port ryddes konsistent
+før target-port settes. Tematisk: dev-snarveier skal være "åpenbare og
+rydde opp etter seg" — ingen halv-state lekker mellom teleport-hopp.
 """
 
 from __future__ import annotations
@@ -24,6 +27,8 @@ from typing import TYPE_CHECKING
 import pygame
 
 from config import port_config
+from systems import balance as _balance
+from systems import voyage as _voyage
 
 if TYPE_CHECKING:
     from state import GameState
@@ -76,6 +81,18 @@ def handle_teleport_key(key: int, state: "GameState") -> str | None:
             target,
         )
         return None
+
+    # Rydd aktiv voyage før teleport — voyage.complete_voyage håndterer
+    # clock-tempo (at_sea → in_port), nuller voyage-state og setter
+    # current_port til voyage.to_port. Vi overskriver current_port til
+    # target rett etter, så netto-effekten er konsistent rydding.
+    if state.world_state.voyage is not None:
+        log.info(
+            "Debug teleport under voyage: completing %s→%s først",
+            state.world_state.voyage.from_port,
+            state.world_state.voyage.to_port,
+        )
+        _voyage.complete_voyage(state, _balance.get())
 
     state.world_state.current_port = target
     state.player_state.position_x = float(

@@ -182,3 +182,148 @@ class TestCustomProduction:
         pl = PitchLakeState(production_per_day=5, upkeep_per_day=8)
         produced, _ = PitchLake.on_new_day(pl, state)
         assert produced == 5
+
+
+# -----------------------------------------------------------------------------
+# Pending-units når spilleren er BORTE fra home_port (Fase 2B C7b)
+# -----------------------------------------------------------------------------
+
+class TestPendingUnitsAway:
+    """Per spec §2.3: når current_port != home_port (eller voyage aktiv),
+    skal produksjon gå til state.pending_units i stedet for inventar.
+    Bekken lagres på kaia og venter på spillerens retur."""
+
+    def test_under_voyage_routes_to_pending(self):
+        from state.voyage_state import VoyageState
+        state = _fresh_state(gold=300)
+        # Sett aktiv voyage — spilleren er ikke i havn
+        state.world_state.voyage = VoyageState(
+            from_port="tortuga", to_port="havana",
+            depart_day=1, arrival_day=4,
+        )
+        pl = PitchLakeState(
+            home_port="tortuga", production_per_day=2, upkeep_per_day=8,
+        )
+        produced, paid = PitchLake.on_new_day(pl, state)
+        assert produced == 2
+        assert paid == 8  # upkeep trekkes som normalt
+        assert pl.pending_units == 2
+        # Inventar uendret — bekken er på kaia
+        assert state.player_state.inventory.get(PITCH_ID, InventoryItem()).quantity == 0
+
+    def test_in_non_home_port_routes_to_pending(self):
+        state = _fresh_state(gold=300)
+        # Ingen voyage, men current_port != home_port
+        state.world_state.current_port = "port_royal"
+        pl = PitchLakeState(
+            home_port="tortuga", production_per_day=2, upkeep_per_day=8,
+        )
+        produced, _ = PitchLake.on_new_day(pl, state)
+        assert produced == 2
+        assert pl.pending_units == 2
+        assert state.player_state.inventory.get(PITCH_ID, InventoryItem()).quantity == 0
+
+    def test_pending_accumulates_over_days(self):
+        from state.voyage_state import VoyageState
+        state = _fresh_state(gold=1000)
+        state.world_state.voyage = VoyageState(
+            from_port="tortuga", to_port="nassau",
+            depart_day=1, arrival_day=5,
+        )
+        pl = PitchLakeState(
+            home_port="tortuga", production_per_day=2, upkeep_per_day=8,
+        )
+        for day in range(1, 5):
+            state.world_state.clock.day = day
+            PitchLake.on_new_day(pl, state)
+        assert pl.pending_units == 8  # 4 dager × 2/dag
+        assert pl.total_produced == 8
+
+    def test_pending_path_does_not_lose_to_full_cargo(self):
+        """I hjemme-stien tapes overskudd ved full last (cargo-klamp).
+        I borte-stien akkumuleres alt til pending uten klamp — bekken
+        venter til kapasitet finnes ved retur."""
+        from state.voyage_state import VoyageState
+        state = _fresh_state(cargo_cap=5, gold=300)
+        # Fyll inventar nesten helt
+        state.player_state.inventory["sugar"] = InventoryItem(quantity=5, avg_cost=40.0)
+        state.world_state.voyage = VoyageState(
+            from_port="tortuga", to_port="havana",
+            depart_day=1, arrival_day=4,
+        )
+        pl = PitchLakeState(
+            home_port="tortuga", production_per_day=2, upkeep_per_day=8,
+        )
+        produced, _ = PitchLake.on_new_day(pl, state)
+        # Selv om cargo er fullt: pending vokser, ingenting tapt
+        assert produced == 2
+        assert pl.pending_units == 2
+
+    def test_last_production_day_set_in_pending_path(self):
+        """HUD halted-deteksjon (last_production_day < clock.day - 1) skal
+        IKKE feilaktig vise halted under reise — produksjonen HAR skjedd,
+        bare lagret på kaia."""
+        from state.voyage_state import VoyageState
+        state = _fresh_state(clock_day=12, gold=300)
+        state.world_state.voyage = VoyageState(
+            from_port="tortuga", to_port="havana",
+            depart_day=10, arrival_day=13,
+        )
+        pl = PitchLakeState(
+            home_port="tortuga", production_per_day=2, upkeep_per_day=8,
+            last_production_day=0,
+        )
+        PitchLake.on_new_day(pl, state)
+        assert pl.last_production_day == 12
+
+
+# -----------------------------------------------------------------------------
+# realize_pending_units (Fase 2B C7b)
+# -----------------------------------------------------------------------------
+
+class TestRealizePendingUnits:
+    def test_moves_pending_to_inventory_up_to_capacity(self):
+        state = _fresh_state(cargo_cap=10, gold=100)
+        pl = PitchLakeState(
+            home_port="tortuga", production_per_day=2, upkeep_per_day=8,
+            pending_units=5,
+        )
+        realized = PitchLake.realize_pending_units(pl, state)
+        assert realized == 5
+        assert state.player_state.inventory[PITCH_ID].quantity == 5
+        assert pl.pending_units == 0
+
+    def test_partial_realization_when_cargo_constrained(self):
+        state = _fresh_state(cargo_cap=10, gold=100)
+        # 7 enheter allerede i lasterom — kun 3 plasser ledig
+        state.player_state.inventory["sugar"] = InventoryItem(quantity=7, avg_cost=40.0)
+        pl = PitchLakeState(
+            home_port="tortuga", production_per_day=2, upkeep_per_day=8,
+            pending_units=8,
+        )
+        realized = PitchLake.realize_pending_units(pl, state)
+        assert realized == 3
+        assert state.player_state.inventory[PITCH_ID].quantity == 3
+        # Resten venter videre i pending
+        assert pl.pending_units == 5
+
+    def test_noop_when_pending_zero(self):
+        state = _fresh_state(cargo_cap=10, gold=100)
+        pl = PitchLakeState(
+            home_port="tortuga", production_per_day=2, upkeep_per_day=8,
+            pending_units=0,
+        )
+        realized = PitchLake.realize_pending_units(pl, state)
+        assert realized == 0
+        assert state.player_state.inventory[PITCH_ID].quantity == 0
+
+    def test_noop_when_cargo_full(self):
+        state = _fresh_state(cargo_cap=5, gold=100)
+        state.player_state.inventory["sugar"] = InventoryItem(quantity=5, avg_cost=40.0)
+        pl = PitchLakeState(
+            home_port="tortuga", production_per_day=2, upkeep_per_day=8,
+            pending_units=10,
+        )
+        realized = PitchLake.realize_pending_units(pl, state)
+        assert realized == 0
+        assert pl.pending_units == 10  # alt forblir på kaia

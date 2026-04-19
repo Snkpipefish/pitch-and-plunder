@@ -236,3 +236,51 @@ class TestTeleportToPortWithoutBuildings:
         result = debug_teleport.handle_teleport_key(pygame.K_F1, state)
         assert result is None
         assert state.world_state.current_port == original_port
+
+
+# -----------------------------------------------------------------------------
+# Voyage-rydding ved teleport (Fase 2B C7b)
+# -----------------------------------------------------------------------------
+
+
+class TestTeleportClearsVoyage:
+    """Per Q6-avtale: hvis voyage er aktiv når F1-F4 trykkes, skal
+    voyage.complete_voyage kalles FØR teleport. Dev-snarveier skal
+    rydde opp etter seg, ikke etterlate halv-state.
+    """
+
+    def test_teleport_during_voyage_completes_voyage_first(self):
+        from systems import balance, voyage as voyage_module
+
+        state = _state()
+        bal = balance.get()
+        # Start en aktiv reise (Tortuga → Havana)
+        v = voyage_module.start_voyage(state, bal, "tortuga", "havana")
+        assert v is not None
+        assert state.world_state.voyage is not None
+        assert state.world_state.clock.seconds_per_day == bal.time.seconds_per_day_at_sea
+
+        # Teleport til Port Royal mens reise pågår
+        result = debug_teleport.handle_teleport_key(pygame.K_F2, state)
+
+        assert result == "port_royal"
+        # Voyage cleared
+        assert state.world_state.voyage is None
+        # Clock-tempo tilbake til in_port
+        assert state.world_state.clock.seconds_per_day == bal.time.seconds_per_day_in_port
+        # Target-porten er destinasjonen, ikke voyage.to_port
+        assert state.world_state.current_port == "port_royal"
+
+    def test_teleport_without_voyage_unchanged(self):
+        """Sanity: teleport uten aktiv voyage skal fortsatt fungere
+        som før (ikke kalle complete_voyage med None-state)."""
+        from systems import balance
+
+        state = _state()
+        bal = balance.get()
+        assert state.world_state.voyage is None
+        result = debug_teleport.handle_teleport_key(pygame.K_F3, state)
+        assert result == "havana"
+        assert state.world_state.current_port == "havana"
+        # Clock uendret
+        assert state.world_state.clock.seconds_per_day == bal.time.seconds_per_day_in_port

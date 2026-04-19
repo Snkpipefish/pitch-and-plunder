@@ -975,3 +975,91 @@ round-trip og new_game-tester. C7b vil legge til
 voyage-helper-tester; C7c vil kreve manuell smoke for hele voyage-
 flyten.
 
+## Fase 2B Commit C7b — Voyage-helpers + PitchLake pending + debug-teleport-rydding
+
+Pure helpers og state-mutasjoner uten scene-integrasjon. Hele
+voyage-livssyklusen er nå testbar i isolasjon før C7c bygger
+VoyageScene oppå.
+
+### Endringer
+
+- `systems/voyage.py` (ny, 174 linjer): `route_key`, `get_route`,
+  `compute_heading` (klamp til 4-retning), `compute_progress`
+  (deterministisk fra clock-state), `interpolate_position`,
+  `start_voyage`, `complete_voyage`. Ingen gull-mutasjon (C9 eier
+  hele gull-håndteringen). `start_voyage` skriver from_port observed
+  før mutasjon.
+- `systems/pitch_lake.py`: `on_new_day` deler nå i to grener basert på
+  `is_home = voyage is None AND current_port == home_port`. Hjemme
+  går produksjonen direkte til inventar (klampet av cargo); borte går
+  alt til `pending_units` uten klamp (bekken lagres på kaia, ikke
+  tapt). `last_production_day` settes uansett — HUD halted-deteksjon
+  fungerer fortsatt under reise. Ny `realize_pending_units(state,
+  game_state) -> int` flytter pending → inventar opp til ledig plass.
+- `systems/debug_teleport.py`: pre-teleport-sjekk for aktiv voyage. Hvis
+  en reise pågår, kalles `voyage.complete_voyage(state, balance)` FØR
+  target-port settes. Konsistent rydding av clock-tempo og voyage-
+  state slik at dev-snarveier ikke etterlater halv-state.
+
+Ingen scene-integrasjon ennå — VoyageScene + reise-dialog + ankomst-
+flyt + main.py-initial-scene-valg lander i C7c.
+
+### Tester
+
+41 nye (mer enn planlagt 17 — granulær oppdeling per helper):
+
+`tests/test_voyage.py` (30 tester):
+
+- `TestRouteKey` (4): alfabetisk, leksikografisk, get_route resolve + missing
+- `TestComputeHeading` (7): 4 retninger, diagonal-tie (horisontal vinner),
+  dominant axis, same-pos defensiv
+- `TestComputeProgress` (6): start, halv, slutt, klampet, seconds_into_day,
+  same-day defensiv
+- `TestInterpolatePosition` (3): start, slutt, midt
+- `TestStartVoyage` (6): VoyageState-felter korrekt, clock til at_sea, gull
+  uendret, observed-snapshot for from_port, None ved ukjent rute, None ved
+  allerede aktiv voyage
+- `TestCompleteVoyage` (3): clearer voyage + setter current_port,
+  resetter clock, no-op uten aktiv voyage
+- `TestVoyageRoundTrip` (1): save mid-voyage → load → voyage-felter og
+  clock-tempo bevart (flyttet fra C7c per brukerens regi for å isolere
+  save-feil fra scene-feil)
+
+`tests/test_pitch_lake.py` (9 nye):
+
+- `TestPendingUnitsAway` (5): under voyage → pending, i ikke-home → pending,
+  akkumulerer over dager, ingen tap ved full last (kontrast hjemme-stien),
+  last_production_day settes
+- `TestRealizePendingUnits` (4): full realisering, partiell ved cargo-
+  begrensning, no-op ved tom pending, no-op ved fullt cargo
+
+`tests/test_debug_teleport.py` (2 nye):
+
+- `TestTeleportClearsVoyage` (2): teleport under voyage rydder voyage +
+  clock, sanity uten voyage uendret
+
+Total 354 grønne (313 → 354), 6.68 s.
+
+### Benchmark (målmaskin T4200)
+
+| Scene | C7a | C7b | Delta |
+|-------|-----|-----|-------|
+| Port lukket | 4.687 ms | 4.661 ms | -0.03 ms (støy) |
+| Port overlay | 6.217 ms | 6.113 ms | -0.10 ms (støy) |
+| World map | 1.124 ms | 1.076 ms | -0.05 ms (støy) |
+
+Ingen kode-regresjon — alt nytt kode i C7b er per-event helpers
+(start_voyage, complete_voyage, realize_pending_units) som ikke kjører
+per frame. PitchLake.on_new_day har én ekstra branch (is_home-sjekk),
+men kalles kun ved daggry (180 sek mellom kall).
+
+### Manuell smoke
+
+Ikke utført — C7b er ren infrastruktur uten brukerverifiserbar
+oppførsel. Voyage-helpers er fullstendig testdekket; PitchLake-
+endringer dekkes av nye pending-tester. Debug-teleport-rydding
+verifiseres via TestTeleportClearsVoyage.
+
+C7c vil kreve full manuell voyage-test (start fra Tortuga → ankomst →
+priser → save+resume).
+
