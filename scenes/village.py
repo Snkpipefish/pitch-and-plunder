@@ -44,6 +44,7 @@ from systems.regime_manager import RegimeManager
 from systems.save import GameState
 from ui.hint import HintIndicator
 from ui.hud import Hud
+from ui.toast import Toast, ToastQueue
 
 
 # Startposisjon: midt på gaten foran Børshuset (jfr. PROSJEKT.md §8)
@@ -218,6 +219,13 @@ class VillageScene(BaseScene):
             hint=hint,
         )
 
+        # Toast-kø for daggry-varsel (Commit 5E) og senere bek-produksjon
+        # (Commit 6) + feilhint (Commit 7). Baseline like over hint-linja.
+        self._toasts = ToastQueue(
+            baseline_y=constants.RENDER_HEIGHT - 18,
+            center_x=constants.RENDER_WIDTH // 2,
+        )
+
     # --- Input ---
 
     def handle_event(self, event: pygame.event.Event) -> None:
@@ -270,10 +278,23 @@ class VillageScene(BaseScene):
                 self._market.on_dawn(self._state.regimes)
                 self._regime_manager.on_new_day(self._state.regimes)
             self._last_seen_day = curr_day
+            # Varsle spilleren visuelt (toast fader ut etter 3 sek). Hvis
+            # flere dager passerte i én frame (f.eks. etter load av save
+            # med seconds_into_day nær rollover) viser vi kun én toast
+            # for den nye gjeldende dagen — ikke én per passert dag.
+            self._toasts.push(
+                Toast(
+                    font=self._font,
+                    text=f"Daggry \u2014 Dag {curr_day}",
+                    color=constants.COLOR_LANTERN_BRIGHT,
+                    duration=3.0,
+                )
+            )
 
         # Lanterne-swing og andre tidsavhengige effekter gaar videre ogsaa.
         self._elapsed += dt
         self._particles.update(dt)
+        self._toasts.update(dt)
 
         # HUD – settere er no-ops hvis verdien ikke har endret seg
         self._hud.set_gold(self._state.gold)
@@ -318,8 +339,10 @@ class VillageScene(BaseScene):
                 and self._overlay is None
             ),
         )
-        # HUD (oeverst venstre) og eventuell bors-overlay tegnes over alt.
+        # HUD (oeverst venstre) og toasts (bunn-sentrert) tegnes over
+        # verden men under bors-overlay.
         self._hud.draw(surface)
+        self._toasts.draw(surface)
         if self._overlay is not None:
             self._overlay.draw(surface)
 
