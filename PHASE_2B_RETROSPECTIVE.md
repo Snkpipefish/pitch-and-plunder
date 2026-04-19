@@ -68,11 +68,39 @@ verktøy-design, ikke etter at en bruker har mistet data.
 
 ---
 
+## Brukertest-observasjoner C8
+
+Notert ved formell lukking av C8 (ObservedPrice stale-UI + tooltip +
+UI-palett). Alle fire tooltip-tilstander visuelt verifisert
+(current/aldri-besøkt/fersk/stale), markør-differensiering leses
+umiddelbart, tooltip-tone er Sid Meier-saklig.
+
+### HUD-tekst overlapper med himmel-gradient
+
+Ikke-blokker, observert som perseptuelt artefakt: HUD-tekst oppe til
+venstre (sted/gull/dag/bek-status) blander seg perseptuelt med
+himmel-bakgrunnen i lyse dag-faser. Tekst kan se "doblet" ut der
+den krysser farge-overganger i bakgrunnen.
+
+**Status:** ikke funksjonelt problem, leselig. Noter for C10-polish.
+
+**C10-vurderinger:**
+- Subtil tekst-bakgrunn (semi-transparent STONE_DARKEST-rektangel
+  bak HUD-teksten) — minst invasive løsning
+- Tekst-outline (1 px mørk kant) — endrer font-rendering, kan se
+  klumpete på 8 px Public Pixel
+- Tekst-skygge (1 px offset i mørk farge) — mellomtilnærming
+
+Anbefaling foreløpig: semi-transparent bakgrunns-rektangel med
+COLOR_STONE_DARKEST og alpha ~120-140. Tester på alle 6 himmel-
+varianter før låsing av valg.
+
+---
+
 ## Status
 
-- C1a–C7c-patch-2: lukket og verifisert
-- C8: ObservedPrice stale-UI + tooltip + UI-palett — neste
-- C9: Reise-gull-kost + blokkering + polish
+- C1a–C8: lukket og verifisert
+- C9: Reise-gull-kost + blokkering + polish — neste
 - C10: Balansering + retrospektiv
 
 Endelig retrospektiv ved C10-lukking vil utvide denne fila med:
