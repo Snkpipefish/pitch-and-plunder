@@ -1,11 +1,17 @@
-"""Tortuga-landsbyens gate.
+"""Havn-scene (port village) — parameterisert over PortConfig.
+
+Refactored fra VillageScene (Tortuga-spesifikk) i Fase 2B C4: scenen
+tar nå et PortConfig-objekt og bygger layout fra `port_config.buildings`.
+Én scene-klasse betjener alle 4 havner i 2B; kun Tortuga har buildings
+i C4 (de andre får layout i C6).
 
 Scene-orchestrerer: eier verdens-state (Player, NPC-er, Market, Partikler,
-Lys, Kamera, Overlay) og delegerer rendering til `VillageRenderer`.
+Lys, Kamera, Overlay) og delegerer rendering til `PortVillageRenderer`.
 Pre-rendrede lag og bake-hjelpere bor i `scenes/parallax_backdrops.py` og
-`scenes/village_buildings.py`. Hint-teksten bor i `ui/hint.py`.
+`scenes/port_buildings.py`. Hint-teksten bor i `ui/hint.py`.
 
-Komposisjon og verdenstall: se docstrings i `village_buildings.py`.
+Market er stateless i C4: én Market-instans opererer på alle havners
+MarketState via eksplisitt parameter. Ingen dobbel-representasjon.
 """
 
 from __future__ import annotations
@@ -13,10 +19,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 
 import pygame
 
 import constants
+from config import port_config
+from config.port_config import PortConfig
 from entities.celestial import Celestial
 from entities.npc import NPC
 from entities.player import Player
@@ -27,32 +36,14 @@ from scenes.parallax_backdrops import (
     build_empty_layer,
     build_foreground_variants,
 )
-from scenes.village_buildings import (
-    EXCHANGE_CENTER_X,
-    EXCHANGE_W,
-    EXCHANGE_X,
-    EXCHANGE_Y,
-    GROUND_TOP_Y,
-    TAVERN_W,
-    TAVERN_X,
-    TAVERN_Y,
-    build_village_gameplay_layer,
-)
-from scenes.village_renderer import VillageRenderer
-import random
-
-from config import port_config
+from scenes.port_buildings import build_port_gameplay_layer
+from scenes.port_village_renderer import PortVillageRenderer
 from state import GameState
-from state.market_state import CommodityMarket, MarketState
+from state.market_state import MarketState
 from systems import save as save_module
 from systems.day_cycle import DayCycle
 from systems.dev_mode import is_dev_mode as _is_dev_mode
-from systems.economy import (
-    Market,
-    apply_regime_drift_to_market_state,
-    load_base_prices,
-    sync_market_to_state,
-)
+from systems.economy import Market, load_base_prices
 from systems.lighting import Light, LightingSystem
 from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
 from systems.particles import ParticleSystem
@@ -63,10 +54,10 @@ from ui.hud import Hud
 from ui.toast import Toast, ToastQueue
 
 
-# Startposisjon: midt på gaten foran Børshuset (jfr. PROSJEKT.md §8)
-PLAYER_START_X = 1340.0
-# Hawkins står rett foran Børshusets trapp
-HAWKINS_X = 1470.0
+# Sprite-høyde for Player — brukt til å sette player_y relativt til
+# `port_config.buildings.ground_top_y`. Hvis det senere blir nødvendig
+# med per-havn-justering, flytter vi denne til PortBuildings.
+_PLAYER_SPRITE_HEIGHT = 20
 
 
 def _load_npcs(path: str = os.path.join(constants.DATA_DIR, "npcs.json")) -> dict:
@@ -76,63 +67,84 @@ def _load_npcs(path: str = os.path.join(constants.DATA_DIR, "npcs.json")) -> dic
     return {entry["id"]: entry for entry in data.get("npcs", [])}
 
 
-class VillageScene(BaseScene):
-    """Tortuga-gate med taverna til venstre og børshus til høyre.
+class PortVillageScene(BaseScene):
+    """Havn-gate parameterisert over PortConfig.
 
     Eier `GameState` via referanse. All pris/inventar/gull-endring muterer
     tilstanden direkte. Autosave skjer ved QUIT, scene-bytte og ved
-    aapning/lukking av bors-overlay.
+    åpning/lukking av børs-overlay.
+
+    Krever at `port_config.buildings` er satt — Port Royal, Havana og
+    Nassau får layout i C6 og kan ikke instansieres før det.
     """
 
     def __init__(
         self,
         font: pygame.font.Font,
         state: GameState,
+        port: PortConfig,
     ) -> None:
         super().__init__()
         self._font = font
         self._state = state
+        self._port = port
+        if port.buildings is None:
+            raise ValueError(
+                f"Port '{port.id}' has no buildings layout — "
+                f"cannot instantiate PortVillageScene"
+            )
+        self._buildings = port.buildings  # non-None fra her
 
         # Parallax-lag. Bakgrunnen er nå dynamisk (6 varianter med cross-
         # fade styrt av DayCycle); ParallaxRenderer håndterer kun gameplay
         # og parallax-forgrunn. Himmel- og fg-backdrop-rendering skjer i
-        # VillageRenderer. Fg-varianter (fjell + hav) ble skilt ut fra
+        # PortVillageRenderer. Fg-varianter (fjell + hav) ble skilt ut fra
         # himmel-variantene i Commit 7.2 slik at celestial kan tegnes
         # mellom dem og bli okkludert av fjell/hav ved horisont.
         self._backdrops = build_backdrop_variants()
         self._foregrounds = build_foreground_variants()
-        gameplay_layer = ParallaxLayer(build_village_gameplay_layer(), speed=1.0)
+        gameplay_layer = ParallaxLayer(
+            build_port_gameplay_layer(port), speed=1.0
+        )
         fg_layer = ParallaxLayer(build_empty_layer(1.3), speed=1.3)
         parallax_renderer = ParallaxRenderer([gameplay_layer, fg_layer])
         self._celestial = Celestial()
 
-        self._camera = Camera(constants.WORLD_WIDTH, constants.RENDER_WIDTH)
+        self._camera = Camera(port.world_width, constants.RENDER_WIDTH)
 
-        # Spilleren: føttene hviler på GROUND_TOP_Y. Plasseres ved
-        # PLAYER_START_X som trygt utgangspunkt; on_enter overskriver x
-        # basert paa from_scene og lagret tilstand.
-        player_y = GROUND_TOP_Y - 20  # sprite-høyde 20
-        self._player = Player(PLAYER_START_X, float(player_y))
+        # Spilleren: føttene hviler på buildings.ground_top_y. Plasseres ved
+        # buildings.player_start_x som trygt utgangspunkt; on_enter
+        # overskriver x basert på from_scene og lagret tilstand.
+        player_y = self._buildings.ground_top_y - _PLAYER_SPRITE_HEIGHT
+        self._player = Player(
+            float(self._buildings.player_start_x), float(player_y)
+        )
         self._player_min_x = 8.0
-        self._player_max_x = float(constants.WORLD_WIDTH - self._player.width - 8)
+        self._player_max_x = float(port.world_width - self._player.width - 8)
 
-        # NPC-er
+        # NPC-er fra ports.json buildings.npcs
         npc_db = _load_npcs()
-        self._npcs: list[NPC] = [
-            NPC.from_data(npc_db["hawkins"], HAWKINS_X, float(player_y)),
-        ]
+        self._npcs: list[NPC] = []
+        for npc_id, npc_x in self._buildings.npcs.items():
+            if npc_id not in npc_db:
+                continue
+            self._npcs.append(
+                NPC.from_data(npc_db[npc_id], float(npc_x), float(player_y))
+            )
 
         # Dynamisk lyssystem. 3 lys, 3 unike gradienter.
         self._lighting = LightingSystem()
+        tavern = self._buildings.tavern
+        exchange = self._buildings.exchange
         # Tavern-svingende lanterne (over skiltet, rett under tak-overhenget)
-        lantern_x = TAVERN_X + TAVERN_W / 2
-        lantern_y = TAVERN_Y + 10
-        # Tavern-dør-glød (midten av doeraapningen)
-        tavern_door_x = TAVERN_X + TAVERN_W / 2
-        tavern_door_y = GROUND_TOP_Y - 16
+        lantern_x = tavern.x + tavern.w / 2
+        lantern_y = tavern.y + 10
+        # Tavern-dør-glød (midten av døråpningen)
+        tavern_door_x = tavern.x + tavern.w / 2
+        tavern_door_y = self._buildings.ground_top_y - 16
         # Børshusets midtvindu
-        exchange_window_x = EXCHANGE_X + EXCHANGE_W / 2
-        exchange_window_y = EXCHANGE_Y + 42
+        exchange_window_x = exchange.x + exchange.w / 2
+        exchange_window_y = exchange.y + 42
         self._lights: list[Light] = [
             Light(
                 x=lantern_x,
@@ -160,61 +172,48 @@ class VillageScene(BaseScene):
         )
         self._elapsed: float = 0.0
 
-        # Økonomi – Market lastes fra JSON, deretter applieres lagrede
-        # current_price og price_history fra Tortugas MarketState.
-        # Dag-telleren eies av world_state.clock (GameClock), ikke Market.
+        # Økonomi — Market er stateless katalog (C4). Én instans opererer
+        # på alle havners MarketState via parameter. Klamp gjør Tortuga-
+        # sjekk ved init for å rydde gamle saves med priser utenfor nye
+        # bounds (se Fase 2A Commit 5D).
         self._market = Market.from_json(
             os.path.join(constants.DATA_DIR, "commodities.json")
         )
-        tortuga_market: MarketState = state.economy_state.markets.setdefault(
-            "tortuga", MarketState()
+        current_market_state: MarketState = state.economy_state.markets.setdefault(
+            port.id, MarketState()
         )
-        for cid, saved in tortuga_market.commodities.items():
-            try:
-                commodity = self._market.get(cid)
-            except KeyError:
-                continue
-            commodity.current_price = float(saved.current_price)
-            commodity.price_history = list(saved.price_history)
-            # Klamp loaded verdier mot gjeldende pris-grenser. Fase 2A
-            # Commit 5D endret bek base_price 55 → 40 og klamp-forholdet
-            # fra [0.3, 3.0] til [0.5, 2.0]; eksisterende saves kan ha
-            # priser utenfor nye grenser (spesielt bek rundt 120+).
-            self._market.clamp_to_price_bounds(cid)
-        # Sync Market → state.markets["tortuga"] etter hydration-og-klamp
-        # slik at state speiler Market eksakt (klamp kan ha endret priser).
-        sync_market_to_state(self._market, tortuga_market)
+        for cid in list(current_market_state.commodities.keys()):
+            self._market.clamp_to_price_bounds(current_market_state, cid)
 
-        # Regime-system. Initialiser manglende regimer for Tortuga.
+        # Regime-system. Initialiser manglende regimer for current port.
         self._regime_manager = RegimeManager()
-        tortuga_regimes = state.economy_state.regimes.setdefault("tortuga", {})
+        current_regimes = state.economy_state.regimes.setdefault(port.id, {})
         missing_ids = [
-            c.id for c in self._market.commodities if c.id not in tortuga_regimes
+            c.id for c in self._market.commodities if c.id not in current_regimes
         ]
         if missing_ids:
-            tortuga_regimes.update(
+            current_regimes.update(
                 self._regime_manager.initialize_regimes(missing_ids)
             )
-        # Dag-skift-sporing: naar clock.day overstiger denne, varsle
+        # Dag-skift-sporing: når clock.day overstiger denne, varsle
         # RegimeManager for hver dag som har passert.
         self._last_seen_day = state.world_state.clock.day
 
-        # Base-priser caches for per-havn-drift av ikke-Tortuga-markeder.
+        # Base-priser caches for referanse (ikke lenger trengt for drift
+        # siden Market.on_dawn nå inkluderer klamp intern). Beholdes for
+        # eventuelt fremtidig bruk; billig oppslag uansett.
         self._base_prices = load_base_prices(
             os.path.join(constants.DATA_DIR, "commodities.json")
         )
-        # RNG for drift/noise på ikke-Tortuga-havner. Tortugas Market har
-        # sin egen intern RNG.
-        self._ports_rng = random.Random()
-        # Cache port_ids (stabil rekkefølge, Tortuga først).
+        # Cache port_ids (stabil rekkefølge, current port først).
         self._port_ids = port_config.get_all_port_ids()
 
-        # HUD (oeverst venstre: sted / gull / dag / bek-drift).
+        # HUD (øverst venstre: sted / gull / dag / bek-drift).
         # DEV-markør nederst til høyre aktiveres via dev-mode-flagg.
         from systems.dev_mode import is_dev_mode
         self._hud = Hud(
             font,
-            place="Tortuga",
+            place=port.name,
             gold=state.player_state.gold,
             day=state.world_state.clock.day,
             pitch_per_day=state.pitch_lake_state.production_per_day,
@@ -223,11 +222,14 @@ class VillageScene(BaseScene):
             dev_mode=is_dev_mode(),
         )
 
-        # Partikler: taake paa gata + ildfluer rundt tavernaen.
-        # Tavernaens "levende midt" ligger litt foran doera og over gulvet.
+        # Partikler: tåke på gata + ildfluer rundt tavernaen.
+        # Tavernaens "levende midt" ligger litt foran døra og over gulvet.
         self._particles = ParticleSystem(
-            tavern_center=(TAVERN_X + TAVERN_W / 2, GROUND_TOP_Y - 22),
-            world_width=constants.WORLD_WIDTH,
+            tavern_center=(
+                tavern.x + tavern.w / 2,
+                self._buildings.ground_top_y - 22,
+            ),
+            world_width=port.world_width,
         )
 
         # Overlay (børs) — None naar lukket
@@ -245,7 +247,7 @@ class VillageScene(BaseScene):
 
         # Render-komposisjon (backdrops + celestial + parallax + entiteter +
         # lys + partikler + hint)
-        self._renderer = VillageRenderer(
+        self._renderer = PortVillageRenderer(
             backdrops=self._backdrops,
             foregrounds=self._foregrounds,
             parallax_renderer=parallax_renderer,
@@ -271,9 +273,9 @@ class VillageScene(BaseScene):
     # --- Input ---
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        # Nar borsen er aapen konsumerer overlayet all input.
+        # Når børsen er åpen konsumerer overlayet all input.
         if self._overlay is not None:
-            self._overlay.handle_event(event)
+            self._overlay.handle_event(event, self._current_market_state())
             return
         if event.type == pygame.KEYDOWN:
             if event.key in constants.KEY_MENU:
@@ -294,18 +296,31 @@ class VillageScene(BaseScene):
     def _player_can_interact_with_exchange(self) -> bool:
         player_center_x = self._player.x + self._player.width / 2
         return (
-            abs(player_center_x - EXCHANGE_CENTER_X) < constants.INTERACTION_DISTANCE
+            abs(player_center_x - (self._buildings.exchange.x + self._buildings.exchange.w / 2))
+            < constants.INTERACTION_DISTANCE
         )
 
     def _open_exchange(self) -> None:
         # Slipp eventuelle holdte tastetrykk slik at spilleren ikke fortsetter
-        # aa gaa naar overlayet lukkes.
+        # å gå når overlayet lukkes.
         self._player.press(0)
         self._overlay = ExchangeOverlay(
-            self._font, self._market, self._state, toasts=self._toasts
+            self._font, self._market, self._state,
+            toasts=self._toasts, port_name=self._port.name,
         )
-        # Autosave ved aapning slik at overgang til bors alltid kan trygges
+        # Autosave ved åpning slik at overgang til børs alltid kan trygges
         self.autosave()
+
+    def _current_market_state(self) -> MarketState:
+        """Hent MarketState for havnen scenen er i nå.
+
+        Passes per call til ExchangeOverlay (ingen __init__-lagring av
+        market_state — C4-direktiv). Når C5+ legger til havn-bytte, vil
+        overlayet automatisk følge aktiv havn.
+        """
+        return self._state.economy_state.markets.setdefault(
+            self._port.id, MarketState()
+        )
 
     # --- Logikk ---
 
@@ -315,11 +330,9 @@ class VillageScene(BaseScene):
         # slik at "siste dag" av et regime fortsatt har sin retnings-
         # effekt; regime_manager.on_new_day etterpå for overgang.
         #
-        # Tortuga: Market.on_dawn (som holder aktiv Commodity-katalog for
-        # rendering) + sync til state.markets["tortuga"].
-        # Ikke-Tortuga: apply_regime_drift_to_market_state direkte på
-        # state.markets[pid] (ingen Market-klasse per havn — se tech-debt-
-        # note på Market i economy.py).
+        # Market er stateless (C4): samme instans opererer på hver havns
+        # MarketState via parameter. `_tick_all_ports_dawn` itererer
+        # over port_ids og kjører on_dawn per havn.
         curr_day = self._state.world_state.clock.day
         if curr_day != self._last_seen_day:
             days_passed = max(0, curr_day - self._last_seen_day)
@@ -348,10 +361,10 @@ class VillageScene(BaseScene):
         )
 
         if self._overlay is not None:
-            self._overlay.update(dt)
+            self._overlay.update(dt, self._current_market_state())
             if self._overlay.want_close:
                 self._overlay = None
-                # Autosave ogsaa ved lukking slik at brukeren kan quit-e
+                # Autosave også ved lukking slik at brukeren kan quit-e
                 # umiddelbart etter handel uten risiko for tap.
                 self.autosave()
             return
@@ -362,43 +375,23 @@ class VillageScene(BaseScene):
     def _tick_all_ports_dawn(self) -> None:
         """Prosesser daggry-overgang for alle 4 havner.
 
-        Tortuga:
-        - `Market.on_dawn(regimes)` oppdaterer aktiv Commodity-katalog
-          (som rendres i exchange og brukes av buy/sell).
-        - `regime_manager.on_new_day(regimes)` tikker regime-klokken.
-        - `sync_market_to_state` kopierer Market → state.markets["tortuga"]
-          slik at save/observed leser fersk data.
-
-        Ikke-Tortuga:
-        - `apply_regime_drift_to_market_state` muterer state.markets[pid]
-          direkte (ingen Market-klasse; bias-initialisert fra port_config).
-        - `regime_manager.on_new_day` på state.regimes[pid].
+        Market er stateless (C4): samme Market-instans kjører `on_dawn`
+        mot hver havns MarketState i tur. Regime-manager oppdateres per
+        havns regime-dict.
 
         Dev-mode: logger én linje per havn med regime-snapshot etter
         overgang.
         """
         econ = self._state.economy_state
-        regimes_tortuga = econ.regimes.setdefault("tortuga", {})
-        markets_tortuga = econ.markets.setdefault("tortuga", MarketState())
         day = self._state.world_state.clock.day
         dev = _is_dev_mode()
 
-        # Tortuga — via Market-klassen + sync etter mutasjon
-        self._market.on_dawn(regimes_tortuga)
-        self._regime_manager.on_new_day(regimes_tortuga)
-        sync_market_to_state(self._market, markets_tortuga)
-        if dev:
-            self._log_port_regimes("tortuga", regimes_tortuga, day)
-
-        # Ikke-Tortuga — pure drift på state
         for port_id in self._port_ids:
-            if port_id == "tortuga":
-                continue
             market_state = econ.markets.setdefault(port_id, MarketState())
             port_regimes = econ.regimes.setdefault(port_id, {})
-            apply_regime_drift_to_market_state(
-                market_state, port_regimes, self._base_prices, self._ports_rng
-            )
+            # Market.on_dawn muterer market_state (inkluderer price,
+            # price_history, tick_id) og tikker regimer.
+            self._market.on_dawn(market_state, port_regimes)
             self._regime_manager.on_new_day(port_regimes)
             if dev:
                 self._log_port_regimes(port_id, port_regimes, day)
@@ -471,32 +464,22 @@ class VillageScene(BaseScene):
         self._hud.draw(surface)
         self._toasts.draw(surface)
         if self._overlay is not None:
-            self._overlay.draw(surface)
+            self._overlay.draw(surface, self._current_market_state())
 
     # --- Lifecycle / save ---
 
     def _sync_state(self) -> None:
-        """Kopier gjeldende scene-tilstand inn i GameState for lagring.
+        """Kopier scene-lokal spiller-posisjon inn i GameState for lagring.
 
         player_state.position_x er den eneste koordinaten som lagres;
-        y gjenopprettes fra scene-konstant (GROUND_TOP_Y - 20) på
-        on_enter. Dette kan bli per-havn i C4.
+        y gjenopprettes fra port_config.buildings.ground_top_y i on_enter.
 
-        Tortuga-markedet synkes også her som defensiv fallback — det
-        synkes allerede eksplisitt etter hver Market.on_dawn i
-        `_tick_all_ports_dawn`, men sync-på-save beskytter mot
-        scenarier der state har gått ut av synk uten dawn (bør ikke
-        skje, men billig forsikring).
+        Market-tilstand trenger IKKE sync i C4+: Market er stateless og
+        opererer direkte på state.economy_state.markets[port_id]. Gull og
+        inventar muteres direkte av ExchangeOverlay. world_state.clock
+        oppdateres kontinuerlig av main.run() via clock.update(dt).
         """
         self._state.player_state.position_x = float(self._player.x)
-        tortuga_market = self._state.economy_state.markets.setdefault(
-            "tortuga", MarketState()
-        )
-        sync_market_to_state(self._market, tortuga_market)
-        # gold og inventory er allerede lagret i self._state.player_state –
-        # direkte mutert av ExchangeOverlay, saa ingen ekstra sync der.
-        # world_state.clock oppdateres kontinuerlig av main.run() via
-        # clock.update(dt), saa ingen sync her.
 
     def autosave(self) -> None:
         """Synk tilstand og skriv save-fil. Kalles fra main ved QUIT og
@@ -511,21 +494,20 @@ class VillageScene(BaseScene):
     ) -> None:
         """Plasser spilleren og sentrer kamera.
 
-        - `from_scene=None` + player_state.position_x er default (320.0):
-          fersk spillstart → PLAYER_START_X.
+        - `from_scene=None` + player_state.position_x er GameState-default
+          (320.0): fersk spillstart → buildings.player_start_x for havnen.
         - Ellers: player_state.position_x er autoritativ (lagret fra
-          forrige oekt eller synket av forrige scene ved bytte).
+          forrige økt eller synket av forrige scene ved bytte).
 
-        Y-koordinaten gjenopprettes fra scene-konstant (GROUND_TOP_Y).
-        Per-havn bakke-høyde kan bli variabel i C4 når bygnings-
-        plasseringer flytter til data/ports.json.
+        Y-koordinaten gjenopprettes fra `port.buildings.ground_top_y` —
+        per-havn bakke-høyde (C4).
         """
         GAMESTATE_DEFAULT_X = 320.0
         if (
             from_scene is None
             and game_state.player_state.position_x == GAMESTATE_DEFAULT_X
         ):
-            self._player.x = PLAYER_START_X
+            self._player.x = float(self._buildings.player_start_x)
         else:
             self._player.x = float(game_state.player_state.position_x)
         # Klamp mot lovlig intervall (guard for korrupte saves)
@@ -533,6 +515,10 @@ class VillageScene(BaseScene):
             self._player.x = self._player_min_x
         elif self._player.x > self._player_max_x:
             self._player.x = self._player_max_x
+        # Y-koordinat fra per-havn ground_top_y
+        self._player.y = float(
+            self._buildings.ground_top_y - _PLAYER_SPRITE_HEIGHT
+        )
         self._center_camera_on_player()
 
     def on_exit(self, to_scene: str | None = None) -> None:

@@ -24,9 +24,10 @@ import constants
 import pygame
 
 from main import PlaceholderScene, _load_font
+from config import port_config
 from scenes.parallax_test import ParallaxTestScene
-from scenes.village import VillageScene
-from systems.save import GameState
+from scenes.port_village import PortVillageScene
+from state import GameState
 
 
 log = logging.getLogger("benchmark")
@@ -39,7 +40,9 @@ def _build_scene(name: str, font: pygame.font.Font, state: GameState):
     if name == "parallax_test":
         return ParallaxTestScene(font)
     if name == "village":
-        return VillageScene(font, state)
+        return PortVillageScene(
+            font, state, port_config.get(state.world_state.current_port)
+        )
     raise ValueError(f"Ukjent scene: {name}")
 
 

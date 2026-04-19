@@ -1,15 +1,16 @@
-"""Bake-funksjoner for Tortuga-landsbyens bygninger og gateplan.
+"""Generiske bake-funksjoner for havn-bygninger og gateplan.
 
-Trekket ut av `scenes/village.py` i Fase 2A / Commit 1. Alt her er rene
-bake-hjelpere som kalles én gang ved scene-innlasting for å produsere et
-pre-rendret gameplay-lag. Ingen state, ingen per-frame-arbeid.
+Refaktorert fra `scenes/village_buildings.py` i Fase 2B C4: ingen
+hardkodede posisjons-konstanter lenger. Alle bake-funksjoner tar
+x/y/w/h (og ground_top_y der relevant) som argumenter. Konfig-drevne
+verdier kommer fra `config.port_config.PortConfig.buildings`.
 
-Komposisjon i verdensrommet (1600 px bredt):
+Tortugas komposisjon (som referanse):
 
     world x:  0 .. 20   | 20 .. 220  | 220 .. 1380 | 1380 .. 1580 | 1580 ..
               kant      | TAVERNA    | ÅPEN GATE   | BØRSHUS      | kant
 
-Vertikalt:
+Vertikalt (for ground_top_y=340):
     y = 0 .. 208    bakgrunn (himmel + måne + stjerner)  – separat lag
     y = 208 .. 340  bygnings-sone (tavernaen og børshuset okkluderer
                     sjø/horisont fra bakgrunnen)
@@ -21,53 +22,43 @@ from __future__ import annotations
 import pygame
 
 import constants
+from config.port_config import PortConfig
 
 
-# Gateplan-tall (i intern render-oppløsning)
-GROUND_TOP_Y = 340
-GROUND_BOTTOM_Y = 360
-
-# Bygningsposisjoner (verdens-x, topp-y, bredde, høyde)
-TAVERN_X = 20
-TAVERN_Y = 258
-TAVERN_W = 200
-TAVERN_H = GROUND_TOP_Y - TAVERN_Y  # 82
-
-EXCHANGE_X = 1380
-EXCHANGE_Y = 248
-EXCHANGE_W = 200
-EXCHANGE_H = GROUND_TOP_Y - EXCHANGE_Y  # 92
-
-# Midt-x på Børshuset, brukes for INTERACTION_DISTANCE-sjekk på E.
-EXCHANGE_CENTER_X = EXCHANGE_X + EXCHANGE_W / 2  # 1480
-
-# Colorkey for transparente områder på gameplay-laget.
+#: Colorkey for transparente områder på gameplay-laget. Fortsatt i bruk
+#: her (gameplay-lag som har store transparente regioner over bygningene);
+#: IKKE brukt på fg-laget som beholder SRCALPHA per C3b-funn.
 COLORKEY = (255, 0, 255)
 
 
-def _bake_ground(surface: pygame.Surface) -> None:
+def _bake_ground(surface: pygame.Surface, ground_top_y: int) -> None:
     """Mørkt tre-/brostein-belte langs hele verdens bredde."""
     width = surface.get_width()
+    ground_bottom_y = constants.RENDER_HEIGHT
     # Hovedstripe (mørkest)
     pygame.draw.rect(
         surface,
         constants.COLOR_WOOD_DARKEST,
-        (0, GROUND_TOP_Y, width, GROUND_BOTTOM_Y - GROUND_TOP_Y),
+        (0, ground_top_y, width, ground_bottom_y - ground_top_y),
     )
     # Lysere midt-stripe (litt mindre, sentrert) for variasjon
     pygame.draw.rect(
         surface,
         constants.COLOR_WOOD_DARK,
-        (200, GROUND_TOP_Y + 2, width - 400, GROUND_BOTTOM_Y - GROUND_TOP_Y - 2),
+        (200, ground_top_y + 2, width - 400, ground_bottom_y - ground_top_y - 2),
     )
     # Små bjelke-detaljer (spare prikker)
     for x in range(260, width - 260, 80):
         pygame.draw.rect(
-            surface, constants.COLOR_WOOD_MID, (x, GROUND_TOP_Y + 4, 8, 1)
+            surface, constants.COLOR_WOOD_MID, (x, ground_top_y + 4, 8, 1)
         )
 
 
-def _bake_tavern(surface: pygame.Surface, x: int, y: int, w: int, h: int) -> None:
+def _bake_tavern(
+    surface: pygame.Surface,
+    x: int, y: int, w: int, h: int,
+    ground_top_y: int,
+) -> None:
     """Tavernaen: varmt tre med 2 opplyste vinduer, dør med varm gulv-glød."""
     # Veggen
     pygame.draw.rect(surface, constants.COLOR_WOOD_DARK, (x, y, w, h))
@@ -120,7 +111,7 @@ def _bake_tavern(surface: pygame.Surface, x: int, y: int, w: int, h: int) -> Non
     # Dør (åpen dør: varm glød-rektangel "fra innsiden")
     door_w, door_h = 24, 36
     door_x = x + w // 2 - door_w // 2
-    door_y = GROUND_TOP_Y - door_h
+    door_y = ground_top_y - door_h
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARKEST, (door_x, door_y, door_w, door_h)
     )
@@ -132,11 +123,15 @@ def _bake_tavern(surface: pygame.Surface, x: int, y: int, w: int, h: int) -> Non
         (door_x + 6, door_y + 10, door_w - 12, door_h - 14),
     )
     # Svak varm "teppe" av lys på gaten rett foran døren (baked, ikke dynamisk)
-    glow_rect = pygame.Rect(door_x - 8, GROUND_TOP_Y, door_w + 16, 4)
+    glow_rect = pygame.Rect(door_x - 8, ground_top_y, door_w + 16, 4)
     pygame.draw.rect(surface, constants.COLOR_EMBER, glow_rect)
 
 
-def _bake_exchange(surface: pygame.Surface, x: int, y: int, w: int, h: int) -> None:
+def _bake_exchange(
+    surface: pygame.Surface,
+    x: int, y: int, w: int, h: int,
+    ground_top_y: int,
+) -> None:
     """Børshuset: kald stein med 3 vinduer, 4 søyler og trekantgavl."""
     # Base
     pygame.draw.rect(surface, constants.COLOR_STONE_DARK, (x, y + 10, w, h - 10))
@@ -197,26 +192,43 @@ def _bake_exchange(surface: pygame.Surface, x: int, y: int, w: int, h: int) -> N
     # Stor dør (midtstilt)
     door_w, door_h = 26, 40
     door_x = x + w // 2 - door_w // 2
-    door_y = GROUND_TOP_Y - door_h
+    door_y = ground_top_y - door_h
     pygame.draw.rect(surface, constants.COLOR_STONE_DARKEST, (door_x, door_y, door_w, door_h))
     pygame.draw.rect(surface, constants.COLOR_STONE_MID, (door_x + 3, door_y + 3, door_w - 6, door_h - 6))
     # Svak kald "spill-over"-glød på trapp
     pygame.draw.rect(
         surface, constants.COLOR_STONE_LIGHT,
-        (door_x - 4, GROUND_TOP_Y, door_w + 8, 3),
+        (door_x - 4, ground_top_y, door_w + 8, 3),
     )
 
 
-def build_village_gameplay_layer() -> pygame.Surface:
-    """Pre-render gateplan + bygninger for hele verdens bredde.
+def build_port_gameplay_layer(port_config: PortConfig) -> pygame.Surface:
+    """Pre-render gateplan + bygninger for hele verdens bredde i en havn.
+
+    Leser layout fra `port_config.buildings`. Kaster ValueError hvis havnen
+    ikke har buildings-felt ennå (ikke-Tortuga før C6).
 
     Returnerer en `convert()`-et Surface med COLORKEY satt slik at
     transparente områder (himmel over bygningene) vises gjennom.
     """
-    surf = pygame.Surface((constants.WORLD_WIDTH, constants.RENDER_HEIGHT)).convert()
+    if port_config.buildings is None:
+        raise ValueError(
+            f"Port '{port_config.id}' has no buildings layout — "
+            f"cannot build gameplay layer"
+        )
+    b = port_config.buildings
+    surf = pygame.Surface(
+        (port_config.world_width, constants.RENDER_HEIGHT)
+    ).convert()
     surf.fill(COLORKEY)
-    _bake_ground(surf)
-    _bake_tavern(surf, TAVERN_X, TAVERN_Y, TAVERN_W, TAVERN_H)
-    _bake_exchange(surf, EXCHANGE_X, EXCHANGE_Y, EXCHANGE_W, EXCHANGE_H)
+    _bake_ground(surf, b.ground_top_y)
+    _bake_tavern(
+        surf, b.tavern.x, b.tavern.y, b.tavern.w, b.tavern.h,
+        b.ground_top_y,
+    )
+    _bake_exchange(
+        surf, b.exchange.x, b.exchange.y, b.exchange.w, b.exchange.h,
+        b.ground_top_y,
+    )
     surf.set_colorkey(COLORKEY)
     return surf

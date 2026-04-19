@@ -1,14 +1,15 @@
-"""Render-komposisjon for Tortuga-landsbyen.
+"""Render-komposisjon for havn-scener.
 
-`VillageRenderer` eier to sett backdrop-varianter (himmel og fjell/hav),
+`PortVillageRenderer` eier to sett backdrop-varianter (himmel og fjell/hav),
 parallax-laget (gameplay + parallax-forgrunn), Celestial-overlay, og
 hint-indikatoren. Utfører tegnings-sekvensen for verdens-laget (alt
 unntatt HUD og børs-overlay).
 
-Trukket ut av `scenes/village.py` i Fase 2A / Commit 1. Utvidet i
-Commit 5B (dag-natt-rendering med cross-fade + Celestial-overlay) og
-Commit 7.2 (split av backdrop i himmel-lag og fjell/hav-lag for å få
-riktig render-rekkefølge rundt celestial).
+Trukket ut av `scenes/village.py` i Fase 2A / Commit 1 som VillageRenderer.
+Utvidet i Commit 5B (dag-natt-rendering med cross-fade + Celestial-overlay)
+og Commit 7.2 (split av backdrop i himmel-lag og fjell/hav-lag for å få
+riktig render-rekkefølge rundt celestial). Omdøpt til PortVillageRenderer
+i Fase 2B C4 samtidig med at scenen ble parameterisert over PortConfig.
 
 Sekvens (per frame):
     1. Himmel-lag cross-fade (opakt; gradient + stjerner)
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
 _BACKDROP_PARALLAX_SPEED = 0.2
 
 
-class VillageRenderer:
+class PortVillageRenderer:
     """Komposisjon av backdrop, celestial, parallax-lag, entiteter, lys,
     partikler og hint.
 
@@ -71,9 +72,9 @@ class VillageRenderer:
         self._foregrounds: list[tuple[float, pygame.Surface]] = list(
             foregrounds
         )
-        assert self._backdrops, "VillageRenderer trenger minst én backdrop"
+        assert self._backdrops, "PortVillageRenderer trenger minst én backdrop"
         assert self._foregrounds, (
-            "VillageRenderer trenger minst ett foreground-lag"
+            "PortVillageRenderer trenger minst ett foreground-lag"
         )
         assert len(self._backdrops) == len(self._foregrounds), (
             "Backdrops og foregrounds må ha samme antall varianter"

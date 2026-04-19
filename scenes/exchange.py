@@ -26,8 +26,9 @@ import pygame
 
 import constants
 from entities.commodity import InventoryItem, compute_trend
-from systems import balance as _balance
 from state import GameState
+from state.market_state import MarketState
+from systems import balance as _balance
 from systems.economy import Market
 from ui.toast import Toast, ToastQueue
 
@@ -74,7 +75,14 @@ def _build_panel_surface() -> pygame.Surface:
 
 
 class ExchangeOverlay:
-    """UI-overlay for kjop/salg."""
+    """UI-overlay for kjøp/salg.
+
+    Refactored i Fase 2B C4: tar IKKE MarketState i __init__.
+    `market_state` passes per call til `update`, `draw`, `handle_event`.
+    Dette gjør at samme overlay følger havn-bytte transparent når C5+
+    legger til scene-bytter — overlayet binder seg aldri til en spesifikk
+    havns MarketState-referanse.
+    """
 
     def __init__(
         self,
@@ -82,10 +90,14 @@ class ExchangeOverlay:
         market: Market,
         state: GameState,
         toasts: ToastQueue | None = None,
+        port_name: str = "Tortuga",
     ) -> None:
         self._font = font
         self._market = market
         self._state = state
+        self._port_name = port_name
+        # Catalog-iterasjon er immutable (base_price + navn); aktiv pris
+        # leses fra market_state per call.
         self._commodities = market.commodities
         self._n = len(self._commodities)
         self._selected = 0
@@ -157,7 +169,9 @@ class ExchangeOverlay:
 
     # --- Input ---
 
-    def handle_event(self, event: pygame.event.Event) -> None:
+    def handle_event(
+        self, event: pygame.event.Event, market_state: MarketState
+    ) -> None:
         if event.type != pygame.KEYDOWN:
             return
         key = event.key
@@ -171,13 +185,14 @@ class ExchangeOverlay:
         elif key in (pygame.K_DOWN, pygame.K_s):
             self._selected = (self._selected + 1) % self._n
         elif key in (pygame.K_RIGHT, pygame.K_d):
-            self._buy(amount)
+            self._buy(amount, market_state)
         elif key in (pygame.K_LEFT, pygame.K_a):
-            self._sell(amount)
+            self._sell(amount, market_state)
 
-    def _buy(self, amount: int) -> None:
+    def _buy(self, amount: int, market_state: MarketState) -> None:
         cid = self._commodities[self._selected].id
         new_gold, new_inv, bought = self._market.buy(
+            market_state,
             cid,
             amount,
             self._state.player_state.gold,
@@ -194,7 +209,7 @@ class ExchangeOverlay:
         # bought == 0: diagnoser hvorfor og gi feilhint via toast
         if self._toasts is None:
             return
-        price = self._market.buy_price(cid)
+        price = self._market.buy_price(market_state, cid)
         fee = _balance.get().economy.transaction_fee
         if self._state.player_state.gold < price + fee:
             # Gullet rekker ikke til én enhet + gebyr
@@ -205,10 +220,14 @@ class ExchangeOverlay:
         # Andre årsaker (cargo fullt) kommuniseres allerede via "Last: X/Y"-
         # indikatoren og dimmet seleksjonsramme – ingen toast nødvendig.
 
-    def _sell(self, amount: int) -> None:
+    def _sell(self, amount: int, market_state: MarketState) -> None:
         cid = self._commodities[self._selected].id
         new_gold, new_inv, sold = self._market.sell(
-            cid, amount, self._state.player_state.gold, self._state.player_state.inventory
+            market_state,
+            cid,
+            amount,
+            self._state.player_state.gold,
+            self._state.player_state.inventory,
         )
         if sold > 0:
             self._state.player_state.gold = new_gold
@@ -243,8 +262,12 @@ class ExchangeOverlay:
 
     # --- Update ---
 
-    def update(self, dt: float) -> None:
-        """Ingen tidsdrevet logikk i overlayet selv. Markedet ticker i village."""
+    def update(self, dt: float, market_state: MarketState) -> None:
+        """Ingen tidsdrevet logikk i overlayet selv. Markedet tikker i
+        port_village via Market.on_dawn. `market_state` passes her for
+        symmetri med draw/handle_event — ubrukt p.t.
+        """
+        del dt, market_state  # ubrukt
 
     # --- Cache-invalidering ---
 
@@ -253,19 +276,19 @@ class ExchangeOverlay:
         if self._title_day != day:
             self._title_day = day
             self._title_surf = self._font.render(
-                f"Tortuga Børs \u2014 Dag {day}",
+                f"{self._port_name} Børs \u2014 Dag {day}",
                 False,
                 constants.COLOR_MOON_CORE,
             ).convert_alpha()
 
-    def _ensure_prices(self) -> None:
-        tid = self._market.tick_id
+    def _ensure_prices(self, market_state: MarketState) -> None:
+        tid = market_state.tick_id
         if self._price_tick_id == tid:
             return
         self._price_tick_id = tid
         for c in self._commodities:
-            buy_p = self._market.buy_price(c.id)
-            sell_p = self._market.sell_price(c.id)
+            buy_p = self._market.buy_price(market_state, c.id)
+            sell_p = self._market.sell_price(market_state, c.id)
             self._price_surfs[c.id] = self._font.render(
                 f"{buy_p:>3d} / {sell_p:>3d}",
                 False,
@@ -304,17 +327,19 @@ class ExchangeOverlay:
             f"Gull: {g} d.", False, constants.COLOR_MOON_CORE
         ).convert_alpha()
 
-    def _ensure_trends(self) -> None:
+    def _ensure_trends(self, market_state: MarketState) -> None:
         """Pre-render trend-pil per vare. Oppdateres én gang per daggry
-        (når `market.tick_id` endrer seg). Varer med < 3 dager historikk
-        får `None` (ingen blit).
+        (når `market_state.tick_id` endrer seg). Varer med < 3 dager
+        historikk får `None` (ingen blit).
         """
-        tid = self._market.tick_id
+        tid = market_state.tick_id
         if self._trend_tick_id == tid:
             return
         self._trend_tick_id = tid
         for c in self._commodities:
-            arrow = compute_trend(c.price_history)
+            cm = market_state.commodities.get(c.id)
+            history = cm.price_history if cm is not None else []
+            arrow = compute_trend(history)
             if not arrow:
                 self._trend_surfs[c.id] = None
                 continue
@@ -340,13 +365,13 @@ class ExchangeOverlay:
 
     # --- Rendering ---
 
-    def draw(self, surface: pygame.Surface) -> None:
+    def draw(self, surface: pygame.Surface, market_state: MarketState) -> None:
         self._ensure_title()
-        self._ensure_prices()
+        self._ensure_prices(market_state)
         self._ensure_qty()
         self._ensure_gold()
         self._ensure_cargo()
-        self._ensure_trends()
+        self._ensure_trends(market_state)
 
         surface.blit(self._panel, (PANEL_X, PANEL_Y))
         assert self._title_surf is not None

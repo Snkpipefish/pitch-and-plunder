@@ -17,6 +17,13 @@
         "rum":     {"rising": 0.33, "stable": 0.34, "falling": 0.33},
         "tobacco": {"rising": 0.33, "stable": 0.34, "falling": 0.33},
         "pitch":   {"rising": 0.40, "stable": 0.35, "falling": 0.25}
+      },
+      "buildings": {
+        "ground_top_y": 340,
+        "player_start_x": 1340,
+        "tavern":   {"x": 20,   "y": 258, "w": 200, "h": 82},
+        "exchange": {"x": 1380, "y": 248, "w": 200, "h": 92},
+        "npcs": {"hawkins": 1470}
       }
     },
     "port_royal": {

@@ -65,11 +65,41 @@ class CelestialConfig:
 
 
 @dataclass(frozen=True)
+class BuildingPlacement:
+    """Rektangulær bygningsplassering (verdens-koordinater)."""
+    x: int
+    y: int
+    w: int
+    h: int
+
+
+@dataclass(frozen=True)
+class PortBuildings:
+    """Per-havn scene-layout: bakkehøyde, bygninger, spiller-start, NPC-er.
+
+    Fase 2B C4: flyttet fra hardkodede konstanter i `scenes/village_buildings.py`.
+    Tortuga har layout i C4; Port Royal, Havana, Nassau får layout i C6
+    når stub-havnene aktiveres.
+    """
+    #: Y-pixel der bakken starter (spiller-føttene hviler på denne).
+    ground_top_y: int
+    #: Verdens-x der spilleren spawn-es ved fersk start i havnen.
+    player_start_x: int
+    tavern: BuildingPlacement
+    exchange: BuildingPlacement
+    #: Verdens-x for hver NPC (id → x). Y utledes fra ground_top_y.
+    npcs: dict[str, int]
+
+
+@dataclass(frozen=True)
 class PortConfig:
     """Immutabel struktur per havn lastet fra ports.json.
 
     Felter som ikke brukes ennå (scene_class, world_map_position osv.)
     parses likevel og lagres for commits som kommer (C3/C4/C5).
+
+    `buildings` er None for havner uten layout ennå (C4: Port Royal,
+    Havana, Nassau). C6 legger til deres buildings-felt.
     """
     id: str
     name: str
@@ -79,6 +109,7 @@ class PortConfig:
     celestial: CelestialConfig
     price_bias: dict[str, float]
     regime_weights: dict[str, dict[str, float]]
+    buildings: PortBuildings | None = None
 
 
 # --- Parsing ---
@@ -177,6 +208,67 @@ def _parse_regime_weights(
     return result
 
 
+def _parse_building_placement(
+    raw: Any, port_id: str, building_name: str
+) -> BuildingPlacement:
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"port '{port_id}': buildings.{building_name} må være et objekt"
+        )
+    try:
+        return BuildingPlacement(
+            x=int(raw["x"]), y=int(raw["y"]),
+            w=int(raw["w"]), h=int(raw["h"]),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"port '{port_id}': buildings.{building_name} ugyldig: {exc}"
+        ) from exc
+
+
+def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
+    """Parse buildings-blokken. None hvis feltet mangler eller er null
+    (havn uten layout ennå).
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"port '{port_id}': buildings må være et objekt eller null"
+        )
+    try:
+        ground_top_y = int(raw["ground_top_y"])
+        player_start_x = int(raw["player_start_x"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"port '{port_id}': buildings mangler/ugyldig felt: {exc}"
+        ) from exc
+    tavern = _parse_building_placement(raw.get("tavern"), port_id, "tavern")
+    exchange = _parse_building_placement(
+        raw.get("exchange"), port_id, "exchange"
+    )
+    npcs_raw = raw.get("npcs", {})
+    if not isinstance(npcs_raw, dict):
+        raise ValueError(
+            f"port '{port_id}': buildings.npcs må være et objekt"
+        )
+    npcs: dict[str, int] = {}
+    for npc_id, x_raw in npcs_raw.items():
+        try:
+            npcs[str(npc_id)] = int(x_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': buildings.npcs[{npc_id!r}] ugyldig: {exc}"
+            ) from exc
+    return PortBuildings(
+        ground_top_y=ground_top_y,
+        player_start_x=player_start_x,
+        tavern=tavern,
+        exchange=exchange,
+        npcs=npcs,
+    )
+
+
 def _parse_port(port_id: str, raw: Any) -> PortConfig:
     if not isinstance(raw, dict):
         raise ValueError(f"port '{port_id}': må være et objekt")
@@ -197,6 +289,7 @@ def _parse_port(port_id: str, raw: Any) -> PortConfig:
         celestial=_parse_celestial(raw.get("celestial"), port_id),
         price_bias=_parse_price_bias(raw.get("price_bias"), port_id),
         regime_weights=_parse_regime_weights(raw.get("regime_weights"), port_id),
+        buildings=_parse_buildings(raw.get("buildings"), port_id),
     )
 
 

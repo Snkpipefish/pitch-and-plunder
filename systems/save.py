@@ -47,7 +47,7 @@ from state.ship_state import ShipState
 from state.voyage_state import VoyageState
 from state.world_state import WorldState
 from systems import balance as _balance
-from systems.economy import init_market_for_port, load_base_prices
+from systems.economy import init_market_for_port, load_base_prices  # noqa: F401
 from systems.game_clock import GameClock
 from systems.regime_manager import (
     REGIMES,
@@ -423,7 +423,11 @@ def _parse_market_state(raw: Any) -> MarketState:
         cid: _parse_commodity_market(cdata)
         for cid, cdata in raw_commodities.items()
     }
-    return MarketState(commodities=commodities)
+    try:
+        tick_id = int(raw.get("tick_id", 0))
+    except (TypeError, ValueError):
+        tick_id = 0
+    return MarketState(commodities=commodities, tick_id=tick_id)
 
 
 def _parse_observed(raw: Any) -> dict[str, dict[str, ObservedPrice]]:

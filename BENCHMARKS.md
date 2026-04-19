@@ -630,3 +630,62 @@ Kompatibilitets-aliaser `MOON_WORLD_X`/`SUN_WORLD_X_DAWN`/`SUN_WORLD_X_DUSK`
 peker på TORTUGA_CELESTIAL-felter slik at eksisterende assertions
 fortsatt refererer samme verdier.
 
+## Fase 2B Commit C3b — FORKASTET
+
+Colorkey fg-optimaliseringen ble forkastet etter mikrobenchmark viste
++5.9 ms regresjon i stedet for forventet −1.0 til −1.5 ms. Se
+`PHASE_2A_RETROSPECTIVE.md`-addendum for full diagnose. Ingen endring
+i ytelses-tall fra C3a.
+
+## Fase 2B Commit C4 — PortVillageScene + stateless Market
+
+Scene parameterisert over PortConfig; Market refaktorert til stateless
+(opererer på MarketState-parameter). Tortugas bygnings-layout flyttet
+fra hardkodede konstanter til `data/ports.json` under `buildings`-felt.
+
+### Resultater (målmaskin T4200 / GM45, SDL_VIDEODRIVER ikke satt)
+
+3 kjøringer per scene, median rapportert.
+
+| Scene | C3a | C4 | Delta |
+|-------|-----|-----|-------|
+| Village (lukket) | 4.712 ms | 4.660 ms (median 3×) | −0.05 ms |
+| Village (overlay åpen) | 6.161 ms | 6.410 ms (median 3×) | +0.25 ms |
+
+Lukket-scenen uendret innenfor støy. Overlay-scenen viser +0.25 ms;
+tre kjøringer spriker fra 6.28 til 6.48 ms, og run-to-run-varians alene
+er ~0.2 ms. Sett mot C2-baseline (6.29 ms overlay) er avviket +0.12 ms
+— fortsatt innenfor normal drift. Mikroskopisk overhead fra ekstra
+MarketState-parameter og dict-lookup er forventet.
+
+### Tester: 240 → 252 (+12, netto etter sletting)
+
+- Slettet `tests/test_market_sync.py` (7): sync-kontrakten er borte med
+  stateless Market — ingen dobbelt-representasjon å synkronisere.
+- Rewrite `tests/test_market.py` (~25 tester): alle Market-kall har ny
+  signatur (market_state som parameter).
+- Rewrite `tests/test_market_buy.py` (~19 tester): samme.
+- `tests/test_port_config.py` (+11): buildings-parsing, validering,
+  None for havner uten layout, feil-paths.
+- `tests/test_port_village_scene.py` (ny, 9): scene-init, buildings-
+  validering med ValueError, player-plassering fra buildings, NPC-
+  posisjonering, exchange-interaksjons-avstand, current_market_state.
+
+### Market-refactor (endelig utløsning av C2 tech-debt)
+
+- Market er stateless katalog — base_prices + navn + rekkefølge.
+- MarketState får `tick_id: int = 0` (flyttet fra Market). Bak-kompatibel
+  default ved parse av v5-saves uten feltet.
+- `sync_market_to_state` og `apply_regime_drift_to_market_state` slettet
+  — fusjonert inn i `Market.on_dawn(state, regimes)`.
+- Én Market-instans i PortVillageScene opererer på alle 4 havners
+  MarketState via parameter.
+- ExchangeOverlay tar market_state per call (update/draw/handle_event)
+  — aldri lagret i __init__. Forbereder for havn-bytte i C5+.
+
+### Manuell smoke
+
+Brukerens v4-save migreres v4→v5 via kjeden (log bekrefter), rescue av
+ikke-Tortuga-havner kjører, autosave skriver v5 med full 4-havns-struktur.
+Dev-mode (.devmode) aktiverte F5 hot-reload-hint som forventet.
+

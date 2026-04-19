@@ -37,26 +37,26 @@ PRICE_MAX_MULT = 2.0
 
 
 class Market:
-    """Katalog over varer + tick-logikk for ÉN havn (p.t. Tortuga).
+    """Stateless markedsfunksjoner over vare-katalog.
 
-    Mutasjonspunkter som endrer `self._commodities[cid].current_price`
-    eller `price_history` (og dermed trenger sync til
-    `state.economy_state.markets[port_id]` for at save skal bli konsistent):
-    - `on_dawn(regimes)`: daglig prisdrift
-    - `buy(...)`: ingen pris-endring, bare inventory/gold
-    - `sell(...)`: ingen pris-endring, bare inventory/gold
-    - `clamp_to_price_bounds(cid)`: kalles ved load, pris-rydding
-    - direkte ekstern mutasjon via `market.get(cid).current_price = ...`
-      (brukes av VillageScene.__init__ for å hydrere Market fra state)
+    Refactored i Fase 2B C4: Market holder ikke lenger egen
+    Commodity-katalog med mutable pris-state. Pris-state lever kun i
+    `MarketState.commodities[cid]` (per havn). Market er kun katalog
+    (base_prices + navn + rekkefølge) + logikk (drift-formel, kjøp/salg-
+    kalkyle).
 
-    buy/sell trenger derfor IKKE sync av MarketState, men on_dawn OG
-    ekstern mutasjon gjør det. Caller (VillageScene) må synkronisere
-    eksplisitt — se `sync_market_to_state` nedenfor.
+    Én Market-instans brukes for ALLE havner. `on_dawn/buy/sell/...`
+    tar `state: MarketState` som parameter — samme Market kan operere
+    på Tortugas, Port Royals, Havanas, Nassaus markeder vekselvis.
 
-    Tech-debt: Full refactor til "Market-on-MarketState" (Market som
-    stateless logikk-klasse som opererer på MarketState-parameter)
-    tas i C4 når PortVillageScene-parameterisering uansett tvinger
-    det frem. Frem til da: dobbelt-representasjon med eksplisitt sync.
+    Catalog inneholder:
+    - `base_price` — brukt til pris-klamp og catalog-iterasjon
+    - `name`, `id` — vare-metadata
+    - `volatility` — ubrukt i C4 (legacy-felt), beholdes for evt. fremtid
+
+    UI-caching: `MarketState.tick_id` inkrementeres av `on_dawn`.
+    Eksterne cachere (exchange-overlay) invaliderer rendrede priser når
+    tick_id endrer seg.
     """
 
     def __init__(
@@ -65,11 +65,14 @@ class Market:
         spread: float = DEFAULT_SPREAD,
         rng: random.Random | None = None,
     ) -> None:
-        self._commodities: dict[str, Commodity] = {c.id: c for c in commodities}
+        # Katalog er immutable: vi bruker Commodity kun for base_price+navn,
+        # IKKE som aktiv pris-container. `current_price`/`price_history`-
+        # feltene på Commodity er ignorert her — state fra MarketState
+        # er autoritativt.
+        self._catalog: dict[str, Commodity] = {c.id: c for c in commodities}
         self._order: list[str] = [c.id for c in commodities]
         self._spread = spread
         self._rng = rng or random.Random()
-        self._tick_id: int = 0
 
     @classmethod
     def from_json(cls, path: str) -> "Market":
@@ -77,44 +80,67 @@ class Market:
             data = json.load(fh)
         return cls([Commodity.from_data(entry) for entry in data["commodities"]])
 
-    def clamp_to_price_bounds(self, commodity_id: str) -> None:
-        """Klamp `current_price` og `price_history` for én vare mot gjeldende
-        pris-grenser `[base * PRICE_MIN_MULT, base * PRICE_MAX_MULT]`.
+    # --- Katalog-oppslag (immutable) ---
+
+    @property
+    def commodities(self) -> list[Commodity]:
+        """Katalog-iterasjon (base_price + navn). Priser lever ikke her."""
+        return [self._catalog[cid] for cid in self._order]
+
+    def get(self, commodity_id: str) -> Commodity:
+        """Hent Commodity fra katalog (base_price + navn)."""
+        return self._catalog[commodity_id]
+
+    def base_price(self, commodity_id: str) -> float:
+        return self._catalog[commodity_id].base_price
+
+    # --- Pris-klamp ---
+
+    def clamp_to_price_bounds(
+        self, state: MarketState, commodity_id: str
+    ) -> None:
+        """Klamp `current_price` og `price_history` i `state` mot
+        `[base * PRICE_MIN_MULT, base * PRICE_MAX_MULT]`.
 
         Brukes ved load av gamle saves der `base_price` er justert (f.eks.
         Fase 2A Commit 5D: bek 55 → 40). Uten clamp ville historiske priser
-        utenfor nye grenser feilinformere trend-indikatoren; current_price
-        ville først bli klampet ved neste `on_dawn`.
+        utenfor nye grenser feilinformere trend-indikatoren.
         """
-        c = self._commodities[commodity_id]
-        lo = c.base_price * PRICE_MIN_MULT
-        hi = c.base_price * PRICE_MAX_MULT
-        c.current_price = round(max(lo, min(hi, c.current_price)), 2)
-        c.price_history = [
-            round(max(lo, min(hi, p)), 2) for p in c.price_history
+        if commodity_id not in state.commodities:
+            return
+        cm = state.commodities[commodity_id]
+        base = self._catalog[commodity_id].base_price
+        lo = base * PRICE_MIN_MULT
+        hi = base * PRICE_MAX_MULT
+        cm.current_price = round(max(lo, min(hi, cm.current_price)), 2)
+        cm.price_history = [
+            round(max(lo, min(hi, p)), 2) for p in cm.price_history
         ]
 
     # --- Daglig pris-drift (ved daggry) ---
 
     def on_dawn(
         self,
+        state: MarketState,
         regimes: "dict[str, RegimeState] | None" = None,
     ) -> None:
-        """Kalles ved daggry (dag-skift). Oppdaterer alle priser én gang.
+        """Oppdater alle priser i `state` én gang (kall ved daggry).
 
         Per vare:
-          change = direction * magnitude + noise
-          new_price = current_price * (1 + change)
-          new_price = clamp(new_price, base*0.5, base*2.0)
+          change = uniform(drift_pct_<regime>) + uniform(±noise_pct)
+          new_price = current_price * (1 + change/100)
+          clamp mot [base*PRICE_MIN_MULT, base*PRICE_MAX_MULT]
           price_history.append(new_price)   # siste 14 dager beholdes
-          tick_id += 1
 
-        `regimes` er dict fra commodity.id → RegimeState. Mangler regime
-        for en vare tolkes som "stable" (ingen retnings-bias).
+        `regimes` mapper commodity_id → RegimeState. Manglende regime
+        tolkes som "stable" (ren støy-drift).
 
-        Drift- og støy-prosent leses fra balance.regimes hver dagstikk.
-        Formelen er `change_pct = uniform(drift_pct_<regime>) + uniform(±noise_pct)`;
-        stable har [0.0, 0.0]-range i default, så ren støy der.
+        Drift- og støy-prosent leses fra balance.regimes. stable har
+        [0.0, 0.0]-range i default, så ren støy der.
+
+        Inkrementerer `state.tick_id` ved slutten slik at UI-cachere
+        invaliderer rendrede priser. Erstatter `apply_regime_drift_to_market_state`
+        som fantes i C2 (samme funksjon, nå fusjonert inn i Market).
         """
         reg_balance = _balance.get().regimes
         drift_by_regime: dict[str, tuple[float, float]] = {
@@ -123,7 +149,10 @@ class Market:
             "falling": reg_balance.drift_pct_falling,
         }
         noise_pct = reg_balance.noise_pct
-        for cid, c in self._commodities.items():
+        for cid, cm in state.commodities.items():
+            if cid not in self._catalog:
+                continue
+            base = self._catalog[cid].base_price
             regime = regimes.get(cid) if regimes else None
             regime_name = regime.current if regime is not None else "stable"
             drift_range = drift_by_regime.get(regime_name, (0.0, 0.0))
@@ -133,47 +162,39 @@ class Market:
                 drift_pct = self._rng.uniform(*drift_range)
             noise = self._rng.uniform(-noise_pct, noise_pct)
             change = (drift_pct + noise) / 100.0
-            new_price = c.current_price * (1.0 + change)
-            lo = c.base_price * PRICE_MIN_MULT
-            hi = c.base_price * PRICE_MAX_MULT
+            new_price = cm.current_price * (1.0 + change)
+            lo = base * PRICE_MIN_MULT
+            hi = base * PRICE_MAX_MULT
             new_price = max(lo, min(hi, new_price))
-            c.current_price = round(new_price, 2)
-            c.price_history.append(c.current_price)
-            if len(c.price_history) > PRICE_HISTORY_WINDOW:
-                del c.price_history[
-                    : len(c.price_history) - PRICE_HISTORY_WINDOW
+            cm.current_price = round(new_price, 2)
+            cm.price_history.append(cm.current_price)
+            if len(cm.price_history) > PRICE_HISTORY_WINDOW:
+                del cm.price_history[
+                    : len(cm.price_history) - PRICE_HISTORY_WINDOW
                 ]
-        self._tick_id += 1
-
-    @property
-    def tick_id(self) -> int:
-        """Monotont tall – UI cacher tekst-surfaces per tick_id. Inkrementeres
-        kun av `on_dawn()` fra og med Commit 5C (tidligere også per 10 s-tick)."""
-        return self._tick_id
-
-    # --- Oppslag ---
-
-    @property
-    def commodities(self) -> list[Commodity]:
-        return [self._commodities[cid] for cid in self._order]
-
-    def get(self, commodity_id: str) -> Commodity:
-        return self._commodities[commodity_id]
+        state.tick_id += 1
 
     # --- Priser med spread ---
 
-    def buy_price(self, commodity_id: str) -> int:
+    def buy_price(self, state: MarketState, commodity_id: str) -> int:
         """Pris for å kjøpe 1 enhet (avrundet til hel dubloon)."""
-        return int(round(self._commodities[commodity_id].current_price * (1 + self._spread)))
+        cm = state.commodities.get(commodity_id)
+        if cm is None:
+            return 0
+        return int(round(cm.current_price * (1 + self._spread)))
 
-    def sell_price(self, commodity_id: str) -> int:
+    def sell_price(self, state: MarketState, commodity_id: str) -> int:
         """Pris for å selge 1 enhet (avrundet til hel dubloon)."""
-        return int(round(self._commodities[commodity_id].current_price * (1 - self._spread)))
+        cm = state.commodities.get(commodity_id)
+        if cm is None:
+            return 0
+        return int(round(cm.current_price * (1 - self._spread)))
 
     # --- Transaksjoner ---
 
     def buy(
         self,
+        state: MarketState,
         commodity_id: str,
         amount: int,
         gold: int,
@@ -182,33 +203,26 @@ class Market:
     ) -> tuple[int, dict[str, InventoryItem], int]:
         """Forsøk å kjøpe `amount` av vare. Returner (nytt_gull, nytt_inventar, kjopt).
 
-        Kjøper maks det gullet tillater gitt pris + `TRANSACTION_FEE`
-        (flat gebyr per handel, ikke per enhet). Hvis `cargo_capacity`
-        er satt, klampes også mot tilgjengelig lasterom.
+        Kjøper maks det gullet tillater gitt pris + `transaction_fee`
+        (flat gebyr per handel). Hvis `cargo_capacity` er satt, klampes
+        også mot tilgjengelig lasterom.
 
         Transaksjon skjer kun hvis minst 1 enhet faktisk kan kjøpes;
-        ingen gebyr trekkes hvis `bought == 0` (ingen handel).
-
-        Modifiserer ikke input-argumentene (ren funksjon på immutable
-        snapshot). Oppdaterer `avg_cost` som veid gjennomsnitt per kjøp –
-        gebyret teller IKKE inn i avg_cost (det er en transaksjonskost,
-        ikke en vare-kost).
+        ingen gebyr trekkes hvis `bought == 0`. Inventar kopieres (ren
+        funksjon), `state` ikke mutert av buy.
         """
         if amount <= 0:
             return gold, inventory, 0
-        price = self.buy_price(commodity_id)
+        price = self.buy_price(state, commodity_id)
         if price <= 0:
             return gold, inventory, 0
         fee = _balance.get().economy.transaction_fee
-        # Må kunne dekke minst 1 enhet + gebyr for å i det hele tatt handle.
         if gold < price + fee:
             return gold, inventory, 0
         max_affordable = (gold - fee) // price
         bought = min(amount, max_affordable)
         if cargo_capacity is not None:
-            current_total = sum(
-                item.quantity for item in inventory.values()
-            )
+            current_total = sum(item.quantity for item in inventory.values())
             cargo_space = max(0, cargo_capacity - current_total)
             bought = min(bought, cargo_space)
         if bought <= 0:
@@ -216,8 +230,6 @@ class Market:
         new_inventory = dict(inventory)
         old = new_inventory.get(commodity_id, InventoryItem())
         new_qty = old.quantity + bought
-        # Veid gjennomsnitt: vekt gammel snitt med gammel mengde og ny pris
-        # med kjøpt mengde. Gebyret teller ikke som en del av varekosten.
         if new_qty > 0:
             new_avg = (old.quantity * old.avg_cost + bought * price) / new_qty
         else:
@@ -230,6 +242,7 @@ class Market:
 
     def sell(
         self,
+        state: MarketState,
         commodity_id: str,
         amount: int,
         gold: int,
@@ -237,13 +250,9 @@ class Market:
     ) -> tuple[int, dict[str, InventoryItem], int]:
         """Forsøk å selge `amount` av vare. Returner (nytt_gull, nytt_inventar, solgt).
 
-        Trekker `TRANSACTION_FEE` én gang fra inntekten. Hvis netto-
-        inntekt (sold*sell_price - fee) er negativ blir handelen refusert
-        (spilleren skal ikke tape penger på å selge); dette slår sjelden
-        til i praksis siden sell_price >> fee for alle fire varer.
-
-        Ved salg beholdes `avg_cost` uendret slik at spilleren fortsatt
-        ser hva hun *betalte*. Når qty når 0 nullstilles avg_cost.
+        Trekker `transaction_fee` én gang fra inntekten. Handelen
+        refuseres hvis netto-inntekt (sold*sell_price - fee) er negativ.
+        Ved salg beholdes `avg_cost` uendret; nullstilles når qty når 0.
         """
         if amount <= 0:
             return gold, inventory, 0
@@ -252,11 +261,10 @@ class Market:
         sold = min(amount, have)
         if sold <= 0:
             return gold, inventory, 0
-        price = self.sell_price(commodity_id)
+        price = self.sell_price(state, commodity_id)
         fee = _balance.get().economy.transaction_fee
         proceeds = sold * price - fee
         if proceeds < 0:
-            # Edge case: selge gir netto tap. Refuser handelen.
             return gold, inventory, 0
         new_inventory = dict(inventory)
         new_qty = have - sold
@@ -307,67 +315,10 @@ def init_market_for_port(
     return MarketState(commodities=commodities)
 
 
-def apply_regime_drift_to_market_state(
-    market_state: MarketState,
-    regimes: "dict[str, RegimeState]",
-    base_prices: dict[str, float],
-    rng: random.Random,
-) -> None:
-    """Ren drift-funksjon for én havns MarketState uten Market-klasse.
-
-    Muterer `market_state.commodities[cid]` in-place etter samme formel
-    som `Market.on_dawn`: `change_pct = uniform(drift_pct_<regime>) +
-    uniform(±noise_pct)`. Klampes mot `[base * PRICE_MIN_MULT,
-    base * PRICE_MAX_MULT]`. `price_history` trunkeres til siste
-    `PRICE_HISTORY_WINDOW` dager.
-
-    Brukes for ikke-Tortuga-havner ved new_day i VillageScene (Tortuga
-    bruker Market.on_dawn fordi Market holder dens aktive Commodity-
-    katalog for rendering).
-    """
-    reg_balance = _balance.get().regimes
-    drift_by_regime: dict[str, tuple[float, float]] = {
-        "rising":  reg_balance.drift_pct_rising,
-        "stable":  reg_balance.drift_pct_stable,
-        "falling": reg_balance.drift_pct_falling,
-    }
-    noise_pct = reg_balance.noise_pct
-
-    for cid, commodity in market_state.commodities.items():
-        base_price = base_prices.get(cid)
-        if base_price is None:
-            continue
-        regime = regimes.get(cid)
-        regime_name = regime.current if regime is not None else "stable"
-        drift_range = drift_by_regime.get(regime_name, (0.0, 0.0))
-        if drift_range[0] == drift_range[1]:
-            drift_pct = drift_range[0]
-        else:
-            drift_pct = rng.uniform(*drift_range)
-        noise = rng.uniform(-noise_pct, noise_pct)
-        change = (drift_pct + noise) / 100.0
-        new_price = commodity.current_price * (1.0 + change)
-        lo = base_price * PRICE_MIN_MULT
-        hi = base_price * PRICE_MAX_MULT
-        new_price = max(lo, min(hi, new_price))
-        commodity.current_price = round(new_price, 2)
-        commodity.price_history.append(commodity.current_price)
-        if len(commodity.price_history) > PRICE_HISTORY_WINDOW:
-            del commodity.price_history[
-                : len(commodity.price_history) - PRICE_HISTORY_WINDOW
-            ]
-
-
-def sync_market_to_state(market: "Market", market_state: MarketState) -> None:
-    """Kopier Market-klassens nåværende Commodity-tilstand til MarketState.
-
-    Brukes av VillageScene etter hver Market-mutasjon (on_dawn, og etter
-    VillageScene.__init__-hydration) for at `state.economy_state.markets
-    ["tortuga"]` er autoritativt speil av Market-klassen. Autosave leser
-    direkte fra state, ikke fra Market.
-    """
-    for c in market.commodities:
-        market_state.commodities[c.id] = CommodityMarket(
-            current_price=float(c.current_price),
-            price_history=list(c.price_history),
-        )
+# `apply_regime_drift_to_market_state` er fusjonert inn i `Market.on_dawn`
+# i Fase 2B C4. Én Market-instans kan nå operere på alle havners
+# MarketState — ingen behov for en separat pure-funksjon.
+#
+# `sync_market_to_state` slettet i C4: Market er stateless, så ingen
+# dobbelt-representasjon å synkronisere. State.markets[port_id] er
+# eneste sannhet.

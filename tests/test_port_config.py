@@ -227,3 +227,120 @@ class TestSingleton:
     def test_init_missing_file_raises(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError):
             pc.init(str(tmp_path / "nope.json"))
+
+
+# -----------------------------------------------------------------------------
+# Buildings (Fase 2B C4) — parser, validering, None for havner uten layout
+# -----------------------------------------------------------------------------
+
+def _valid_buildings_payload() -> dict:
+    return {
+        "ground_top_y": 340,
+        "player_start_x": 1340,
+        "tavern":   {"x": 20,   "y": 258, "w": 200, "h": 82},
+        "exchange": {"x": 1380, "y": 248, "w": 200, "h": 92},
+        "npcs": {"hawkins": 1470},
+    }
+
+
+class TestBuildingsParsing:
+    def test_real_tortuga_has_buildings(self) -> None:
+        """Faktisk data/ports.json har buildings for Tortuga."""
+        ports = pc.load_ports(str(REAL_PORTS_PATH))
+        tortuga = ports["tortuga"]
+        assert tortuga.buildings is not None
+        assert tortuga.buildings.ground_top_y == 340
+        assert tortuga.buildings.player_start_x == 1340
+        assert tortuga.buildings.tavern.x == 20
+        assert tortuga.buildings.exchange.x == 1380
+        assert tortuga.buildings.npcs["hawkins"] == 1470
+
+    def test_real_non_tortuga_ports_have_no_buildings(self) -> None:
+        """Port Royal / Havana / Nassau får layout i C6 — None i C4."""
+        ports = pc.load_ports(str(REAL_PORTS_PATH))
+        for pid in ("port_royal", "havana", "nassau"):
+            assert ports[pid].buildings is None, (
+                f"{pid} skal ikke ha buildings ennå (lagt til i C6)"
+            )
+
+    def test_buildings_parsed_from_synthetic_payload(self, tmp_path: Path) -> None:
+        payload = _valid_full_payload()
+        payload["ports"]["tortuga"]["buildings"] = _valid_buildings_payload()
+        path = tmp_path / "ports.json"
+        _write_json(path, payload)
+        ports = pc.load_ports(str(path))
+        tortuga = ports["tortuga"]
+        assert tortuga.buildings is not None
+        assert tortuga.buildings.tavern.w == 200
+        assert tortuga.buildings.tavern.h == 82
+        assert tortuga.buildings.exchange.w == 200
+
+    def test_buildings_absent_gives_none(self, tmp_path: Path) -> None:
+        payload = _valid_full_payload()
+        # Tortuga uten buildings-felt
+        assert "buildings" not in payload["ports"]["tortuga"]
+        path = tmp_path / "ports.json"
+        _write_json(path, payload)
+        ports = pc.load_ports(str(path))
+        assert ports["tortuga"].buildings is None
+
+    def test_buildings_explicit_null_gives_none(self, tmp_path: Path) -> None:
+        payload = _valid_full_payload()
+        payload["ports"]["tortuga"]["buildings"] = None
+        path = tmp_path / "ports.json"
+        _write_json(path, payload)
+        ports = pc.load_ports(str(path))
+        assert ports["tortuga"].buildings is None
+
+
+class TestBuildingsValidation:
+    def test_missing_ground_top_y_raises(self, tmp_path: Path) -> None:
+        payload = _valid_full_payload()
+        buildings = _valid_buildings_payload()
+        del buildings["ground_top_y"]
+        payload["ports"]["tortuga"]["buildings"] = buildings
+        path = tmp_path / "ports.json"
+        _write_json(path, payload)
+        with pytest.raises(ValueError, match="buildings mangler/ugyldig"):
+            pc.load_ports(str(path))
+
+    def test_missing_tavern_raises(self, tmp_path: Path) -> None:
+        payload = _valid_full_payload()
+        buildings = _valid_buildings_payload()
+        del buildings["tavern"]
+        payload["ports"]["tortuga"]["buildings"] = buildings
+        path = tmp_path / "ports.json"
+        _write_json(path, payload)
+        with pytest.raises(ValueError, match="buildings.tavern"):
+            pc.load_ports(str(path))
+
+    def test_invalid_tavern_placement_raises(self, tmp_path: Path) -> None:
+        payload = _valid_full_payload()
+        buildings = _valid_buildings_payload()
+        buildings["tavern"] = {"x": "not-a-number", "y": 258, "w": 200, "h": 82}
+        payload["ports"]["tortuga"]["buildings"] = buildings
+        path = tmp_path / "ports.json"
+        _write_json(path, payload)
+        with pytest.raises(ValueError, match="buildings.tavern"):
+            pc.load_ports(str(path))
+
+    def test_npcs_not_dict_raises(self, tmp_path: Path) -> None:
+        payload = _valid_full_payload()
+        buildings = _valid_buildings_payload()
+        buildings["npcs"] = ["hawkins"]  # feil struktur (liste)
+        payload["ports"]["tortuga"]["buildings"] = buildings
+        path = tmp_path / "ports.json"
+        _write_json(path, payload)
+        with pytest.raises(ValueError, match="buildings.npcs"):
+            pc.load_ports(str(path))
+
+    def test_empty_npcs_ok(self, tmp_path: Path) -> None:
+        """Havner uten NPC-er (hypotetisk) parser fortsatt med tomt dict."""
+        payload = _valid_full_payload()
+        buildings = _valid_buildings_payload()
+        buildings["npcs"] = {}
+        payload["ports"]["tortuga"]["buildings"] = buildings
+        path = tmp_path / "ports.json"
+        _write_json(path, payload)
+        ports = pc.load_ports(str(path))
+        assert ports["tortuga"].buildings.npcs == {}

@@ -33,7 +33,7 @@ port_config_module.init()
 
 from scenes.base_scene import BaseScene  # noqa: E402
 from scenes.parallax_test import ParallaxTestScene  # noqa: E402
-from scenes.village import VillageScene  # noqa: E402
+from scenes.port_village import PortVillageScene  # noqa: E402
 from state import GameState  # noqa: E402
 from systems import save as save_module  # noqa: E402
 from ui.toast import Toast  # noqa: E402
@@ -264,7 +264,7 @@ def run() -> int:
     font_small = _load_font(8)
 
     # Last spilltilstand fra disk, eller fall tilbake til startverdier.
-    # VillageScene avgjoer selv i on_enter om den skal bruke saved posisjon
+    # PortVillageScene avgjør selv i on_enter om den skal bruke saved posisjon
     # eller scene-spesifikk startposisjon, basert paa from_scene-argumentet
     # og innholdet i game_state.
     loaded = save_module.load()
@@ -274,9 +274,13 @@ def run() -> int:
         factories={
             "placeholder": lambda: PlaceholderScene(font_small),
             "parallax_test": lambda: ParallaxTestScene(font_small),
-            "village": lambda: VillageScene(font_small, game_state),
+            "port_village": lambda: PortVillageScene(
+                font_small,
+                game_state,
+                port_config_module.get(game_state.world_state.current_port),
+            ),
         },
-        initial="village",
+        initial="port_village",
         game_state=game_state,
     )
 
