@@ -27,6 +27,7 @@ from main import PlaceholderScene, _load_font
 from config import port_config
 from scenes.parallax_test import ParallaxTestScene
 from scenes.port_village import PortVillageScene
+from scenes.world_map import WorldMapScene
 from state import GameState
 
 
@@ -43,6 +44,8 @@ def _build_scene(name: str, font: pygame.font.Font, state: GameState):
         return PortVillageScene(
             font, state, port_config.get(state.world_state.current_port)
         )
+    if name == "world_map":
+        return WorldMapScene(font, state)
     raise ValueError(f"Ukjent scene: {name}")
 
 

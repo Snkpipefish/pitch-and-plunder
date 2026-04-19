@@ -34,6 +34,7 @@ port_config_module.init()
 from scenes.base_scene import BaseScene  # noqa: E402
 from scenes.parallax_test import ParallaxTestScene  # noqa: E402
 from scenes.port_village import PortVillageScene  # noqa: E402
+from scenes.world_map import WorldMapScene  # noqa: E402
 from state import GameState  # noqa: E402
 from systems import save as save_module  # noqa: E402
 from ui.toast import Toast  # noqa: E402
@@ -279,6 +280,7 @@ def run() -> int:
                 game_state,
                 port_config_module.get(game_state.world_state.current_port),
             ),
+            "world_map": lambda: WorldMapScene(font_small, game_state),
         },
         initial="port_village",
         game_state=game_state,

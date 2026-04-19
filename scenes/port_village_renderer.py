@@ -174,7 +174,7 @@ class PortVillageRenderer:
         lights: Sequence["Light"],
         elapsed: float,
         particles: "ParticleSystem",
-        show_near_hint: bool,
+        hint_state: "bool | str" = False,
     ) -> None:
         # 1) Himmel-lag (cross-fade mellom to nærmeste varianter)
         self._draw_backdrop(surface, cam_x, snapshot)
@@ -211,8 +211,9 @@ class PortVillageRenderer:
         # 7) Partikler: taake (normal blit) + ildfluer (BLEND_RGB_ADD).
         particles.draw(surface, cam_x)
 
-        # 8) Hint-linje
-        self._hint.draw(surface, show_near_hint)
+        # 8) Hint-linje — tar bool (2A-kompat) eller str (C5: "far",
+        # "near"/"near_exchange", "near_dock")
+        self._hint.draw(surface, hint_state)
 
         # 9) Parallax forgrunn (index 1 i parallax-renderen, speed 1.3)
         self._parallax.draw(surface, cam_x, start=1, stop=2)

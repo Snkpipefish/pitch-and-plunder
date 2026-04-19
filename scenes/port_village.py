@@ -59,6 +59,17 @@ from ui.toast import Toast, ToastQueue
 # med per-havn-justering, flytter vi denne til PortBuildings.
 _PLAYER_SPRITE_HEIGHT = 20
 
+# Havn-kant (dock) interaksjons-x-range for C5. Venstre ende av
+# verdens-bredde er "dokket"; E her åpner verdenskart. Hardkodet for
+# alle havner i C5 — dock-sprite og per-havn dock_x_range flyttes til
+# port_config.buildings i C6 per direktiv.
+_DOCK_INTERACTION_X_MIN = 8.0
+_DOCK_INTERACTION_X_MAX = 80.0
+
+# Spiller-posisjon ved retur fra verdenskart — plasseres rett innenfor
+# dock-region.
+_DOCK_RETURN_X = 60.0
+
 
 def _load_npcs(path: str = os.path.join(constants.DATA_DIR, "npcs.json")) -> dict:
     """Les `data/npcs.json` og returner et dict indeksert på NPC-id."""
@@ -235,7 +246,8 @@ class PortVillageScene(BaseScene):
         # Overlay (børs) — None naar lukket
         self._overlay: ExchangeOverlay | None = None
 
-        # Hint-indikator (to pre-rendrede tekstsurfaces)
+        # Hint-indikator (multi-tilstand). "near" er børs-hint (2A-kompat);
+        # "near_dock" er kart-hint (C5).
         hint = HintIndicator(
             font=font,
             far_text="A/D gå   F11 fullskjerm   Esc avslutt",
@@ -243,6 +255,11 @@ class PortVillageScene(BaseScene):
             far_color=constants.COLOR_STONE_LIT,
             near_color=constants.COLOR_LANTERN_BRIGHT,
             pos=(8, constants.RENDER_HEIGHT - 12),
+        )
+        hint.add_state(
+            "near_dock",
+            "E åpne verdenskart   A/D gå   F11 fullskjerm   Esc avslutt",
+            constants.COLOR_LANTERN_BRIGHT,
         )
 
         # Render-komposisjon (backdrops + celestial + parallax + entiteter +
@@ -283,6 +300,8 @@ class PortVillageScene(BaseScene):
             elif event.key in constants.KEY_INTERACT:
                 if self._player_can_interact_with_exchange():
                     self._open_exchange()
+                elif self._player_can_interact_with_dock():
+                    self._open_world_map()
             elif event.key in constants.KEY_LEFT:
                 self._player.press(-1)
             elif event.key in constants.KEY_RIGHT:
@@ -299,6 +318,36 @@ class PortVillageScene(BaseScene):
             abs(player_center_x - (self._buildings.exchange.x + self._buildings.exchange.w / 2))
             < constants.INTERACTION_DISTANCE
         )
+
+    def _player_can_interact_with_dock(self) -> bool:
+        """True hvis spiller er i dock-region (venstre verdens-kant).
+
+        Per FASE_2B.md §3.3: spilleren går til havn-kant-sprite, trykker
+        E → åpner verdenskart. C5 bruker hardkodet x-range; C6 flytter
+        til port_config.buildings.
+        """
+        player_center_x = self._player.x + self._player.width / 2
+        return _DOCK_INTERACTION_X_MIN <= player_center_x <= _DOCK_INTERACTION_X_MAX
+
+    def _open_world_map(self) -> None:
+        """Åpne verdenskart (instant cut — fade kommer i C7)."""
+        self._player.press(0)
+        self.autosave()
+        self.next_scene = "world_map"
+
+    def _compute_hint_state(self) -> str:
+        """Velg hint-tilstand basert på spiller-posisjon og overlay-state.
+
+        Prioritet: exchange > dock > far. Overlay åpent → far (ingen
+        hint mens spilleren handler).
+        """
+        if self._overlay is not None:
+            return "far"
+        if self._player_can_interact_with_exchange():
+            return "near_exchange"
+        if self._player_can_interact_with_dock():
+            return "near_dock"
+        return "far"
 
     def _open_exchange(self) -> None:
         # Slipp eventuelle holdte tastetrykk slik at spilleren ikke fortsetter
@@ -454,10 +503,7 @@ class PortVillageScene(BaseScene):
             lights=self._lights,
             elapsed=self._elapsed,
             particles=self._particles,
-            show_near_hint=(
-                self._player_can_interact_with_exchange()
-                and self._overlay is None
-            ),
+            hint_state=self._compute_hint_state(),
         )
         # HUD (oeverst venstre) og toasts (bunn-sentrert) tegnes over
         # verden men under bors-overlay.
@@ -494,6 +540,8 @@ class PortVillageScene(BaseScene):
     ) -> None:
         """Plasser spilleren og sentrer kamera.
 
+        - `from_scene="world_map"`: spilleren kommer tilbake fra kartet
+          — plasseres ved dock-retur-x (rett innenfor dock-region).
         - `from_scene=None` + player_state.position_x er GameState-default
           (320.0): fersk spillstart → buildings.player_start_x for havnen.
         - Ellers: player_state.position_x er autoritativ (lagret fra
@@ -503,7 +551,9 @@ class PortVillageScene(BaseScene):
         per-havn bakke-høyde (C4).
         """
         GAMESTATE_DEFAULT_X = 320.0
-        if (
+        if from_scene == "world_map":
+            self._player.x = _DOCK_RETURN_X
+        elif (
             from_scene is None
             and game_state.player_state.position_x == GAMESTATE_DEFAULT_X
         ):

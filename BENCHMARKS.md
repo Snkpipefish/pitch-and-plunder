@@ -689,3 +689,83 @@ Brukerens v4-save migreres v4→v5 via kjeden (log bekrefter), rescue av
 ikke-Tortuga-havner kjører, autosave skriver v5 med full 4-havns-struktur.
 Dev-mode (.devmode) aktiverte F5 hot-reload-hint som forventet.
 
+## Fase 2B Commit C5 — WorldMapScene + havn-markører + round-trip
+
+Første top-down-scene i spillet. Bakgrunn (himmel-band + hav-gradient
++ øy-silhuetter + bølge-prikker) pre-rendres ved scene-init. Per-frame-
+kost er 4 markør-blits + 1 skip-blit + tittel + hint = ~7 surfaces.
+
+### Resultater (målmaskin T4200 / GM45, SDL_VIDEODRIVER ikke satt)
+
+3 kjøringer per scene, median rapportert.
+
+| Scene | C4 | C5 | Delta |
+|-------|-----|-----|-------|
+| Village (lukket) | 4.660 ms | 4.692 ms | +0.03 ms (støy) |
+| Village (overlay åpen) | 6.089 ms | 6.133 ms | +0.04 ms (støy) |
+| **World map** | — | **1.021 ms** | ny baseline |
+
+World_map ligger på 20% av budsjettet (5 ms-grense). Stor headroom
+for C8/C9-UI-tillegg (observed-tooltip, reise-dialog) og C10 polish
+(4-faset dag/natt cross-fade).
+
+### Scene-init-tid
+
+WorldMapScene konstruktør (10 kjøringer):
+- Cold (første): 9.59 ms
+- Warm median (run 2-10): 4.92 ms (min 4.57, max 5.71)
+
+Godt under 100 ms spec-mål.
+
+### Tester: 252 → 278 (+26)
+
+- `tests/test_world_map.py` (26 tester):
+  - PortMarker (3): happy-path-rendering, ukjent tilstand-toleranse,
+    pulse-fallback-logging i dev-mode (én gang, ikke spammer).
+  - ShipIcon (5): 4 retninger tegner, ukjent heading-fallback,
+    flip-symmetri-verifisering, N-mast-i-topp-halvdel, S-er-vertikal-
+    mirror-av-N pixel-for-pixel.
+  - world_map_builder (3): dimensjoner, determinisme gitt seed,
+    alle 4 faser-API-et bygger uten feil.
+  - WorldMapScene init (2), navigasjon (4: ←/↑/↓ fra Tortuga, → fra
+    Havana), confirm (3: E på current, E på annen, ESC), rendering (2).
+  - PortVillageScene dock-interaksjon (4): player-posisjon i dock-
+    region, E trigger world_map, hint-state "near_dock", on_enter
+    fra world_map plasserer ved dock-retur-x.
+
+### Designvalg — eksplisitte beslutninger
+
+**Skip-sprite: 2+2-flip OK etter visuell test.** `verify_flip_symmetry()`
+asserterer pixel-for-pixel at S = vertikal flip av N og W = horisontal
+flip av Ø. Testen passerer. Rasjonal i `FASE_2B_VISUELL_REFERANSE.md §4`:
+ship-formen har bilateral symmetri om lengde-aksen, så vertikal flip
+av N gir gyldig S, horisontal flip av Ø gir gyldig W. 4 separate
+pre-renderinger forkastet — ville duplisert 2 sprites uten visuell
+gevinst.
+
+**Markør-pulsering: aktiv, ikke fallback.** World_map benchmark 1.02 ms
+— god margin til 5 ms-grensen. Pulserings-kost er ~0.05 ms per frame
+(én set_alpha + én blit). Fallback-protokoll (disable_pulse) finnes
+for fremtidig C8/C9-polish-regresjon; logger én gang i dev-mode hvis
+aktivert.
+
+**Utsatt til senere:**
+- Dag/natt cross-fade på kartet → **C10 polish** (per Q2-direktiv).
+  Verdenskart-builder-API-et tar allerede `phase: str`-parameter slik
+  at C10 kun trenger å bygge 4 varianter + krysse mellom dem ved
+  fase-skifte.
+- Fade-overgang mellom scener (0.3s per spec §6.4) → C7 sammen med
+  VoyageScene-overgang.
+- Observed-pris-tooltip og `never_visited`-markør-tilstand → C8.
+- Reise-bekreftelse-dialog og voyage-trigger → C7/C9.
+- Dock-sprite og per-havn `dock_interaction_x_range` i
+  `port_config.buildings` → C6 (per Q1-direktiv). C5 bruker
+  hardkodet `[8, 80]`-region for alle havner.
+
+### Manuell smoke
+
+v4-save migreres (v4→v5 + port-rescue). Spiller plassert ved x=40
+(dock-region). Dev-mode aktiv; F5-hot-reload-hint i loggen. Autosave
+skriver v5. Scene-bytte-testing dekket av `TestPortVillageDockInteraction.
+test_e_in_dock_region_triggers_world_map` (programmatisk).
+
