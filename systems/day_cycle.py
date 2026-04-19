@@ -8,18 +8,20 @@ Designvalg:
 - **Stateless**. `DayCycle.compute_snapshot()` er en ren funksjon av klokken.
 - **Himmel-fase** (morning/day/night) er proporsjoner av dagen. Fase bruker
   `MORNING_FRAC` = 1/6 og `NIGHT_FRAC` = 1/6 av `seconds_per_day`.
-- **Celestial-vinduer** er uavhengige av fase-grensene (bruker explicit
-  fraksjoner fra review-spec):
+- **Celestial-vinduer** er uavhengige av fase-grensene:
     - Moon window:  [0.00, 0.12) + [0.88, 1.00)   (wrapping over midnatt)
-    - Sun window:   [0.17, 0.83)
-    - Gap windows:  [0.12, 0.17) + [0.83, 0.88)   (ingen celestial synlig)
-  Hvorfor? Fysisk korrekt: måne er oppe om natten og i tidlig daggry;
-  solen kommer opp først når daggry er fullført. Gap-vinduene representerer
-  den "tomme himmelen" rett før solen kommer og rett etter den går ned.
+    - Sun window:   [0.17, 0.88)   (inkl. fade-out fra 0.80)
+    - Gap window:   [0.12, 0.17)   (ingen celestial — tom himmel før daggry)
+  Sun-fade fra 0.80 til 0.88 er samtidig med at moon-fade-in starter ved
+  0.88 — solen når horisonten akkurat når månen begynner å stige.
 - **Sol-farge 3-stegs**:
     - [0.17, 0.25): SUN_DAWN → SUN_DAY (varm innledning)
     - [0.25, 0.65): SUN_DAY (hvit midt på dagen, konstant)
-    - [0.65, 0.83): SUN_DAY → SUN_DUSK (orange mot kvelden)
+    - [0.65, 0.88): SUN_DAY → SUN_DUSK (orange mot kvelden, over hele
+      restperioden inkludert fade-out)
+- **Sol-bane**: x linært 0.9 → 0.1, y parabolsk med y=0 ved både sunrise
+  og sunset (f=0 og f=1), peak SUN_Y_NOON ved midt. Spannet er hele sol-
+  vinduet [0.17, 0.88]; y når horisonten akkurat når alpha=0.
 - **Moon fade**: måne fader ut [0.08, 0.12) og fader inn [0.88, 0.92).
 
 Fase-oppdeling (for himmelfarge):
@@ -55,8 +57,12 @@ MOON_FADE_OUT_END = 0.12
 #: Sol begynner å være synlig (full alpha) fra og med denne fraksjonen.
 SUN_VISIBLE_START = 0.17
 #: Sol starter fade-out (alpha 1.0 → 0.0) fra og med denne fraksjonen.
-SUN_FADE_OUT_START = 0.83
-#: Sol fullt ute av syne (alpha=0) fra og med denne fraksjonen.
+#: Utvidet i Commit 7.1 fra 0.83 → 0.80 for glatt solnedgang (14 s i
+#: stedet for 9 s på 180 s/dag).
+SUN_FADE_OUT_START = 0.80
+#: Sol fullt ute av syne (alpha=0) fra og med denne fraksjonen. Sol-
+#: bevegelsen fortsetter helt til denne fraksjonen slik at solen når
+#: horisonten (celestial_y=0) samtidig som alpha blir 0.
 SUN_FADE_OUT_END = 0.88
 #: Måne fader inn fra denne fraksjonen.
 MOON_FADE_IN_START = 0.88
@@ -71,8 +77,7 @@ SUN_COLOR_DUSK_START = 0.65   # Start på orange-glidning mot dusk
 SUN_X_DAWN = 0.9  # Sol stiger fra høyre
 SUN_X_NOON = 0.5
 SUN_X_DUSK = 0.1  # Sol går ned mot venstre
-SUN_Y_DAWN = 0.15   # Like over horisonten
-SUN_Y_NOON = 0.85   # Nær topp av himmelen (parabel-topp)
+SUN_Y_NOON = 0.85   # Nær topp av himmelen (parabel-topp; endene er 0)
 
 # --- Måne-plassering ---
 #: MOON_Y=0.65 gir screen_y ≈ 72, matcher den originale statiske månen
@@ -238,16 +243,14 @@ def _celestial_for_fraction(
         return is_sun, x, y, color, 1.0
 
     if t < SUN_FADE_OUT_END:
-        # Sol synlig men fader ut. Bruker normal sol-posisjon/farge fra
-        # _sun_state (den dekker fraksjonen [0.17, 0.83+] fordi 0.83 er
-        # langt inn i DUSK-fargestadiet), men multiplisert med fade-alpha.
+        # Sol synlig men fader ut. Posisjonen fortsetter å bevege seg
+        # gjennom _sun_state slik at solen når horisonten (celestial_y=0)
+        # samtidig som alpha blir 0 ved SUN_FADE_OUT_END. Visuelt: solen
+        # setter seg gradvis i stedet for å "henge fast midt i lufta".
         k = (t - SUN_FADE_OUT_START) / (
             SUN_FADE_OUT_END - SUN_FADE_OUT_START
         )
-        # Bruk posisjon/farge fra like før fade starter (0.83) slik at
-        # solen "henger" ved venstre horisont mens den fader — ikke driver
-        # videre inn mot ikke-eksisterende posisjoner.
-        is_sun, x, y, color = _sun_state(SUN_FADE_OUT_START)
+        is_sun, x, y, color = _sun_state(t)
         return is_sun, x, y, color, 1.0 - k
 
     if t < MOON_FADE_IN_START:
@@ -269,22 +272,25 @@ def _celestial_for_fraction(
 def _sun_state(
     t: float,
 ) -> tuple[bool, float, float, tuple[int, int, int]]:
-    """Sol-posisjon og farge innenfor [SUN_VISIBLE_START, SUN_FADE_OUT_START).
+    """Sol-posisjon og farge innenfor [SUN_VISIBLE_START, SUN_FADE_OUT_END).
 
-    - Lineær x-bane fra SUN_X_DAWN → SUN_X_DUSK
-    - Parabolsk y-bane, topp ved midten av sol-vinduet
-    - 3-stegs farge:
-        [0.17, 0.25): SUN_DAWN → SUN_DAY (varm innledning)
-        [0.25, 0.65): SUN_DAY hold (hvit midt på dagen)
-        [0.65, 0.83): SUN_DAY → SUN_DUSK (orange mot kvelden)
+    - Lineær x-bane fra SUN_X_DAWN → SUN_X_DUSK over hele sol-vinduet.
+    - Parabolsk y-bane: y = 4f(1-f) * SUN_Y_NOON. y=0 ved f=0 og f=1
+      (sunrise og sunset rører horisonten), peak SUN_Y_NOON ved f=0.5.
+    - 3-stegs farge (spenner hele sol-vinduet [0.17, 0.88]):
+        [0.17, 0.25):            SUN_DAWN → SUN_DAY (varm innledning)
+        [0.25, 0.65):            SUN_DAY (hvit midt på dagen, konstant)
+        [0.65, SUN_FADE_OUT_END): SUN_DAY → SUN_DUSK (orange mot kvelden)
     """
     # Lineær sol-x: 0.9 → 0.1 over hele sol-vinduet
-    span = SUN_FADE_OUT_START - SUN_VISIBLE_START
+    span = SUN_FADE_OUT_END - SUN_VISIBLE_START
     f = (t - SUN_VISIBLE_START) / span  # 0 at sunrise, 1 at sunset
+    f = max(0.0, min(1.0, f))  # defensivt klamp
     x = _lerp(SUN_X_DAWN, SUN_X_DUSK, f)
-    # Parabolsk y: 4f(1-f) har topp 1.0 ved f=0.5
+    # Parabolsk y: 4f(1-f) har topp 1.0 ved f=0.5, og 0.0 ved f=0 og f=1.
+    # Solen rører altså horisonten både ved sunrise og sunset.
     parabola = 4.0 * f * (1.0 - f)
-    y = SUN_Y_DAWN + (SUN_Y_NOON - SUN_Y_DAWN) * parabola
+    y = SUN_Y_NOON * parabola
 
     # 3-stegs farge
     if t < SUN_COLOR_WARM_END:
@@ -295,9 +301,12 @@ def _sun_state(
     elif t < SUN_COLOR_DUSK_START:
         color = constants.COLOR_SUN_DAY
     else:
+        # Dusk-interpolering spenner helt til SUN_FADE_OUT_END slik at
+        # farge og alpha begge når SUN_DUSK / 0.0 samtidig.
         k = (t - SUN_COLOR_DUSK_START) / (
-            SUN_FADE_OUT_START - SUN_COLOR_DUSK_START
+            SUN_FADE_OUT_END - SUN_COLOR_DUSK_START
         )
+        k = min(1.0, k)
         color = _lerp_color(
             constants.COLOR_SUN_DAY, constants.COLOR_SUN_DUSK, k
         )

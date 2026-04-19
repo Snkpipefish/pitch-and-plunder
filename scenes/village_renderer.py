@@ -142,8 +142,10 @@ class VillageRenderer:
         # 1) Backdrop (cross-fade mellom to nærmeste varianter)
         self._draw_backdrop(surface, cam_x, snapshot)
 
-        # 2) Celestial (sol eller måne) som overlay, ikke del av parallax
-        self._celestial.draw(surface, snapshot)
+        # 2) Celestial (sol eller måne) som overlay. Tegnes med sin egen
+        # parallax (Commit 7.1) så den drifter med samme avstandsfølelse
+        # som bakgrunnslaget (0.2×).
+        self._celestial.draw(surface, snapshot, cam_x)
 
         # 3) Gameplay-lag (index 0 i denne parallax-renderen)
         self._parallax.draw(surface, cam_x, start=0, stop=1)

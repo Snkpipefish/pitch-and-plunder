@@ -232,18 +232,32 @@ class TestCelestialMotion:
         assert snap.celestial_x == SUN_X_DAWN
 
     def test_sun_ends_near_left_edge_at_fade_start(self):
-        # Ved SUN_FADE_OUT_START (0.83) er solen på sin laveste posisjon
-        # før den fader ut.
-        snap = DayCycle.compute_snapshot(_clock_at_fraction(0.82))
-        assert snap.celestial_x < 0.2
+        # Ved t=0.79 (like før fade-start 0.80) har solen nærmet seg
+        # venstre horisont (SUN_X_DUSK = 0.1).
+        snap = DayCycle.compute_snapshot(_clock_at_fraction(0.79))
+        assert snap.celestial_x < 0.25
 
-    def test_sun_position_frozen_during_fade(self):
-        # Under fade-out holdes posisjonen slik at solen ikke driver
-        # videre mens den fader.
-        snap_at_fade_start = DayCycle.compute_snapshot(_clock_at_fraction(0.83))
-        snap_mid_fade = DayCycle.compute_snapshot(_clock_at_fraction(0.855))
-        assert snap_at_fade_start.celestial_x == snap_mid_fade.celestial_x
-        assert snap_at_fade_start.celestial_y == snap_mid_fade.celestial_y
+    def test_sun_continues_motion_during_fade(self):
+        # Commit 7.1: solen fortsetter å bevege seg under fade-out slik at
+        # den når horisonten samtidig som alpha blir 0. Celestial_x synker
+        # videre, celestial_y synker mot 0.
+        snap_fade_start = DayCycle.compute_snapshot(_clock_at_fraction(0.80))
+        snap_mid_fade = DayCycle.compute_snapshot(_clock_at_fraction(0.84))
+        snap_fade_end = DayCycle.compute_snapshot(_clock_at_fraction(0.879))
+        assert snap_fade_start.celestial_x > snap_mid_fade.celestial_x > snap_fade_end.celestial_x
+        assert snap_fade_start.celestial_y > snap_mid_fade.celestial_y > snap_fade_end.celestial_y
+
+    def test_sun_reaches_horizon_at_fade_end(self):
+        # Ved SUN_FADE_OUT_END (0.88) skal celestial_y være nær 0 (horisont).
+        # Vi tester like før 0.88 fordi nøyaktig 0.88 er en gap-fraksjon.
+        snap = DayCycle.compute_snapshot(_clock_at_fraction(0.879))
+        assert snap.celestial_y < 0.02
+
+    def test_sun_rises_from_horizon(self):
+        # Ved SUN_VISIBLE_START (0.17) er parabolen 0 ved f=0, så solen
+        # rører horisonten (y ≈ 0) idet den blir synlig.
+        snap = DayCycle.compute_snapshot(_clock_at_fraction(0.17))
+        assert snap.celestial_y < 0.02
 
     def test_moon_position_is_static(self):
         snap_midnight = DayCycle.compute_snapshot(_clock_at_fraction(0.00))
@@ -291,19 +305,23 @@ class TestSunColorThreeStage:
         assert snap.celestial_color == constants.COLOR_SUN_DAY
 
     def test_sunset_approaches_dusk_color(self):
-        snap = DayCycle.compute_snapshot(_clock_at_fraction(0.82))
-        # Nær SUN_DUSK. Flerkanals-avvik kan være opptil ~12 pga int-lerp.
+        # Commit 7.1: dusk-interpolering spenner hele vinduet [0.65, 0.88].
+        # Ved 0.87 er vi ~96% gjennom overgangen, svært nær SUN_DUSK.
+        snap = DayCycle.compute_snapshot(_clock_at_fraction(0.87))
         for i in range(3):
             assert (
                 abs(snap.celestial_color[i] - constants.COLOR_SUN_DUSK[i]) <= 12
             )
 
-    def test_fade_start_color_matches_sun_at_083(self):
-        # Under fade-out (fra 0.83) skal solfargen være festet til fargen
-        # ved 0.83 (ikke drift videre via _sun_state).
-        snap_0_83 = DayCycle.compute_snapshot(_clock_at_fraction(0.83))
+    def test_sun_color_continues_changing_during_fade(self):
+        # Commit 7.1: sol-farge fortsetter å interpolere mot SUN_DUSK
+        # under fade-out (ikke frozen som i 5B-implementasjonen).
+        snap_fade_start = DayCycle.compute_snapshot(_clock_at_fraction(0.80))
         snap_mid_fade = DayCycle.compute_snapshot(_clock_at_fraction(0.855))
-        assert snap_0_83.celestial_color == snap_mid_fade.celestial_color
+        # Fargen skal være tydelig mer mot DUSK ved 0.855 enn 0.80.
+        # G-kanal går fra SUN_DAY (248) mot SUN_DUSK (108) — synker
+        # monotont under fade.
+        assert snap_mid_fade.celestial_color[1] < snap_fade_start.celestial_color[1]
 
 
 class TestSnapshotImmutable:
@@ -325,7 +343,8 @@ class TestFractionConstants:
         assert MOON_FADE_OUT_START == 0.08
         assert MOON_FADE_OUT_END == 0.12
         assert SUN_VISIBLE_START == 0.17
-        assert SUN_FADE_OUT_START == 0.83
+        # Commit 7.1: utvidet fade-vindu for glatt solnedgang
+        assert SUN_FADE_OUT_START == 0.80
         assert SUN_FADE_OUT_END == 0.88
         assert MOON_FADE_IN_START == 0.88
         assert MOON_FADE_IN_END == 0.92
