@@ -127,12 +127,37 @@ def _peak_rss_mb() -> float:
     return usage.ru_maxrss / 1024.0
 
 
+def _disable_autosave_for_benchmark() -> None:
+    """Hindre at benchmark overskriver prod-save (saves/savegame.json).
+
+    Benchmark bygger fersk `GameState()` med 0 gull, tomme markeder og
+    pitch_lake_state 0/0 (dataclass-defaults). Hvis et scene-kall
+    trigger autosave (eksempel: `_open_exchange` via `--open-exchange`-
+    flagget kaller `PortVillageScene.autosave()`), vil den tomme staten
+    bli skrevet til disk og ødelegge spillerens save.
+
+    Monkey-patcher `save_module.save` til no-op for HELE benchmark-
+    prosessen. Universell og uavhengig av hvilke autosave-stier som
+    finnes nå eller senere. Benchmark trenger aldri å persistere
+    state — vi måler kun runtime.
+
+    Lagt til i C7c-patch-2 etter at en `--open-exchange`-benchmark-
+    kjøring overskrev en aktiv brukertest-save med 0/tom state.
+    """
+    from systems import save as save_module
+    save_module.save = lambda *args, **kwargs: True
+
+
 def benchmark(
     scene_name: str = "placeholder",
     duration_sec: float = 10.0,
     open_exchange: bool = False,
 ) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+    # MÅ kalles før noen scene-kall — _open_exchange trigger autosave
+    # umiddelbart i samme funksjon der overlay åpnes.
+    _disable_autosave_for_benchmark()
 
     pygame.display.init()
     pygame.font.init()

@@ -1237,5 +1237,62 @@ SEA_MID-dominans og 75 sek/dag-tempo flagget for C10:
   forkastet (bryter spec §7.5 "once committed, go"-prinsippet).
   Tilfeldige møter på sjøen kommer i Fase 3.
 
+## Fase 2B Commit C7c-patch-2 — Benchmark autosave-safety
+
+**Bug funnet under brukertest av C7c-patch:** `python benchmark.py
+--open-exchange` overskrev brukerens `saves/savegame.json` med fersk
+`GameState()`-default (gold=0, tomme markeder, pitch_lake 0/0).
+Konsekvens: ved neste `python main.py` lastet spillet den ødelagte
+saven, `_rescue_empty_nontortuga_ports` fylte bias-data for tre
+havner men Tortuga-marked + gold + pitch_lake forble tom.
+
+### Rotårsak
+
+`PortVillageScene._open_exchange` kaller `self.autosave()`
+umiddelbart når børs-overlay åpnes. Benchmark-kjøringen med
+`--open-exchange` simulerte dette for å måle overlay-rendering, og
+autosave-en skrev den minimale `GameState()`-en (uten markedene som
+PortVillageScene fyller via `setdefault`) til prod-save-stien.
+
+Bugget eksisterte siden C5/C6 (da `--open-exchange`-flagget ble
+introdusert), men manifesterte seg ikke før jeg traff samme test-
+vindu med en eksisterende save under C7c-patch-benchmarken.
+
+### Fix
+
+`benchmark.py` monkey-patcher `save_module.save` til no-op før noen
+scene-kall. Universell beskyttelse: dekker alle nåværende OG
+fremtidige autosave-stier (scene-bytte, overlay-åpning, QUIT).
+Benchmark trenger aldri å persistere — vi måler kun runtime.
+
+```python
+def _disable_autosave_for_benchmark() -> None:
+    from systems import save as save_module
+    save_module.save = lambda *args, **kwargs: True
+```
+
+Kalt fra `benchmark()` rett etter `logging.basicConfig`, før
+`pygame.display.init`. Restitusjon ikke nødvendig — benchmark er
+en one-shot CLI-prosess.
+
+### Verifikasjon
+
+- `stat saves/savegame.json` før: `2026-04-19 20:44:12.162984904 +0200`
+- `python benchmark.py --scene village --open-exchange --duration 1`
+- `stat saves/savegame.json` etter: **identisk** mtime og størrelse
+
+### Tester
+
+374 grønne (uendret antall — patchen er en runtime-safety, ikke en
+test-relevant logikk-endring). Ingen ny test for benchmark-no-save —
+ville kreve subprocess-ramping som er flaky; den manuelle mtime-
+sammenligningen over er tilstrekkelig dokumentasjon.
+
+### Brukerens restitusjon
+
+`rm saves/savegame.json && python main.py` → fresh `new_game_state()`
+→ 300 gull, alle 4 havners markeder med bias, pitch_lake 2/8,
+observed["tortuga"] populert.
+
 
 
