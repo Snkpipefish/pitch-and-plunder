@@ -757,6 +757,7 @@ Deretter, én commit per logisk enhet:
 
 ## CHANGELOG
 
+- **v2.3** – Fase 2A komplett. Markedsdybde (daglig oppdatering, regimer, trend-piler), dag-natt-syklus (6 pre-rendrede bakgrunner, sol/måne i verdenskoordinater med 1:1 kamera-offset og render-rekkefølge som gir fjell-okklusjon), bek-produksjon med daglig vedlikeholdskostnad, lagerbegrensning, transaksjonsgebyr. 18 commits (inkl. underversjoner), 187 tester grønne, 4.61-6.15 ms frame time. Se `PHASE_2A_RETROSPECTIVE.md`.
 - **v2.2** – Fase 2 reformulert fra "verdenskart + seiling" til "markedsdybde + verdenskart + seiling" basert på Fase 1-spilletesting. Spilleren observerte at den mekaniske børsen er triviell å utnytte uten friksjon (tilbud/etterspørsel, transport-risiko, guvernør-mistanke, informasjons-kost). Disse komponentene adresseres i Fase 2 parallelt med kartscenen.
 - **Fase 1 komplett.** Se Commit 9 for oppsummering og Fase 2 ikke påbegynt.
 - **v2.1** – Lagt til seksjon 3.1 "Maskin-spesifikke optimaliseringer" med fblits(), Clock.tick() vs tick_busy_loop(), event.set_blocked(), Surface.scroll(), heltallskoordinater og mixer-avslåing. Ny seksjon 3.2 om environment-variabler (SDL_HINT_RENDER_SCALE_QUALITY, PYGAME_HIDE_SUPPORT_PROMPT). Utvidet benchmark til å inkludere cProfile topp-20. Oppdatert constants.py til å sette env vars før pygame-import og inkludere BLOCKED_EVENTS-liste. Commit 2 presiserer `pygame.display.init()` + `pygame.font.init()` i stedet for `pygame.init()`. Lagt til flere feilmoduser.
