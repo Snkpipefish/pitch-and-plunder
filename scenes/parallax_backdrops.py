@@ -378,6 +378,63 @@ def build_backdrop_variants() -> list[tuple[float, pygame.Surface]]:
             width, height, horizon_y, top_c, horizon_c, sea_c
         )
         _bake_stars(surf, horizon_y, intensity=star_intensity)
+        # Commit 7.2: `_bake_distant_islands` flyttes til
+        # `build_foreground_variants()` slik at fjell tegnes ETTER celestial
+        # i VillageRenderer, og dermed okkluderer solen når den setter seg.
+        variants.append((frac, surf))
+    return variants
+
+
+def build_foreground_variants() -> list[tuple[float, pygame.Surface]]:
+    """Bygg 6 forgrunns-lag (fjell-silhuetter + opakt hav) for dag-natt-syklus.
+
+    Separasjonen fra `build_backdrop_variants` (Commit 7.2) gir riktig
+    render-rekkefølge: bakgrunn → celestial → FORGRUNN → gameplay. Slik
+    blir solen skjult bak fjell når den nærmer seg horisonten og havnivået
+    når alpha fader ut.
+
+    Hver variant er en SRCALPHA-surface:
+    - Over horisonten: transparent bortsett fra mørke fjell-silhuetter
+    - På og under horisonten: opakt hav i fase-spesifikk farge
+
+    Sjø-fargene matcher de samme fraksjonene som `build_backdrop_variants`
+    bruker, slik at cross-fade mellom forgrunn og bakgrunn er konsistent.
+    """
+    speed = 0.2
+    width = required_layer_width(
+        constants.WORLD_WIDTH, constants.RENDER_WIDTH, speed
+    )
+    height = constants.RENDER_HEIGHT
+    horizon_y = int(height * _HORIZON_Y_RATIO)
+
+    # Samme sjø-fargekurve som `build_backdrop_variants` bruker.
+    fg_anchors: list[tuple[float, tuple[int, int, int]]] = [
+        (0.00, constants.COLOR_SEA_DEEP),
+        (0.08, constants.COLOR_SEA_DEEP),
+        (0.17, constants.COLOR_SEA_MID),
+        (0.50, constants.COLOR_SEA_LIGHT),
+        (0.83, constants.COLOR_SEA_MID),
+        (0.92, constants.COLOR_SEA_DEEP),
+    ]
+
+    variants: list[tuple[float, pygame.Surface]] = []
+    for frac, sea_c in fg_anchors:
+        surf = pygame.Surface(
+            (width, height), pygame.SRCALPHA
+        ).convert_alpha()
+        # Start fullt transparent — fylling med 0 alpha garanterer at
+        # områder vi ikke tegner på forblir gjennomsiktige.
+        surf.fill((0, 0, 0, 0))
+        # Fjern-silhuett — trukket opp til horisonten. `_bake_distant_islands`
+        # tegner med COLOR_STONE_DARKEST som en solid polygon; på SRCALPHA
+        # blir det opak polygon (alpha=255).
         _bake_distant_islands(surf, horizon_y)
+        # Opakt hav under horisonten. Dette dekker også de nederste 6 px
+        # av fjell-polygonet slik at kun den øvre silhuetten vises.
+        pygame.draw.rect(
+            surf,
+            (sea_c[0], sea_c[1], sea_c[2], 255),
+            (0, horizon_y, width, height - horizon_y),
+        )
         variants.append((frac, surf))
     return variants

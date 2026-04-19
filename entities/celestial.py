@@ -9,12 +9,14 @@ Design-valg:
   frame (jfr. PROSJEKT.md §14). Working-sprite re-fylles med base + tint.
 - **Ingen halo** i Fase 2A (jfr. review-dokument). Enkel solid skive.
   Halo kan legges til som polish i senere commit.
-- **Parallax på 0.2×** (Commit 7.1): celestial er "i verden", ikke fast
-  på skjermen. Matcher bakgrunnslagets parallax slik at sol/måne føles
-  tilhørende samme avstand som distant horisont og øyer — og gir
-  visuell følelse av at himmellegemene forblir ankret mens spilleren
-  går. Matcher også Fase 1 der månen var bakt inn i bg_layer-surfaces
-  med speed 0.2.
+- **Verdens-forankring 1:1** (Commit 7.2): celestial er tematisk
+  forankret i verden. Månen står statisk over Børshuset (worldx=1350);
+  solen beveger seg gjennom verden fra SUN_WORLD_X_DAWN til
+  SUN_WORLD_X_DUSK gjennom dagen. `screen_x = int(worldx - cam_x)` —
+  ekte 1:1 kamera-offset, ingen parallax-faktor. Det gir korrekt
+  tematisk atferd: når spilleren går fra Børshuset til tavernaen om
+  natten forsvinner månen ut til høyre (kan ikke "flyktes fra månen
+  men kan gå ut av synsfeltet").
 """
 
 from __future__ import annotations
@@ -36,11 +38,6 @@ CELESTIAL_RADIUS = 14
 #: Horisont-linje i skjerm-koordinater (matcher parallax-backdrops).
 _HORIZON_Y = int(constants.RENDER_HEIGHT * 0.58)
 
-#: Parallax-hastighet for celestial (sol/måne). 0.2 matcher bakgrunnslaget
-#: slik at himmellegemene føles som del av samme distante sky-scene som
-#: horisont og distant-øyer. Større verdi = celestial drifter raskere
-#: (= føles nærmere); mindre = føles fjernere.
-CELESTIAL_PARALLAX_SPEED = 0.2
 
 
 class Celestial:
@@ -95,16 +92,13 @@ class Celestial:
         per-surface alpha på sprite-en slik at den fader jevnt inn/ut
         gjennom moon/sun-transisjonene.
 
-        Posisjon:
-        - basis-x = `celestial_x * RENDER_WIDTH`
-        - parallax-offset = `cam_x * CELESTIAL_PARALLAX_SPEED` (trukket fra)
-        - y = `(1 - celestial_y) * HORIZON_Y` (celestial_y=0 ved horisont,
+        Posisjon (Commit 7.2 — verdens-forankring):
+        - x: `int(celestial_x - cam_x)` — celestial_x er verdens-x
+          (0 til WORLD_WIDTH), subtraherer kamera 1:1. Ingen parallax-
+          skalering: når spilleren står under himmellegemet, er det rett
+          over ham; når han går bort, forsvinner det ut av synsfeltet.
+        - y: `(1 - celestial_y) * HORIZON_Y` (celestial_y=0 ved horisont,
           celestial_y=1 ved topp av himmelen)
-
-        Parallax gjør at celestial drifter i motsatt retning av spillerens
-        bevegelse — naturlig avstandsillusjon. Når spilleren går fra
-        tavernaen til Børshuset (cam_x: 0 → 960) rykker celestial ca. 192
-        px til venstre på skjermen.
         """
         alpha = snapshot.celestial_alpha
         if alpha <= 0.0:
@@ -115,9 +109,7 @@ class Celestial:
         # None settes, som gir sprite-korner tegnet som solid sort. Bruk
         # heller eksplisitt 255 for full opasitet (per-pixel alpha bevares).
         self._tinted.set_alpha(int(alpha * 255) if alpha < 1.0 else 255)
-        base_x = int(snapshot.celestial_x * constants.RENDER_WIDTH)
-        parallax_offset = int(cam_x * CELESTIAL_PARALLAX_SPEED)
-        center_x = base_x - parallax_offset
+        center_x = int(snapshot.celestial_x - cam_x)
         center_y = int((1.0 - snapshot.celestial_y) * _HORIZON_Y)
         surface.blit(
             self._tinted,

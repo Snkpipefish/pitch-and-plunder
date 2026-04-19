@@ -21,7 +21,11 @@ from entities.npc import NPC
 from entities.player import Player
 from scenes.base_scene import BaseScene
 from scenes.exchange import ExchangeOverlay
-from scenes.parallax_backdrops import build_backdrop_variants, build_empty_layer
+from scenes.parallax_backdrops import (
+    build_backdrop_variants,
+    build_empty_layer,
+    build_foreground_variants,
+)
 from scenes.village_buildings import (
     EXCHANGE_CENTER_X,
     EXCHANGE_W,
@@ -80,8 +84,12 @@ class VillageScene(BaseScene):
 
         # Parallax-lag. Bakgrunnen er nå dynamisk (6 varianter med cross-
         # fade styrt av DayCycle); ParallaxRenderer håndterer kun gameplay
-        # og forgrunn. Backdrop-rendering skjer i VillageRenderer.
+        # og parallax-forgrunn. Himmel- og fg-backdrop-rendering skjer i
+        # VillageRenderer. Fg-varianter (fjell + hav) ble skilt ut fra
+        # himmel-variantene i Commit 7.2 slik at celestial kan tegnes
+        # mellom dem og bli okkludert av fjell/hav ved horisont.
         self._backdrops = build_backdrop_variants()
+        self._foregrounds = build_foreground_variants()
         gameplay_layer = ParallaxLayer(build_village_gameplay_layer(), speed=1.0)
         fg_layer = ParallaxLayer(build_empty_layer(1.3), speed=1.3)
         parallax_renderer = ParallaxRenderer([gameplay_layer, fg_layer])
@@ -221,6 +229,7 @@ class VillageScene(BaseScene):
         # lys + partikler + hint)
         self._renderer = VillageRenderer(
             backdrops=self._backdrops,
+            foregrounds=self._foregrounds,
             parallax_renderer=parallax_renderer,
             celestial=self._celestial,
             hint=hint,

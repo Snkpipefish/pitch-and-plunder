@@ -73,16 +73,24 @@ MOON_FADE_IN_END = 0.92
 SUN_COLOR_WARM_END = 0.25     # Slutt på varm innledning
 SUN_COLOR_DUSK_START = 0.65   # Start på orange-glidning mot dusk
 
-# --- Sol-bane (skjerm-fraksjoner) ---
-SUN_X_DAWN = 0.9  # Sol stiger fra høyre
-SUN_X_NOON = 0.5
-SUN_X_DUSK = 0.1  # Sol går ned mot venstre
-SUN_Y_NOON = 0.85   # Nær topp av himmelen (parabel-topp; endene er 0)
+# --- Sol-bane (verdens-koordinater; Commit 7.2) ---
+#: Solen beveger seg gjennom verden, ikke skjermen. Ved sunrise står
+#: solen ved østre ende (worldx 1500, utenfor Børshuset). Ved sunset er
+#: den ved vestre ende (worldx 100, utenfor tavernaen). Når spilleren
+#: står stille ved tavernaen (cam_x=0) kan solen gå ned bak fjellene
+#: som ligger rundt worldx=100 — tematisk "sol ned i vest".
+SUN_WORLD_X_DAWN = 1500.0  # Sol stiger ved østre horisont
+SUN_WORLD_X_DUSK = 100.0   # Sol går ned ved vestre horisont
+SUN_Y_NOON = 0.85          # Nær topp av himmelen (parabel-topp; endene er 0)
 
-# --- Måne-plassering ---
-#: MOON_Y=0.65 gir screen_y ≈ 72, matcher den originale statiske månen
-#: fra Fase 1.
-MOON_X = 0.75
+# --- Måne-plassering (verdens-koordinater; Commit 7.2) ---
+#: Månen er statisk forankret over Børshuset på worldx=1350. Når
+#: spilleren går til tavernaen (worldx ~100) er månen langt til høyre
+#: og kan helt eller delvis være utenfor skjermen. Tematisk: månen er
+#: institusjonell vokter; tavernaen er flukten. Matcher Fase 1 der
+#: månen satt bakt inn i bg_layer over samme posisjon.
+#: MOON_Y=0.65 gir screen_y ≈ 72, matcher originalen fra Fase 1.
+MOON_WORLD_X = 1350.0
 MOON_Y = 0.65
 
 
@@ -90,7 +98,11 @@ MOON_Y = 0.65
 class DaySnapshot:
     """Visuell state for ett tidspunkt i døgnet.
 
-    `celestial_x/y` er skjerm-relative fraksjoner (0.0–1.0).
+    `celestial_x` er en verdens-koordinat (0.0–WORLD_WIDTH) slik at
+    himmellegemene er forankret i scenen: månen står fast over Børshuset,
+    solen reiser gjennom verden. `celestial_y` er en fraksjon (0.0 ved
+    horisont, 1.0 ved topp av himmelen). Renderen beregner skjerm-x
+    som `int(celestial_x - cam_x)`.
     `celestial_alpha` er 0.0 (sprite ikke synlig) til 1.0 (full styrke);
     brukt for fade inn/ut ved celestial-vindu-grensene.
     `star_alpha` er 0.0 (ingen stjerner) til 1.0 (full natt).
@@ -224,18 +236,18 @@ def _celestial_for_fraction(
     # Måne-vinduer først (wrap-around over midnatt)
     if t < MOON_FADE_OUT_START:
         # Full måne, første del av natten-etter-midnatt
-        return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0
+        return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0
 
     if t < MOON_FADE_OUT_END:
         # Måne fader ut
         k = (t - MOON_FADE_OUT_START) / (
             MOON_FADE_OUT_END - MOON_FADE_OUT_START
         )
-        return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0 - k
+        return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0 - k
 
     if t < SUN_VISIBLE_START:
         # Gap mellom måne-set og sol-opp (ingen celestial synlig)
-        return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, 0.0
+        return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, 0.0
 
     if t < SUN_FADE_OUT_START:
         # Sol synlig, full alpha
@@ -256,17 +268,17 @@ def _celestial_for_fraction(
     if t < MOON_FADE_IN_START:
         # Numerisk nesten-umulig (SUN_FADE_OUT_END == MOON_FADE_IN_START),
         # men defensivt: ingen celestial i denne micro-greinen.
-        return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, 0.0
+        return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, 0.0
 
     if t < MOON_FADE_IN_END:
         # Måne fader inn
         k = (t - MOON_FADE_IN_START) / (
             MOON_FADE_IN_END - MOON_FADE_IN_START
         )
-        return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, k
+        return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, k
 
     # t in [MOON_FADE_IN_END, 1.0)
-    return False, MOON_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0
+    return False, MOON_WORLD_X, MOON_Y, constants.COLOR_MOON_CORE, 1.0
 
 
 def _sun_state(
@@ -274,7 +286,8 @@ def _sun_state(
 ) -> tuple[bool, float, float, tuple[int, int, int]]:
     """Sol-posisjon og farge innenfor [SUN_VISIBLE_START, SUN_FADE_OUT_END).
 
-    - Lineær x-bane fra SUN_X_DAWN → SUN_X_DUSK over hele sol-vinduet.
+    - Lineær x-bane i verdens-koordinater fra SUN_WORLD_X_DAWN →
+      SUN_WORLD_X_DUSK over hele sol-vinduet (Commit 7.2).
     - Parabolsk y-bane: y = 4f(1-f) * SUN_Y_NOON. y=0 ved f=0 og f=1
       (sunrise og sunset rører horisonten), peak SUN_Y_NOON ved f=0.5.
     - 3-stegs farge (spenner hele sol-vinduet [0.17, 0.88]):
@@ -282,11 +295,11 @@ def _sun_state(
         [0.25, 0.65):            SUN_DAY (hvit midt på dagen, konstant)
         [0.65, SUN_FADE_OUT_END): SUN_DAY → SUN_DUSK (orange mot kvelden)
     """
-    # Lineær sol-x: 0.9 → 0.1 over hele sol-vinduet
+    # Lineær sol-x: verdens-koordinat 1500 → 100 over hele sol-vinduet
     span = SUN_FADE_OUT_END - SUN_VISIBLE_START
     f = (t - SUN_VISIBLE_START) / span  # 0 at sunrise, 1 at sunset
     f = max(0.0, min(1.0, f))  # defensivt klamp
-    x = _lerp(SUN_X_DAWN, SUN_X_DUSK, f)
+    x = _lerp(SUN_WORLD_X_DAWN, SUN_WORLD_X_DUSK, f)
     # Parabolsk y: 4f(1-f) har topp 1.0 ved f=0.5, og 0.0 ved f=0 og f=1.
     # Solen rører altså horisonten både ved sunrise og sunset.
     parabola = 4.0 * f * (1.0 - f)

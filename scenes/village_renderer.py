@@ -1,24 +1,26 @@
 """Render-komposisjon for Tortuga-landsbyen.
 
-`VillageRenderer` eier bakgrunns-varianter (6 pre-rendrede for dag-natt-
-syklus), parallax-laget (gameplay + forgrunn), Celestial-overlay, og
+`VillageRenderer` eier to sett backdrop-varianter (himmel og fjell/hav),
+parallax-laget (gameplay + parallax-forgrunn), Celestial-overlay, og
 hint-indikatoren. Utfører tegnings-sekvensen for verdens-laget (alt
 unntatt HUD og børs-overlay).
 
 Trukket ut av `scenes/village.py` i Fase 2A / Commit 1. Utvidet i
-Commit 5B til å kobles mot `DaySnapshot` for dag-natt-rendering:
-cross-fade mellom to nærmeste backdrop-varianter + Celestial-sprite som
-overlay.
+Commit 5B (dag-natt-rendering med cross-fade + Celestial-overlay) og
+Commit 7.2 (split av backdrop i himmel-lag og fjell/hav-lag for å få
+riktig render-rekkefølge rundt celestial).
 
 Sekvens (per frame):
-    1. Backdrop cross-fade (2 blits, parallax speed 0.2)
-    2. Celestial (sol/måne) som overlay
-    3. Gameplay-lag (parallax speed 1.0)
-    4. Entiteter (spiller + NPC-er) i én fblits-batch
-    5. Dynamiske lys (BLEND_RGB_ADD)
-    6. Partikler (tåke + ildfluer)
-    7. Hint-linje
-    8. Parallax forgrunn (speed 1.3)
+    1. Himmel-lag cross-fade (opakt; gradient + stjerner)
+    2. Celestial (sol/måne) som overlay — verdens-forankret, 1:1 cam
+    3. Forgrunns-lag cross-fade (SRCALPHA; fjell + opakt hav) — okkluderer
+       celestial som måtte nærme seg eller ha sunket under horisonten
+    4. Gameplay-lag (parallax speed 1.0)
+    5. Entiteter (spiller + NPC-er) i én fblits-batch
+    6. Dynamiske lys (BLEND_RGB_ADD)
+    7. Partikler (tåke + ildfluer)
+    8. Hint-linje
+    9. Parallax forgrunn (speed 1.3)
 
 Scene-eier tegner HUD og overlay etter at `draw()` returnerer.
 """
@@ -57,14 +59,25 @@ class VillageRenderer:
     def __init__(
         self,
         backdrops: Sequence[tuple[float, pygame.Surface]],
+        foregrounds: Sequence[tuple[float, pygame.Surface]],
         parallax_renderer: ParallaxRenderer,
         celestial: "Celestial",
         hint: "HintIndicator",
     ) -> None:
-        # Backdrops sorteres stigende på fraksjon (forutsetter at input
-        # allerede er sortert; assert beskytter mot feil i byggeren).
+        # Backdrops og foregrounds sorteres stigende på fraksjon
+        # (forutsetter at input allerede er sortert; assert beskytter mot
+        # feil i byggeren).
         self._backdrops: list[tuple[float, pygame.Surface]] = list(backdrops)
+        self._foregrounds: list[tuple[float, pygame.Surface]] = list(
+            foregrounds
+        )
         assert self._backdrops, "VillageRenderer trenger minst én backdrop"
+        assert self._foregrounds, (
+            "VillageRenderer trenger minst ett foreground-lag"
+        )
+        assert len(self._backdrops) == len(self._foregrounds), (
+            "Backdrops og foregrounds må ha samme antall varianter"
+        )
         assert all(
             self._backdrops[i][0] <= self._backdrops[i + 1][0]
             for i in range(len(self._backdrops) - 1)
@@ -73,33 +86,31 @@ class VillageRenderer:
         self._celestial = celestial
         self._hint = hint
 
-    def _find_backdrop_pair(
-        self, fraction: float
+    @staticmethod
+    def _find_variant_pair(
+        variants: list[tuple[float, pygame.Surface]],
+        fraction: float,
     ) -> tuple[pygame.Surface, pygame.Surface, float]:
-        """Returner (backdrop_A, backdrop_B, blend_t) for gitt fraksjon.
-
-        `blend_t=0` → bare A er synlig; `blend_t=1` → bare B. For
-        `fraction` mellom to anker-fraksjoner, blend_t er lineært
-        interpolert. Wrap-around fra siste anker (f.eks. 0.92) til første
-        (0.00) håndteres ved å behandle 0.00 som også 1.00.
+        """Returner (A, B, blend_t) for en gitt fraksjon fra et sortert
+        variant-sett. Wrap-around fra siste (f.eks. 0.92) til første (0.00)
+        håndteres ved å behandle 0.00 som også 1.00.
         """
-        backdrops = self._backdrops
-        n = len(backdrops)
+        n = len(variants)
         # Klamp fraksjon til [0, 1) for å håndtere floating-point overshoot
         f = fraction % 1.0
         for i in range(n):
             next_i = (i + 1) % n
-            frac_a = backdrops[i][0]
+            frac_a = variants[i][0]
             # Wrap-around: siste ankers "slutt" er 1.0, ikke første ankers 0.0
-            frac_b = backdrops[next_i][0] if next_i != 0 else 1.0
+            frac_b = variants[next_i][0] if next_i != 0 else 1.0
             if frac_a <= f < frac_b:
                 span = frac_b - frac_a
                 if span <= 0.0:
-                    return backdrops[i][1], backdrops[next_i][1], 0.0
+                    return variants[i][1], variants[next_i][1], 0.0
                 t = (f - frac_a) / span
-                return backdrops[i][1], backdrops[next_i][1], t
+                return variants[i][1], variants[next_i][1], t
         # Fallback (numerisk kantsituasjon): bruk første anker fullt ut
-        return backdrops[0][1], backdrops[0][1], 0.0
+        return variants[0][1], variants[0][1], 0.0
 
     def _draw_backdrop(
         self,
@@ -107,24 +118,49 @@ class VillageRenderer:
         cam_x: float,
         snapshot: "DaySnapshot",
     ) -> None:
-        """Blit to backdrops med cross-fade basert på snapshot-fraksjon.
+        """Blit to himmel-varianter med cross-fade.
 
-        Begge backdrops flyttes med parallax-speed 0.2. Første backdrop
-        tegnes som opaque (raskt), andre med per-surface alpha for
-        cross-fade. `set_alpha(None)` på første er viktig – uten det vil
-        pygame utføre full per-pixel alpha-blending selv ved alpha=255,
-        noe som gir en 5–10 ms/frame regresjon på svak CPU.
+        Begge flyttes med parallax-speed 0.2. Første tegnes opaque
+        (raskt), andre med per-surface alpha for cross-fade.
+        `set_alpha(None)` på første er viktig – uten det vil pygame
+        utføre full per-pixel alpha-blending selv ved alpha=255, som gir
+        5–10 ms/frame regresjon på svak CPU.
         """
-        bg_a, bg_b, t = self._find_backdrop_pair(snapshot.day_fraction)
+        bg_a, bg_b, t = self._find_variant_pair(
+            self._backdrops, snapshot.day_fraction
+        )
         offset_x = int(-cam_x * _BACKDROP_PARALLAX_SPEED)
-        # Første backdrop: fullt opaque, alpha disabled → memcpy-fast blit
+        # Første himmel: fullt opaque, alpha disabled → memcpy-fast blit
         bg_a.set_alpha(None)
         surface.blit(bg_a, (offset_x, 0))
-        # Andre backdrop: alpha = t*255 for cross-fade. Hopp over hvis
-        # fraksjon er nøyaktig på anker (t=0) eller bg_a og bg_b er samme.
         if t > 0.0 and bg_a is not bg_b:
             bg_b.set_alpha(int(t * 255))
             surface.blit(bg_b, (offset_x, 0))
+
+    def _draw_foreground_backdrop(
+        self,
+        surface: pygame.Surface,
+        cam_x: float,
+        snapshot: "DaySnapshot",
+    ) -> None:
+        """Blit to forgrunns-varianter (fjell + hav) med cross-fade.
+
+        SRCALPHA-surfaces: første blits med sin egen per-pixel alpha,
+        andre med set_alpha for cross-fade. Forgrunnen kalles EFTER
+        celestial slik at fjellsilhuetter og hav kan okkludere solen og
+        månen når de nærmer seg eller har sunket under horisonten.
+        """
+        fg_a, fg_b, t = self._find_variant_pair(
+            self._foregrounds, snapshot.day_fraction
+        )
+        offset_x = int(-cam_x * _BACKDROP_PARALLAX_SPEED)
+        # For SRCALPHA-surface er alpha=255 default når set_alpha ikke
+        # settes; vi setter eksplisitt 255 for konsistens.
+        fg_a.set_alpha(255)
+        surface.blit(fg_a, (offset_x, 0))
+        if t > 0.0 and fg_a is not fg_b:
+            fg_b.set_alpha(int(t * 255))
+            surface.blit(fg_b, (offset_x, 0))
 
     def draw(
         self,
@@ -139,18 +175,23 @@ class VillageRenderer:
         particles: "ParticleSystem",
         show_near_hint: bool,
     ) -> None:
-        # 1) Backdrop (cross-fade mellom to nærmeste varianter)
+        # 1) Himmel-lag (cross-fade mellom to nærmeste varianter)
         self._draw_backdrop(surface, cam_x, snapshot)
 
-        # 2) Celestial (sol eller måne) som overlay. Tegnes med sin egen
-        # parallax (Commit 7.1) så den drifter med samme avstandsfølelse
-        # som bakgrunnslaget (0.2×).
+        # 2) Celestial (sol eller måne) som overlay. Verdens-forankret
+        # (Commit 7.2): screen_x = worldx - cam_x. Månen står over
+        # Børshuset; solen beveger seg gjennom verden fra øst til vest.
         self._celestial.draw(surface, snapshot, cam_x)
 
-        # 3) Gameplay-lag (index 0 i denne parallax-renderen)
+        # 3) Forgrunns-lag (fjell + opakt hav). Tegnes ETTER celestial
+        # (Commit 7.2) slik at fjell-silhuetter og hav okkluderer solen
+        # og månen ved horisont-passering.
+        self._draw_foreground_backdrop(surface, cam_x, snapshot)
+
+        # 4) Gameplay-lag (index 0 i denne parallax-renderen)
         self._parallax.draw(surface, cam_x, start=0, stop=1)
 
-        # 4) Entiteter (spiller og NPC-er) i verdens-koordinater.
+        # 5) Entiteter (spiller og NPC-er) i verdens-koordinater.
         # Bruk fblits for én batch; ingen overlap-sortering er nødvendig
         # i Fase 1 siden alle står på samme gatenivå.
         cx = int(cam_x)
@@ -162,15 +203,15 @@ class VillageRenderer:
         )
         surface.fblits(batch)
 
-        # 5) Dynamiske lys (BLEND_RGB_ADD) – legger seg over bygninger og
+        # 6) Dynamiske lys (BLEND_RGB_ADD) – legger seg over bygninger og
         # entiteter slik at lyset "faller på" spilleren.
         lighting.draw(surface, lights, cam_x, elapsed)
 
-        # 6) Partikler: taake (normal blit) + ildfluer (BLEND_RGB_ADD).
+        # 7) Partikler: taake (normal blit) + ildfluer (BLEND_RGB_ADD).
         particles.draw(surface, cam_x)
 
-        # 7) Hint-linje
+        # 8) Hint-linje
         self._hint.draw(surface, show_near_hint)
 
-        # 8) Forgrunnslag (index 1 i parallax-renderen)
+        # 9) Parallax forgrunn (index 1 i parallax-renderen, speed 1.3)
         self._parallax.draw(surface, cam_x, start=1, stop=2)

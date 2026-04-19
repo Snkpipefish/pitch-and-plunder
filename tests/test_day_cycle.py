@@ -12,7 +12,7 @@ from systems.day_cycle import (
     MOON_FADE_IN_START,
     MOON_FADE_OUT_END,
     MOON_FADE_OUT_START,
-    MOON_X,
+    MOON_WORLD_X,
     MOON_Y,
     MORNING_END,
     SUN_COLOR_DUSK_START,
@@ -20,8 +20,8 @@ from systems.day_cycle import (
     SUN_FADE_OUT_END,
     SUN_FADE_OUT_START,
     SUN_VISIBLE_START,
-    SUN_X_DAWN,
-    SUN_X_DUSK,
+    SUN_WORLD_X_DAWN,
+    SUN_WORLD_X_DUSK,
     DayCycle,
 )
 from systems.game_clock import GameClock
@@ -227,15 +227,17 @@ class TestCelestialMotion:
         assert snap_noon.celestial_y > snap_start.celestial_y
         assert snap_noon.celestial_y > snap_end.celestial_y
 
-    def test_sun_starts_at_right_edge(self):
+    def test_sun_starts_at_east_world_edge(self):
+        # Commit 7.2: celestial_x er verdens-koordinat. Ved SUN_VISIBLE_START
+        # står solen nøyaktig ved SUN_WORLD_X_DAWN (= 1500, øst for Børshuset).
         snap = DayCycle.compute_snapshot(_clock_at_fraction(0.17))
-        assert snap.celestial_x == SUN_X_DAWN
+        assert snap.celestial_x == SUN_WORLD_X_DAWN
 
-    def test_sun_ends_near_left_edge_at_fade_start(self):
+    def test_sun_ends_near_west_world_edge_at_fade_start(self):
         # Ved t=0.79 (like før fade-start 0.80) har solen nærmet seg
-        # venstre horisont (SUN_X_DUSK = 0.1).
+        # SUN_WORLD_X_DUSK (= 100, vest for tavernaen).
         snap = DayCycle.compute_snapshot(_clock_at_fraction(0.79))
-        assert snap.celestial_x < 0.25
+        assert snap.celestial_x < 300
 
     def test_sun_continues_motion_during_fade(self):
         # Commit 7.1: solen fortsetter å bevege seg under fade-out slik at
@@ -260,11 +262,32 @@ class TestCelestialMotion:
         assert snap.celestial_y < 0.02
 
     def test_moon_position_is_static(self):
+        # Commit 7.2: månen er statisk forankret i verden ved MOON_WORLD_X
+        # (= 1350, over Børshuset). Kamera-forskyvning håndteres av renderen.
         snap_midnight = DayCycle.compute_snapshot(_clock_at_fraction(0.00))
         snap_late = DayCycle.compute_snapshot(_clock_at_fraction(0.95))
-        assert snap_midnight.celestial_x == MOON_X
-        assert snap_late.celestial_x == MOON_X
+        assert snap_midnight.celestial_x == MOON_WORLD_X
+        assert snap_late.celestial_x == MOON_WORLD_X
         assert snap_midnight.celestial_y == MOON_Y
+
+    def test_moon_is_east_of_tavern(self):
+        # Tematisk: månen skal være over Børshuset, ikke over tavernaen.
+        # Tavernaen står ved worldx ~100; månen på 1350 er klart øst for
+        # den slik at spilleren kan "flykte fra månen" ved å gå til
+        # tavernaen.
+        snap = DayCycle.compute_snapshot(_clock_at_fraction(0.00))
+        assert snap.celestial_x > 1000
+
+    def test_sun_travels_through_world_coordinates(self):
+        # Sunrise: worldx 1500. Midday: worldx ~800 (lineær interpolering).
+        # Sunset: worldx → 100. Alle er verdens-koordinater, ikke fraksjoner.
+        snap_dawn = DayCycle.compute_snapshot(_clock_at_fraction(0.17))
+        snap_noon = DayCycle.compute_snapshot(_clock_at_fraction(0.525))
+        snap_set = DayCycle.compute_snapshot(_clock_at_fraction(0.879))
+        assert snap_dawn.celestial_x == 1500.0
+        # Midway (f=0.5): x = (1500+100)/2 = 800
+        assert abs(snap_noon.celestial_x - 800.0) < 20.0
+        assert snap_set.celestial_x < 120.0
 
 
 class TestSunColorThreeStage:
