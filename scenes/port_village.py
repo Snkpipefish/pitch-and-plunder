@@ -31,6 +31,7 @@ from entities.npc_silhouette import NPCSilhouette, build_silhouette
 from entities.player import Player
 from scenes.base_scene import BaseScene
 from scenes.exchange import ExchangeOverlay
+from ui.cache_dialog import CacheSubDialog
 from ui.harbormaster_dialog import HarbormasterDialog
 from ui.tavern_dialog import TavernDayDialog, TavernDialog, TavernNightDialog
 from scenes.parallax_backdrops import (
@@ -308,8 +309,13 @@ class PortVillageScene(BaseScene):
         self._tavern_dialog: TavernDialog | None = None
         # Havnekontor-dialog (C3-4) — None naar lukket. Mutually eksklusiv
         # med exchange og tavern. Kan starte voyage eller transisjon til
-        # WorldMapScene via `requested_next_scene`.
+        # WorldMapScene via `requested_next_scene`, eller signalere at
+        # CacheSubDialog skal åpnes via `open_cache` (C3-5).
         self._harbormaster_dialog: HarbormasterDialog | None = None
+        # Cache-subdialog (C3-5) — None naar lukket. Peer til
+        # HarbormasterDialog (ikke nested) per design. Åpnes etter at
+        # HarbormasterDialog lukkes med `open_cache=True`.
+        self._cache_dialog: CacheSubDialog | None = None
 
         # Hint-indikator (multi-tilstand). "near" er børs-hint (2A-kompat);
         # "near_dock" er kart-hint (C5); "near_tavern" er tavern-hint (C3-3).
@@ -376,6 +382,10 @@ class PortVillageScene(BaseScene):
         # Havnekontor-dialog (C3-4) — samme input-konsumpsjon.
         if self._harbormaster_dialog is not None:
             self._harbormaster_dialog.handle_event(event)
+            return
+        # Cache-subdialog (C3-5) — samme mønster.
+        if self._cache_dialog is not None:
+            self._cache_dialog.handle_event(event)
             return
         if event.type == pygame.KEYDOWN:
             if event.key in constants.KEY_MENU:
@@ -467,6 +477,7 @@ class PortVillageScene(BaseScene):
             self._overlay is not None
             or self._tavern_dialog is not None
             or self._harbormaster_dialog is not None
+            or self._cache_dialog is not None
         ):
             return "far"
         if self._player_can_interact_with_exchange():
@@ -523,6 +534,20 @@ class PortVillageScene(BaseScene):
             toasts=self._toasts,
         )
         self.autosave()
+
+    def _open_cache_dialog(self) -> None:
+        """Åpne CacheSubDialog for gjeldende havn (Fase 3 C3-5).
+
+        Kalt fra update() etter at HarbormasterDialog lukkes med
+        `open_cache=True`. Ingen direkte interaksjon via E — cache
+        nås kun via havnekontor-dialogen.
+        """
+        self._cache_dialog = CacheSubDialog(
+            self._font,
+            self._state,
+            port_id=self._port.id,
+            toasts=self._toasts,
+        )
 
     def _open_harbormaster(self) -> None:
         """Åpne havnekontor-dialog (Fase 3 C3-4).
@@ -607,16 +632,25 @@ class PortVillageScene(BaseScene):
                 self.autosave()
             return
         if self._harbormaster_dialog is not None:
-            # Havnekontor-dialog — samme close-mønster, men kan signalere
-            # scene-transisjon via requested_next_scene (voyage eller
-            # world_map). Transisjonen skjer etter autosave slik at
-            # reise-state er persistert før VoyageScene instansieres.
+            # Havnekontor-dialog — samme close-mønster. Kan signalere:
+            # (a) scene-transisjon via requested_next_scene (voyage/map),
+            # (b) åpning av CacheSubDialog via open_cache (C3-5).
+            # Transisjonen skjer etter autosave slik at state er
+            # persistert før ny scene/dialog instansieres.
             if self._harbormaster_dialog.want_close:
                 requested = self._harbormaster_dialog.requested_next_scene
+                open_cache = self._harbormaster_dialog.open_cache
                 self._harbormaster_dialog = None
                 self.autosave()
                 if requested is not None:
                     self.next_scene = requested
+                elif open_cache:
+                    self._open_cache_dialog()
+            return
+        if self._cache_dialog is not None:
+            if self._cache_dialog.want_close:
+                self._cache_dialog = None
+                self.autosave()
             return
         # Kun naar overlayet er lukket kan spilleren bevege seg.
         self._player.update(dt, self._player_min_x, self._player_max_x)
@@ -716,6 +750,8 @@ class PortVillageScene(BaseScene):
             self._tavern_dialog.draw(surface)
         elif self._harbormaster_dialog is not None:
             self._harbormaster_dialog.draw(surface)
+        elif self._cache_dialog is not None:
+            self._cache_dialog.draw(surface)
 
     # --- Lifecycle / save ---
 

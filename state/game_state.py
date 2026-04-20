@@ -39,3 +39,21 @@ class GameState:
     world_state: WorldState = field(default_factory=WorldState)
     economy_state: EconomyState = field(default_factory=EconomyState)
     pitch_lake_state: PitchLakeState = field(default_factory=PitchLakeState)
+
+    def get_score(self) -> int:
+        """Returnér spillerens nåværende score (Fase 3 C3-5).
+
+        Score = gull i Tortuga-cachen. Andre havner-caches teller IKKE
+        (låst til havnen, spilleren er ikke der ved game-over). Gull
+        på hånden teller heller ikke (kan tapes ved arrest).
+
+        Tortuga-cachen er samme entitet som "Tortuga-kista" i design-
+        dokumentet (FASE_3.md §1.2/§1.9); samme slot i `port_caches`,
+        navngitt dobbelt i UI: "Gullkiste" for Tortuga, "Cache" for
+        andre havner, men mekanisk identisk.
+
+        Brukes av C3-12 score-overlay ved game-over. IKKE vist i HUD
+        før da (presisering C3-5 #2 — score forblir usynlig under
+        normal spilling).
+        """
+        return self.player_state.port_caches.get("tortuga", 0)

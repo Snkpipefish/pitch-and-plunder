@@ -329,18 +329,22 @@ class TestHarbormasterDialog:
 
 
 class TestCacheSubDialog:
+    """Sanity-tester for instansiering. Detaljert deposit/withdraw-adferd
+    ligger i tests/test_cache_dialog.py (C3-5)."""
+
     def test_instantiates(self, font, game_state):
         d = CacheSubDialog(font, game_state, port_id="tortuga")
         assert d is not None
-
-    def test_build_entries_empty(self, font, game_state):
-        d = CacheSubDialog(font, game_state, port_id="havana")
-        assert d._build_entries() == []
 
     def test_draw_no_crash(self, font, game_state):
         d = CacheSubDialog(font, game_state, port_id="tortuga")
         surf = pygame.Surface((640, 360), pygame.SRCALPHA)
         d.draw(surf)
+
+    def test_esc_sets_want_close(self, font, game_state):
+        d = CacheSubDialog(font, game_state, port_id="tortuga")
+        d.handle_event(_keydown(pygame.K_ESCAPE))
+        assert d.want_close is True
 
 
 class TestScoreOverlay:

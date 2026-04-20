@@ -110,8 +110,13 @@ class HarbormasterDialog(DialogOverlay):
         self._port_id = port_id
         self._toasts = toasts
         #: Scene-owner leser denne når `want_close` settes. None = lukk
-        #: uten transisjon (ESC eller stubbed cache).
+        #: uten transisjon (ESC).
         self.requested_next_scene: str | None = None
+        #: C3-5: Signaler at scene-owner skal åpne CacheSubDialog etter
+        #: at denne dialogen lukker. Scene-owner leser sammen med
+        #: `want_close` og instansierer CacheSubDialog i stedet for å
+        #: gå tilbake til havn-input.
+        self.open_cache: bool = False
         # Caches
         self._entries_cached: list[HarbormasterEntry] | None = None
         self._label_surfs: list[pygame.Surface] = []
@@ -145,12 +150,19 @@ class HarbormasterDialog(DialogOverlay):
                 active=True,
                 dest_port_id=dest_id,
             ))
-        # Cache-stub (C3-5)
+        # C3-5: Cache-oppføring aktivert. Tortuga viser "Gullkiste",
+        # andre havner viser "Cache" — samme UI mekanisk, kun tittel
+        # skiller seg. Aktivering åpner CacheSubDialog via scene-owner.
+        cache_label = (
+            "\u00c5pne gullkiste"
+            if self._port_id == "tortuga"
+            else "\u00c5pne cache"
+        )
         entries.append(HarbormasterEntry(
             action_id=ACTION_CACHE,
-            label="Åpne cache",
-            cost_label="(kommer i C3-5)",
-            active=False,
+            label=cache_label,
+            cost_label="\u2014",
+            active=True,
         ))
         # Vis kart (aktiv, eksisterende WorldMapScene)
         entries.append(HarbormasterEntry(
@@ -266,6 +278,8 @@ class HarbormasterDialog(DialogOverlay):
             self._do_travel(entry)
         elif entry.action_id == ACTION_SHOW_MAP:
             self._do_show_map()
+        elif entry.action_id == ACTION_CACHE:
+            self._do_open_cache()
 
     # --- Aktive handlinger ---
 
@@ -306,6 +320,16 @@ class HarbormasterDialog(DialogOverlay):
         """Be scene om å bytte til WorldMapScene."""
         self._want_close = True
         self.requested_next_scene = "world_map"
+
+    def _do_open_cache(self) -> None:
+        """Signaliser scene-owner om å åpne CacheSubDialog (C3-5).
+
+        Ingen direkte scene-transisjon — CacheSubDialog er peer-dialog
+        i samme scene. Scene-owner lukker HarbormasterDialog og åpner
+        CacheSubDialog etter autosave.
+        """
+        self._want_close = True
+        self.open_cache = True
 
     def _push_toast(self, text: str, color) -> None:
         if self._toasts is None:

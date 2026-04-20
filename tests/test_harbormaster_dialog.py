@@ -109,12 +109,21 @@ class TestEntries:
         show_map = next(e for e in entries if e.action_id == ACTION_SHOW_MAP)
         assert show_map.active is True
 
-    def test_cache_entry_inactive_with_stub_tag(self, font, state):
+    def test_cache_entry_active_with_port_specific_label(self, font, state):
+        """C3-5: cache-entry aktivert. Label skiller Tortuga (Gullkiste)
+        fra andre havner (Cache)."""
+        # Tortuga → "Åpne gullkiste"
         d = HarbormasterDialog(font, state, port_id="tortuga")
         entries = d._build_entries()
         cache = next(e for e in entries if e.action_id == ACTION_CACHE)
-        assert cache.active is False
-        assert "kommer i C3-5" in cache.cost_label
+        assert cache.active is True
+        assert "gullkiste" in cache.label.lower()
+        # Port Royal → "Åpne cache"
+        d2 = HarbormasterDialog(font, state, port_id="port_royal")
+        entries2 = d2._build_entries()
+        cache2 = next(e for e in entries2 if e.action_id == ACTION_CACHE)
+        assert cache2.active is True
+        assert "cache" in cache2.label.lower()
 
     def test_travel_entries_active_regardless_of_affordability(
         self, font, state
@@ -142,13 +151,13 @@ class TestNavigation:
         d = HarbormasterDialog(font, state, port_id="tortuga")
         assert d.selected == 0  # havana (første fast-travel)
 
-    def test_navigation_skips_cache(self, font, state):
-        """Down fra siste travel-entry (port_royal = index 2) skal skippe
-        cache (index 3) og lande på vis-kart (index 4)."""
+    def test_down_from_last_travel_lands_on_cache(self, font, state):
+        """C3-5: cache er nå aktiv, så down fra siste travel-entry lander
+        på cache (index 3), ikke vis-kart."""
         d = HarbormasterDialog(font, state, port_id="tortuga")
         d._selected = 2  # port_royal
         d.handle_event(_keydown(pygame.K_DOWN))
-        assert d.selected == 4  # vis-kart (skip cache)
+        assert d.selected == 3  # cache
 
     def test_wrap_around_from_show_map_to_first_travel(
         self, font, state
@@ -259,9 +268,11 @@ class TestShowMap:
 # -----------------------------------------------------------------------------
 
 
-class TestCacheStub:
-    def test_cache_enter_is_noop(self, font, state):
-        """Manuelt sett _selected til cache — Enter skal ikke aktivere."""
+class TestCacheActivation:
+    """C3-5: cache-entry er aktiv og signalerer scene-owner om å åpne
+    CacheSubDialog via `open_cache=True` + `want_close=True`."""
+
+    def test_cache_enter_signals_open_cache(self, font, state):
         d = HarbormasterDialog(font, state, port_id="tortuga")
         entries = d._build_entries()
         cache_index = next(
@@ -269,9 +280,16 @@ class TestCacheStub:
         )
         d._selected = cache_index
         d.handle_event(_keydown(pygame.K_RETURN))
-        # Ingen transisjon, ingen close
-        assert d.want_close is False
+        # Dialog lukker + scene-signal
+        assert d.want_close is True
+        assert d.open_cache is True
+        # Ingen scene-transisjon — CacheSubDialog er peer, ikke ny scene
         assert d.requested_next_scene is None
+
+    def test_open_cache_false_by_default(self, font, state):
+        """Nylig opprettet dialog har open_cache=False."""
+        d = HarbormasterDialog(font, state, port_id="tortuga")
+        assert d.open_cache is False
 
 
 # -----------------------------------------------------------------------------
