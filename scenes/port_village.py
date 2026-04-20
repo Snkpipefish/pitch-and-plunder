@@ -107,7 +107,10 @@ class PortVillageScene(BaseScene):
         # himmel-variantene i Commit 7.2 slik at celestial kan tegnes
         # mellom dem og bli okkludert av fjell/hav ved horisont.
         self._backdrops = build_backdrop_variants()
-        self._foregrounds = build_foreground_variants()
+        # Forgrunns-variantene får nå havn-spesifikke ankrede skip-
+        # silhuetter bakt inn (C2.5-5). 4 havner × 6 dag-faser = 24
+        # pre-rendringer ved init; per-frame-blit er uendret.
+        self._foregrounds = build_foreground_variants(port)
         gameplay_layer = ParallaxLayer(
             build_port_gameplay_layer(port), speed=1.0
         )

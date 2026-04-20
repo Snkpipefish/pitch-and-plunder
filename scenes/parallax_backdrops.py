@@ -385,8 +385,11 @@ def build_backdrop_variants() -> list[tuple[float, pygame.Surface]]:
     return variants
 
 
-def build_foreground_variants() -> list[tuple[float, pygame.Surface]]:
-    """Bygg 6 forgrunns-lag (fjell-silhuetter + opakt hav) for dag-natt-syklus.
+def build_foreground_variants(
+    port_config=None,
+) -> list[tuple[float, pygame.Surface]]:
+    """Bygg 6 forgrunns-lag (fjell-silhuetter + opakt hav + ankrede skip)
+    for dag-natt-syklus.
 
     Separasjonen fra `build_backdrop_variants` (Commit 7.2) gir riktig
     render-rekkefølge: bakgrunn → celestial → FORGRUNN → gameplay. Slik
@@ -396,10 +399,24 @@ def build_foreground_variants() -> list[tuple[float, pygame.Surface]]:
     Hver variant er en SRCALPHA-surface:
     - Over horisonten: transparent bortsett fra mørke fjell-silhuetter
     - På og under horisonten: opakt hav i fase-spesifikk farge
+    - Ankrede skip-silhuetter (C2.5-5) bakes MELLOM hav-fyll og dypere
+      lag slik at de står over havet men bak fjell-silhuetter.
 
     Sjø-fargene matcher de samme fraksjonene som `build_backdrop_variants`
     bruker, slik at cross-fade mellom forgrunn og bakgrunn er konsistent.
+
+    Parameters
+    ----------
+    port_config : PortConfig | None
+        Hvis oppgitt og `port_config.buildings.anchored_ships` er ikke-tom,
+        bakes skip-silhuetter inn i hver variant. Samme skip tegnes i alle
+        6 variantene (skipene ser like ut gjennom natt og dag — tonal
+        forskjell kommer fra hav-fargen rundt).
     """
+    # Lazy import for å unngå top-level-avhengighet fra scenes/ til entities/
+    # anchored_ship — holder import-grafen flat.
+    from entities.anchored_ship import draw_anchored_ship
+
     speed = 0.2
     width = required_layer_width(
         constants.WORLD_WIDTH, constants.RENDER_WIDTH, speed
@@ -416,6 +433,16 @@ def build_foreground_variants() -> list[tuple[float, pygame.Surface]]:
         (0.83, constants.COLOR_SEA_MID),
         (0.92, constants.COLOR_SEA_DEEP),
     ]
+
+    # Ankrede skip fra port_config (C2.5-5). Tom tuple hvis ingen port
+    # eller ingen skip konfigurert.
+    anchored_ships: tuple = ()
+    if (
+        port_config is not None
+        and port_config.buildings is not None
+        and port_config.buildings.anchored_ships
+    ):
+        anchored_ships = port_config.buildings.anchored_ships
 
     variants: list[tuple[float, pygame.Surface]] = []
     for frac, sea_c in fg_anchors:
@@ -436,5 +463,13 @@ def build_foreground_variants() -> list[tuple[float, pygame.Surface]]:
             (sea_c[0], sea_c[1], sea_c[2], 255),
             (0, horizon_y, width, height - horizon_y),
         )
+        # Ankrede skip — bakt inn i hav-regionen (y over horisonten
+        # men under bygnings-base-linjen). Bakes etter hav-fyll slik
+        # at skipene står over, ikke skjult av havet.
+        for ship in anchored_ships:
+            draw_anchored_ship(
+                surf, ship.x, ship.y, ship.kind,
+                flipped=ship.flipped, tilted=ship.tilted,
+            )
         variants.append((frac, surf))
     return variants

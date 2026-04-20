@@ -154,6 +154,28 @@ class ChestStack:
 
 
 @dataclass(frozen=True)
+class AnchoredShip:
+    """Ankrede skip-silhuett i havnen (Fase 2.5 C2.5-5).
+
+    Plasseres i forgrunns-lagets koordinatrom (speed 0.2). `x` og `y`
+    er parallax-koordinater — `y` er vannlinjen (skroget tegnes opp fra
+    dette nivået).
+
+    `kind` må være i `entities.anchored_ship.VALID_SHIP_KINDS`:
+    "smuggler", "frigate", "galleon", "small", "pirate".
+
+    `flipped` speiler skipet horisontalt (bue mot venstre i stedet for
+    høyre). `tilted` skråstiller pirat-skip subtilt — kun gyldig for
+    "pirate".
+    """
+    x: int
+    y: int
+    kind: str
+    flipped: bool = False
+    tilted: bool = False
+
+
+@dataclass(frozen=True)
 class SignatureBuilding:
     """Havn-spesifikk signatur-bygning utover tavern + exchange.
 
@@ -221,6 +243,11 @@ class PortBuildings:
     #: (klokketårn, rum-magasin, katedral, guvernørpalass, etc).
     #: Tom tuple = kun tavern + exchange (Tortuga i C2.5-1).
     signature_buildings: tuple[SignatureBuilding, ...] = ()
+    #: Ankrede skip-silhuetter i havnen (Fase 2.5 C2.5-5).
+    #: Bakes inn i foreground SRCALPHA-variantene ved scene-init.
+    #: Tematisk variasjon: Tortuga 3 smugler, Port Royal 3 fregatt,
+    #: Havana 2-3 imperiell, Nassau 4-5 kaotisk små.
+    anchored_ships: tuple[AnchoredShip, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -729,6 +756,50 @@ def _parse_signature_buildings(
     return tuple(result)
 
 
+def _parse_anchored_ships(
+    raw: Any, port_id: str,
+) -> tuple[AnchoredShip, ...]:
+    # Lazy import for å unngå top-level-avhengighet fra config/ til entities/
+    from entities.anchored_ship import VALID_SHIP_KINDS
+
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': anchored_ships må være en liste"
+        )
+    result: list[AnchoredShip] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': anchored_ships[{i}] må være et objekt"
+            )
+        try:
+            kind = str(entry["kind"])
+            x = int(entry["x"])
+            y = int(entry["y"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': anchored_ships[{i}] ugyldig: {exc}"
+            ) from exc
+        if kind not in VALID_SHIP_KINDS:
+            raise ValueError(
+                f"port '{port_id}': anchored_ships[{i}].kind={kind!r} "
+                f"ikke gyldig (må være en av {sorted(VALID_SHIP_KINDS)})"
+            )
+        flipped = bool(entry.get("flipped", False))
+        tilted = bool(entry.get("tilted", False))
+        if tilted and kind != "pirate":
+            raise ValueError(
+                f"port '{port_id}': anchored_ships[{i}]: 'tilted' er kun "
+                f"gyldig for kind='pirate', fikk kind={kind!r}"
+            )
+        result.append(AnchoredShip(
+            x=x, y=y, kind=kind, flipped=flipped, tilted=tilted,
+        ))
+    return tuple(result)
+
+
 def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
     """Parse buildings-blokken. None hvis feltet mangler eller er null
     (havn uten layout ennå).
@@ -788,6 +859,9 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
     signature_buildings = _parse_signature_buildings(
         raw.get("signature_buildings"), port_id,
     )
+    anchored_ships = _parse_anchored_ships(
+        raw.get("anchored_ships"), port_id,
+    )
     return PortBuildings(
         ground_top_y=ground_top_y,
         player_start_x=player_start_x,
@@ -797,6 +871,7 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
         dock_interaction_range=dock_range,
         props=props,
         signature_buildings=signature_buildings,
+        anchored_ships=anchored_ships,
     )
 
 

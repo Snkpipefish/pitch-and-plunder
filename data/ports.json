@@ -25,6 +25,11 @@
         "exchange": {"x": 1380, "y": 248, "w": 200, "h": 92},
         "npcs": {"hawkins": 1470},
         "dock_interaction_range": [8, 80],
+        "anchored_ships": [
+          {"kind": "smuggler", "x": 110, "y": 232},
+          {"kind": "smuggler", "x": 340, "y": 240, "flipped": true},
+          {"kind": "smuggler", "x": 580, "y": 228}
+        ],
         "props": {
           "ground_texture": "cobblestone_wet",
           "lanterns": [
@@ -73,6 +78,11 @@
         "exchange": {"x": 980, "y": 248, "w": 200, "h": 92},
         "npcs": {"hawkins": 1070},
         "dock_interaction_range": [8, 80],
+        "anchored_ships": [
+          {"kind": "frigate", "x": 110, "y": 238},
+          {"kind": "frigate", "x": 310, "y": 238},
+          {"kind": "frigate", "x": 510, "y": 238}
+        ],
         "signature_buildings": [
           {"kind": "church_tower",  "x": 320, "y": 234, "w": 24, "h": 106},
           {"kind": "rum_warehouse", "x": 540, "y": 284, "w": 220, "h": 56}
@@ -125,6 +135,11 @@
         "exchange": {"x": 1180, "y": 248, "w": 200, "h": 92},
         "npcs": {"hawkins": 1270},
         "dock_interaction_range": [8, 80],
+        "anchored_ships": [
+          {"kind": "galleon", "x": 110, "y": 244},
+          {"kind": "galleon", "x": 380, "y": 248, "flipped": true},
+          {"kind": "small",   "x": 600, "y": 232}
+        ],
         "signature_buildings": [
           {"kind": "cathedral",        "x": 320, "y": 232, "w": 200, "h": 108},
           {"kind": "governor_palace",  "x": 580, "y": 256, "w": 260, "h": 84}
@@ -182,6 +197,13 @@
         "exchange": {"x": 980, "y": 248, "w": 200, "h": 92},
         "npcs": {"hawkins": 1070},
         "dock_interaction_range": [8, 80],
+        "anchored_ships": [
+          {"kind": "pirate", "x":  90, "y": 228, "tilted": true},
+          {"kind": "pirate", "x": 210, "y": 238},
+          {"kind": "pirate", "x": 320, "y": 224, "flipped": true, "tilted": true},
+          {"kind": "pirate", "x": 470, "y": 242},
+          {"kind": "pirate", "x": 610, "y": 230, "flipped": true}
+        ],
         "signature_buildings": [
           {"kind": "teachs_house", "x": 320, "y": 252, "w": 180, "h": 88},
           {"kind": "shipyard",     "x": 560, "y": 282, "w": 320, "h": 58}
