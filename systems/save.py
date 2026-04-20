@@ -37,12 +37,15 @@ from dataclasses import asdict as _asdict
 import constants
 from config import port_config as _port_config
 from entities.commodity import InventoryItem
+from state.action_budget import ActionBudget
 from state.economy_state import EconomyState
 from state.game_state import CURRENT_SAVE_VERSION, GameState
+from state.market_effects import PendingRumorImpact, PendingSabotage
 from state.market_state import CommodityMarket, MarketState
 from state.observed_price import ObservedPrice
 from state.pitch_lake_state import PitchLakeState
 from state.player_state import PlayerState
+from state.rumor_state import ActiveRumor
 from state.ship_state import ShipState
 from state.voyage_state import VoyageState
 from state.world_state import WorldState
@@ -468,10 +471,55 @@ def _parse_voyage(raw: Any) -> VoyageState | None:
         return None
 
 
+def _parse_active_rumors(raw: Any) -> list[ActiveRumor]:
+    """Fase 3 (v2) stub-parse. Ukjente/manglende nøkler → tom liste."""
+    if not isinstance(raw, list):
+        return []
+    result: list[ActiveRumor] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            result.append(
+                ActiveRumor(
+                    rumor_type=str(entry.get("rumor_type", "regime_preview")),
+                    port_id=str(entry.get("port_id", "tortuga")),
+                    commodity_id=str(entry.get("commodity_id", "sugar")),
+                    expires_on_day=int(entry.get("expires_on_day", 0)),
+                    payload=(
+                        entry["payload"]
+                        if isinstance(entry.get("payload"), dict)
+                        else {}
+                    ),
+                )
+            )
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def _parse_port_caches(raw: Any) -> dict[str, int]:
+    """Fase 3 (v2) stub-parse. Ikke-dict → tom."""
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, int] = {}
+    for port_id, val in raw.items():
+        if not isinstance(port_id, str):
+            continue
+        try:
+            result[port_id] = int(val)
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
 def _parse_player_state(raw: Any) -> PlayerState:
     bal = _balance.get()
     if not isinstance(raw, dict):
-        return PlayerState(gold=bal.economy.starting_gold)
+        return PlayerState(
+            gold=bal.economy.starting_gold,
+            rest=bal.rest.default_start,
+        )
     try:
         position_x = float(raw.get("position_x", 320.0))
     except (TypeError, ValueError):
@@ -481,24 +529,114 @@ def _parse_player_state(raw: Any) -> PlayerState:
     except (TypeError, ValueError):
         gold = bal.economy.starting_gold
     inventory = _parse_inventory(raw.get("inventory"))
-    return PlayerState(position_x=position_x, gold=gold, inventory=inventory)
+    # Fase 3 (v2) stub-felt — defaults ved mangel (v5-saves uten feltet)
+    try:
+        suspicion = float(raw.get("suspicion", 0.0))
+    except (TypeError, ValueError):
+        suspicion = 0.0
+    try:
+        rest = float(raw.get("rest", bal.rest.default_start))
+    except (TypeError, ValueError):
+        rest = bal.rest.default_start
+    port_caches = _parse_port_caches(raw.get("port_caches"))
+    active_rumors = _parse_active_rumors(raw.get("active_rumors"))
+    return PlayerState(
+        position_x=position_x,
+        gold=gold,
+        inventory=inventory,
+        suspicion=suspicion,
+        rest=rest,
+        port_caches=port_caches,
+        active_rumors=active_rumors,
+    )
+
+
+def _parse_action_budget(raw: Any) -> ActionBudget:
+    """Fase 3 (v2) stub-parse. Mangler/invalid → new_default fra balance."""
+    if not isinstance(raw, dict):
+        return ActionBudget.new_default()
+    bal = _balance.get()
+    try:
+        day_budget = float(raw.get(
+            "day_budget_hours", bal.actions.day_budget_hours
+        ))
+    except (TypeError, ValueError):
+        day_budget = bal.actions.day_budget_hours
+    try:
+        night_budget = float(raw.get(
+            "night_budget_hours", bal.actions.night_budget_hours
+        ))
+    except (TypeError, ValueError):
+        night_budget = bal.actions.night_budget_hours
+    try:
+        hours_used_today = float(raw.get("hours_used_today", 0.0))
+    except (TypeError, ValueError):
+        hours_used_today = 0.0
+    try:
+        hours_used_tonight = float(raw.get("hours_used_tonight", 0.0))
+    except (TypeError, ValueError):
+        hours_used_tonight = 0.0
+    phase = raw.get("phase", "day")
+    if phase not in ("day", "night"):
+        phase = "day"
+    return ActionBudget(
+        day_budget_hours=day_budget,
+        night_budget_hours=night_budget,
+        hours_used_today=hours_used_today,
+        hours_used_tonight=hours_used_tonight,
+        phase=phase,
+    )
 
 
 def _parse_world_state(raw: Any) -> WorldState:
     if not isinstance(raw, dict):
-        return WorldState()
+        return WorldState(action_budget=ActionBudget.new_default())
     current_port = raw.get("current_port", "tortuga")
     if not isinstance(current_port, str):
         current_port = "tortuga"
     clock = _parse_clock(raw.get("clock"))
     ship = _parse_ship(raw.get("ship"))
     voyage = _parse_voyage(raw.get("voyage"))
+    # Fase 3 (v2) stub: action_budget feltet. v5-saves uten feltet får
+    # default fra balance via _parse_action_budget.
+    action_budget = _parse_action_budget(raw.get("action_budget"))
     return WorldState(
         current_port=current_port,
         clock=clock,
         ship=ship,
         voyage=voyage,
+        action_budget=action_budget,
     )
+
+
+def _parse_pending_sabotage(raw: Any) -> PendingSabotage | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return PendingSabotage(
+            target_port=str(raw.get("target_port", "port_royal")),
+            commodity_id=str(raw.get("commodity_id", "sugar")),
+            magnitude_pct=float(raw.get("magnitude_pct", 10.0)),
+            ordered_on_day=int(raw.get("ordered_on_day", 0)),
+            impact_day=int(raw.get("impact_day", 0)),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_pending_rumor_impact(raw: Any) -> PendingRumorImpact | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return PendingRumorImpact(
+            target_port=str(raw.get("target_port", "port_royal")),
+            commodity_id=str(raw.get("commodity_id", "sugar")),
+            magnitude_pct=float(raw.get("magnitude_pct", 10.0)),
+            ordered_on_day=int(raw.get("ordered_on_day", 0)),
+            impact_day=int(raw.get("impact_day", 0)),
+        )
+    except (TypeError, ValueError):
+        return None
 
 
 def _parse_economy_state(raw: Any) -> EconomyState:
@@ -515,7 +653,28 @@ def _parse_economy_state(raw: Any) -> EconomyState:
         for pid, rdata in raw_regimes.items():
             regimes[pid] = _parse_regimes(rdata)
     observed = _parse_observed(raw.get("observed", {}))
-    return EconomyState(markets=markets, regimes=regimes, observed=observed)
+    # Fase 3 (v2) stub-felt — tom liste ved mangel
+    pending_sabotages: list[PendingSabotage] = []
+    raw_ps = raw.get("pending_sabotages", [])
+    if isinstance(raw_ps, list):
+        for entry in raw_ps:
+            parsed = _parse_pending_sabotage(entry)
+            if parsed is not None:
+                pending_sabotages.append(parsed)
+    pending_rumor_impacts: list[PendingRumorImpact] = []
+    raw_pri = raw.get("pending_rumor_impacts", [])
+    if isinstance(raw_pri, list):
+        for entry in raw_pri:
+            parsed = _parse_pending_rumor_impact(entry)
+            if parsed is not None:
+                pending_rumor_impacts.append(parsed)
+    return EconomyState(
+        markets=markets,
+        regimes=regimes,
+        observed=observed,
+        pending_sabotages=pending_sabotages,
+        pending_rumor_impacts=pending_rumor_impacts,
+    )
 
 
 def _parse_pitch_lake_state(raw: Any) -> PitchLakeState:
@@ -549,6 +708,11 @@ def _parse_pitch_lake_state(raw: Any) -> PitchLakeState:
     home_port = raw.get("home_port", "tortuga")
     if not isinstance(home_port, str):
         home_port = "tortuga"
+    # Fase 3 (v2) stub-felt. Default False ved mangel (v5-saves uten
+    # feltet). v5→v6-migreringen i C3-1 vil sette True for eksisterende
+    # dev-saves — foreløpig er stubben ikke koblet til gate-logikk, så
+    # default har ingen effekt på gameplay.
+    purchased = bool(raw.get("purchased", False))
     return PitchLakeState(
         home_port=home_port,
         production_per_day=production_per_day,
@@ -556,6 +720,7 @@ def _parse_pitch_lake_state(raw: Any) -> PitchLakeState:
         pending_units=pending_units,
         total_produced=total_produced,
         last_production_day=last_production_day,
+        purchased=purchased,
     )
 
 
@@ -586,6 +751,12 @@ def new_game_state() -> GameState:
             "tobacco": InventoryItem(),
             "pitch": InventoryItem(),
         },
+        # Fase 3 (v2) C3-0 stubs: default-verdier fra balance. Ingen
+        # wiring ennå.
+        suspicion=0.0,
+        rest=bal.rest.default_start,
+        port_caches={},
+        active_rumors=[],
     )
     world = WorldState(
         current_port="tortuga",
@@ -595,6 +766,9 @@ def new_game_state() -> GameState:
             cargo_capacity=bal.economy.ship_starting_cargo_capacity,
         ),
         voyage=None,
+        # Fase 3 (v2) C3-0 stub: ActionBudget med balance-forankrede
+        # verdier. Koblingen til game loop kommer i C3-1.
+        action_budget=ActionBudget.new_default(),
     )
     base_prices = load_base_prices(
         os.path.join(constants.DATA_DIR, "commodities.json")

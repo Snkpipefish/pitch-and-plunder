@@ -1,5 +1,9 @@
 {
-  "version": 1,
+  "version": 2,
+  "game": {
+    "total_days": 100,
+    "starting_port": "tortuga"
+  },
   "economy": {
     "starting_gold": 300,
     "transaction_fee": 5,
@@ -9,9 +13,60 @@
     "seconds_per_day_in_port": 180.0,
     "seconds_per_day_at_sea": 75.0
   },
+  "actions": {
+    "day_budget_hours": 12.0,
+    "night_budget_hours": 12.0,
+    "cost_hours_per_action": {
+      "walk_across_port": 0.25,
+      "enter_building": 0.0,
+      "exchange_trade": 0.5,
+      "buy_room": 1.0,
+      "buy_rumor": 1.0,
+      "order_sabotage": 2.0,
+      "spread_false_rumor": 2.0,
+      "cache_deposit": 0.25,
+      "cache_withdraw": 0.25,
+      "pitch_lake_purchase": 1.0
+    }
+  },
+  "suspicion": {
+    "threshold": 100.0,
+    "daily_decay": 2.0,
+    "rumor_increase": 0.0,
+    "arrest_on_threshold": true
+  },
+  "rest": {
+    "default_start": 1.0,
+    "decay_per_action": 0.05,
+    "tired_penalty_multiplier": 2.0,
+    "room_cost_gold": 10,
+    "room_cost_hours": 1.0
+  },
+  "rumors": {
+    "cost_gold": 20,
+    "cost_hours": 1.0,
+    "ttl_days": 3,
+    "regime_preview_enabled": true,
+    "price_spike_warning_enabled": true
+  },
+  "sabotage": {
+    "base_cost_gold": 50,
+    "impact_delay_days": 2,
+    "magnitude_pct": 10.0,
+    "false_rumor_base_cost_gold": 40,
+    "false_rumor_magnitude_pct": 10.0,
+    "suspicion_increase_sabotage": 15.0,
+    "suspicion_increase_false_rumor": 8.0
+  },
+  "events": {
+    "voyage_frequency_per_day": 0.5,
+    "port_frequency_per_day_start": 0.2,
+    "positive_ratio": 0.3
+  },
   "pitch_lake": {
     "production_per_day": 2,
-    "upkeep_per_day": 8
+    "upkeep_per_day": 8,
+    "purchase_cost_gold": 500
   },
   "travel": {
     "routes": {

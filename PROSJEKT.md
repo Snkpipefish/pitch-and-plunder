@@ -1,6 +1,6 @@
-# Pitch & Plunder – Prosjektspesifikasjon (v2.4)
+# Pitch & Plunder – Prosjektspesifikasjon (v2.6)
 
-Et 2D pixel art pirat-spill satt til Karibien under pirattiden (sent 1600-tall / tidlig 1700-tall). Krysning mellom **Sid Meier's Pirates!** (PSP), et **Life-sim** (bo i landsby, jobb, spis, sov), og en **skjult økonomi-krigføring** der spilleren manipulerer en lokal børs gjennom ulovlig piratvirksomhet. Inkluderer et **bek-/tjære-utvinningsspill** (sideview med rør, pumper og vogner) inspirert av Pitch Lake på Trinidad. Visuell stil er en hybrid av Kingdom: Two Crowns (atmosfærisk parallax og volumetrisk lys) og Monkey Island (varm karibisk palett, lesbare karakterer).
+Et 2D pixel art pirat-spill satt til Karibien under pirattiden (sent 1600-tall / tidlig 1700-tall). Spillet er et **100-dagers pirat-liv med score** (Jones in the Fast Lane-inspirert life-sim) der spilleren veksler mellom respektabelt fasade-liv (handel på børsen, bek-produksjon) og skjult piratvirksomhet (sabotasje, falske rykter) i fire karibiske havner. Score = gull i Tortuga-kista ved dag 100, arrestasjon eller død. Ytterligere inspirasjon fra **Sid Meier's Pirates!** (PSP) for verden og havner, og et planlagt **bek-/tjære-utvinningsspill** (Fase 4, sideview med rør/pumper/vogner) inspirert av Pitch Lake på Trinidad. Visuell stil er en hybrid av Kingdom: Two Crowns (atmosfærisk parallax og volumetrisk lys) og Monkey Island (varm karibisk palett, lesbare karakterer).
 
 ---
 
@@ -32,11 +32,13 @@ Denne spesifikasjonen er skrevet for en spesifikk maskin:
 
 ## 1. Designpilarer
 
-1. **Dobbeltliv** – Respektabel kjøpmann/embetsmann om dagen, pirat/saboter om natten. Mistankesystem sporer guvernørens bevissthet.
-2. **Markedsmanipulasjon som kjerneløyfe** – Spilleren påvirker tilbud/etterspørsel via piratvirksomhet, og profitterer på prisbevegelsene på den lokale børsen.
-3. **Historisk forankret fantasi** – Ekte karibiske havner (Tortuga, Port Royal, Nassau, Havanna), ekte bek-utvinning, men frihet til pirat-eventyr.
-4. **Atmosfærisk pixel art** – Ikke detalj-tett, men stemningstett. Lys, silhuetter og begrenset palett.
-5. **Ytelse over effekter** – Spillet skal gå smidig på en 2009-maskin. Hvis noe er "kulest mulig" vs "smidig", velger vi smidig.
+1. **100-dagers score-løp** – Spillet er et endelig pirat-liv på 100 dager med klar slutt-tilstand og score. Dette gir tempo, stakes og målbar progresjon — ikke et åpent life-sim. Score = gull i Tortuga-kista ved dag 100, arrestasjon eller død.
+2. **Handlinger driver tid** – Jones in the Fast Lane-inspirert: hver handling koster timer, dagen blir natt når dag-budsjettet er brukt, neste dag når natt-budsjettet er brukt. Tid er diskret og dyrt, ikke en bakgrunnsstrøm.
+3. **Dobbeltliv med mistanke** – Respektabel kjøpmann om dagen (handel, bek-produksjon), pirat om natten (sabotasje, falske rykter). Mistanke-meter sporer guvernørens bevissthet; arrest ved terskel.
+4. **Markedsmanipulasjon som offensiv mekanikk** – Sabotasje hever priser i target-havn, falske rykter senker dem — begge med 2-dagers forsinkelse. Spilleren påvirker tilbud/etterspørsel via piratvirksomhet og profitterer på prisbevegelsene på den lokale børsen.
+5. **Historisk forankret fantasi** – Ekte karibiske havner (Tortuga, Port Royal, Nassau, Havanna), ekte bek-utvinning, men frihet til pirat-eventyr.
+6. **Atmosfærisk pixel art** – Ikke detalj-tett, men stemningstett. Lys, silhuetter og begrenset palett.
+7. **Ytelse over effekter** – Spillet skal gå smidig på en 2009-maskin. Hvis noe er "kulest mulig" vs "smidig", velger vi smidig.
 
 ---
 
@@ -391,11 +393,31 @@ F5 hot-reload av balance.json og F1-F4 debug-teleport. Stub-havner
 har funksjonell børs men deler Tortugas layout — distinkt karakter
 kommer i Fase 3. Se `PHASE_2B_RETROSPECTIVE.md`.
 
-### Fase 3 – Piratvirksomhet + rykte (NESTE)
-### Fase 4 – Bek-utvinning (sideview mini-game)
-### Fase 5 – Dyp simulering + dag/natt
+### Fase 2.5 – Havn-atmosfære per havn (KOMPLETT — v2.5)
 
-(Detaljer senere – disse utformes når Fase 2 er stabil.)
+Se `PHASE_2_5_RETROSPECTIVE.md` og `FASE_2_5.md`. Ren visuell fase
+som ga hver havn distinkt identitet, dag/natt-lys-gating via sprite-
+varianter, og animerte bål/ild-kilder via palette-cycling.
+
+### Fase 3 – 100-dagers pirat-liv med score (NESTE)
+
+Pivot fra åpent life-sim til Jones in the Fast Lane-inspirert score-
+løp. Handlinger driver tid (12 h dag-budsjett + 12 h natt-budsjett per
+dag) — dag/natt-syklus går fra real-time til handlings-drevet.
+Spiller kan sabotere (hever priser i target-havn, +10%, 2 dagers
+delay) og spre falske rykter (senker priser i target, −10%, 2 dagers
+delay) fra tavern-natt-meny; kjøpe rykter (`regime_preview`,
+`price_spike_warning`); hvile i rom; gjemme gull i per-havn caches
+(Tortuga-cachen teller i score, de andre beskytter kun mot arrest);
+og investere i bek-anlegg (500 gull i tavern-dag-meny i Tortuga).
+Mistanke-meter + arrestasjon, random events (voyage + port), tre
+game-over-årsaker (dag 100, arrest, død). Score = gull i Tortuga-
+cachen ved slutt. Se `FASE_3.md` for full spesifikasjon.
+
+### Fase 4 – Bek-utvinning (sideview mini-game)
+### Fase 5 – Dyp simulering + hendelser
+
+(Detaljer senere – disse utformes når Fase 3 er stabil.)
 
 ---
 
@@ -772,6 +794,21 @@ Deretter, én commit per logisk enhet:
 
 ## CHANGELOG
 
+- **v2.6** (2026-04-20) – Fase 3-planlegging komplett, C3-0 landet.
+  Designpilarer omformet: "Dobbeltliv + markedsmanipulasjon" blir
+  "100-dagers score-løp + handlings-drevet tid + offensiv
+  markedsmanipulasjon". Jones in the Fast Lane-inspirert pivot fra
+  åpent life-sim til endelig spill med score. Nye mekanikker i
+  Fase 3: handlings-tid (12+12 h per dag), sabotasje (+10% target
+  pris, 2 dagers delay, mistanke +15), falske rykter (−10% target
+  pris, 2 dagers delay, mistanke +8), rykte-kjøp
+  (`regime_preview` + `price_spike_warning`), rom-meter med decay,
+  mistanke-meter med arrestasjon ved terskel, per-havn gull-caches
+  (Tortuga-cachen = score), bek-anlegg-kjøp gate, random events
+  (voyage + port), score-overlay ved dag 100 / arrest / død.
+  balance.json v1 → v2 med nye seksjoner (game, actions, suspicion,
+  rest, rumors, sabotage, events) og utvidede pitch_lake-felt. Save
+  v5 → v6 bumpes i C3-1. Se `FASE_3.md`.
 - **v2.5** (2026-04-20) – Fase 2.5 komplett. Alle 4 havner har distinkt visuell identitet (Tortuga råhet, Port Royal autoritet, Havana grandiositet, Nassau lovløshet), bystruktur med fyll-bygninger og smug, slitasje/natur/statisk-lys-karakter, dag/natt-lys-gating via sprite-variant-snap (night_factor ≥ 0.5) og animerte bål/ild-kilder med palett-cycling (≤25 px budsjett per havn). 13 commits (C2.5-1 til C2.5-10 inkl. 2 vann-refleksjons-reverter som ble Fase 3-teknisk gjeld). Tester 577/577 (+159 fra v2.4). Ingen mekaniske endringer — ren visuell fase; 2B-balanse-parametere urørt. Se `PHASE_2_5_RETROSPECTIVE.md` for commit-historikk, designbeslutninger, brukertest-observasjoner og Fase 3-gjeld (bakgrunn-bygningslag HØY prioritet, Tortuga-tavern-silhuett-redesign, flere NPC-er, glatt dag/natt-fade).
 - **v2.4** – Fase 2B komplett. Verdenskart-scene (640×360 top-down med 4 havn-markører + tooltip for sist sett priser), aktiv seiling mellom 4 havner (Tortuga, Port Royal, Havana, Nassau) med akselerert klokke (75 sek/dag at sea vs 180 i havn), per-havn marked med bias-priser og regimer som tikker parallelt for alle havner under reise, ObservedPrice-modell med fersk/stale/aldri-besøkt-tilstander, reise-bekreftelse-dialog med gull-trekk + blokkering ved insufficient gold, voyage-resume via save/load (deterministisk progress fra clock-state), dev-mode med F5 hot-reload av balance.json og F1-F4 debug-teleport. Stub-havner deler Tortugas layout — distinkt karakter kommer i Fase 3. Nested GameState v5 med per-domene-felter (PlayerState/WorldState/EconomyState/PitchLakeState). PortConfig + ports.json. balance.json med live/sesjon/nytt-spill hot-reload-kategorier. 16 hovedcommits (C1a–C10) + 2 patch-commits, 418 tester grønne (+231 gjennom 2B), 4.87/6.29 ms frame time (+0.26/+0.14 ms over 2A), 1.21 ms verdenskart, 1.25 ms voyage-scene. Se `PHASE_2B_RETROSPECTIVE.md`. Brukertest-protokollen ble droppet — provisoriske tall kan ikke meningsfullt balanseres før Fase 3-mekanikker (piratinntekter, møter, rykter) gir kontekst.
 - **v2.3** – Fase 2A komplett. Markedsdybde (daglig oppdatering, regimer, trend-piler), dag-natt-syklus (6 pre-rendrede bakgrunner, sol/måne i verdenskoordinater med 1:1 kamera-offset og render-rekkefølge som gir fjell-okklusjon), bek-produksjon med daglig vedlikeholdskostnad, lagerbegrensning, transaksjonsgebyr. 18 commits (inkl. underversjoner), 187 tester grønne, 4.61-6.15 ms frame time. Se `PHASE_2A_RETROSPECTIVE.md`.

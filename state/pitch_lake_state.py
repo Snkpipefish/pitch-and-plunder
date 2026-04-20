@@ -37,6 +37,11 @@ class PitchLakeState:
     pending_units: int = 0
     total_produced: int = 0
     last_production_day: int = 0
+    #: Fase 3 (v2-schema) C3-0 stub. Gates bek-produksjon: False → ingen
+    #: produksjon eller upkeep. True → aktiv. C3-6 wirer dette inn i
+    #: PitchLake.on_new_day som tidlig-return. v5→v6-migrering (C3-1)
+    #: setter True for eksisterende dev-saves; ny save starter False.
+    purchased: bool = False
 
     @classmethod
     def new_default(cls) -> "PitchLakeState":
@@ -46,6 +51,9 @@ class PitchLakeState:
         asdict/dict-unpacking skal gi forutsigbare verdier i load() —
         defaults brukes KUN ved ny save (ikke ved migrering), og da går
         det via denne funksjonen eksplisitt.
+
+        `purchased=False` på fresh save (C3-0 stub-semantikk — ikke
+        koblet). C3-6 gate-logikk bruker dette.
         """
         return cls(
             home_port="tortuga",
@@ -54,4 +62,5 @@ class PitchLakeState:
             pending_units=0,
             total_produced=0,
             last_production_day=0,
+            purchased=False,
         )
