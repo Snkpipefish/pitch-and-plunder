@@ -1,4 +1,4 @@
-"""VoyageScene — aktiv reise mellom to havner (Fase 2B C7c).
+"""VoyageScene — aktiv reise mellom to havner (Fase 2B C7c + Fase 3 C3-9.5).
 
 Top-down 640×360. Skip beveger seg lineært fra from_port til to_port
 basert på `voyage.compute_progress(voyage, clock, balance)`. Posisjon
@@ -23,8 +23,26 @@ Per FASE_2B.md §7. Designvalg:
   havn ved scene-bytte. PortVillageScene.on_enter(from_scene="voyage")
   utfører ankomst-rituale (write_observed, realize_pending_units,
   toast).
-- Ingen player-bevegelse, ingen interaktivitet (autopilot per spec
-  §7.5). ESC og E er no-op i C7c — inventory-overlay deferert til C9.
+- Ingen player-bevegelse utover skip-ikon, ingen aktiv styring.
+
+**Fase 3 C3-9.5 — Tempo-akselerasjon (KUN wall-clock)**:
+
+Scene-init setter `clock.seconds_per_day` til
+`balance.time.voyage_animation_seconds / days_remaining`. Total wall-
+clock-varighet er ~5 sek uansett rute-lengde. In-game-varighet
+(arrival_day, antall dawn-ticks, rest-decay-basert-på-days) påvirkes
+IKKE — KUN animasjons-tempo komprimeres.
+
+Enter/Space/ESC hopper over resterende animasjon ved å sette
+`clock.day = voyage.arrival_day` direkte. update() kjører dawn-tick-
+loopen for gjenværende dager og trigger complete_voyage normalt.
+Events og state-mutasjoner respekteres (C3-11 events vil interrupe
+som vanlig siden de lever inne i dawn-tick-pipelinen).
+
+Save/load under reise fungerer uendret: clock-state rekonstruerer
+skip-posisjon, og scene-init recomputer tempo basert på nytt
+days_remaining ved load — ~5 sek resterende animasjon uansett når
+spilleren gjenopptar.
 """
 
 from __future__ import annotations
@@ -121,13 +139,38 @@ class VoyageScene(BaseScene):
         self._regime_manager = RegimeManager()
         self._last_seen_day = state.world_state.clock.day
 
+        # Fase 3 C3-9.5: akselerert wall-clock-tempo. Komprimerer hele
+        # reise-animasjonen til `voyage_animation_seconds` total, uansett
+        # rute-lengde. Dawn-tick-loopen i update() kjøres fortsatt N
+        # ganger for gjenstående dager — kun tidsskalaen endres.
+        #
+        # days_remaining = voyage.arrival_day - current day. Ved fresh
+        # voyage er det = route.days. Ved resume etter save/load kan
+        # det være mindre; animasjonen bruker da ~voyage_animation_seconds
+        # for resten av reisen.
+        #
+        # Nullstill seconds_into_day: hadde spilleren lagret midt-i-dag
+        # med at_sea-tempo (75 s/dag, f.eks. 30 s inn), ville
+        # ny (mye mindre) seconds_per_day tolke det som mange fulle
+        # dager. Vi ofrer sub-day-presisjon ved resume for å holde
+        # animasjons-semantikken ren.
+        bal = _balance.get()
+        days_remaining = voyage.arrival_day - state.world_state.clock.day
+        if days_remaining > 0:
+            state.world_state.clock.seconds_per_day = (
+                bal.time.voyage_animation_seconds / days_remaining
+            )
+            state.world_state.clock.seconds_into_day = 0.0
+
         # HUD-tekst (statisk for hele reisen — destinasjons-info)
         self._title_surf = font.render(
             f"Reise: {self._from_port_name} \u2192 {self._to_port_name}",
             False, constants.COLOR_MOON_CORE,
         ).convert_alpha()
+        # Fase 3 C3-9.5: skip-hint. Reisen kan ikke AVBRYTES (dawn-ticks
+        # landes fortsatt); bare animasjonen hoppes over.
         self._hint_surf = font.render(
-            "Reisen kan ikke avbrytes",
+            "Enter/Space/Esc hopper til ankomst",
             False, constants.COLOR_FOG,
         ).convert_alpha()
 
@@ -147,10 +190,34 @@ class VoyageScene(BaseScene):
     # --- Input ---
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        # Per spec §7.5: "Once committed, go." Ingen avbryt, ingen
-        # styring. ESC og E er no-op i C7c. C9 vurderer inventory-
-        # overlay med E.
-        return
+        # Fase 3 C3-9.5: Enter/Space/ESC hopper over resterende
+        # animasjon ved å sette clock.day = arrival_day direkte. Neste
+        # update() ser days_passed = gjenværende dager, kjører dawn-
+        # tick-loopen som normalt (inkludert evt. events, sabotasje-
+        # impact osv.) og trigger deretter complete_voyage. Ingen
+        # spill-logikk hoppes over — kun wall-clock-animasjonen.
+        #
+        # Presisering C3-9.5 #2: "Once committed, go" fra spec §7.5
+        # bevares — reisen AVBRYTES ikke (ingen retur til from_port),
+        # bare visningen komprimeres til én frame.
+        if event.type != pygame.KEYDOWN:
+            return
+        if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_ESCAPE):
+            self._skip_to_arrival()
+
+    def _skip_to_arrival(self) -> None:
+        """Hopp direkte til arrival-dagen. update() håndterer dawn-ticks
+        + complete_voyage på neste frame."""
+        voyage = self._state.world_state.voyage
+        if voyage is None:
+            return
+        clock = self._state.world_state.clock
+        if clock.day >= voyage.arrival_day:
+            # Allerede ved eller forbi arrival — neste update() vil
+            # trigge complete_voyage uansett. Ingen endring nødvendig.
+            return
+        clock.day = voyage.arrival_day
+        clock.seconds_into_day = 0.0
 
     # --- Update ---
 

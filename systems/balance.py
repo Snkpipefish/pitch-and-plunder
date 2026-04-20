@@ -58,6 +58,12 @@ class EconomyBalance:
 class TimeBalance:
     seconds_per_day_in_port: float
     seconds_per_day_at_sea: float
+    #: Fase 3 C3-9.5: total wall-clock-varighet (sekunder) for
+    #: VoyageScene-animasjonen, uansett in-game-varighet på reisen.
+    #: Spill-tid (arrival_day, dawn-ticks) påvirkes IKKE. VoyageScene
+    #: deler dette på days_remaining ved scene-init og setter
+    #: `clock.seconds_per_day` for å komprimere animasjonen.
+    voyage_animation_seconds: float = 5.0
 
 
 @dataclass
@@ -242,6 +248,9 @@ LIVE_FIELDS: frozenset[str] = frozenset({
 SESSION_FIELDS: frozenset[str] = frozenset({
     "time.seconds_per_day_in_port",
     "time.seconds_per_day_at_sea",
+    # Fase 3 C3-9.5: voyage-animasjons-tempo. Slår inn ved neste
+    # VoyageScene-init (ikke midt i aktiv reise).
+    "time.voyage_animation_seconds",
     # Fase 3 (v2) session-felt
     "actions.day_budget_hours",
     "actions.night_budget_hours",
@@ -324,6 +333,9 @@ def _parse_balance(raw: dict) -> Balance:
         time_b = TimeBalance(
             seconds_per_day_in_port=float(time_raw["seconds_per_day_in_port"]),
             seconds_per_day_at_sea=float(time_raw["seconds_per_day_at_sea"]),
+            voyage_animation_seconds=float(
+                time_raw.get("voyage_animation_seconds", 5.0)
+            ),
         )
         pl_raw = raw["pitch_lake"]
         pitch_lake = PitchLakeBalance(
@@ -511,6 +523,10 @@ def _diff_fields(old: Balance, new: Balance) -> dict[str, list[str]]:
         ),
         "time.seconds_per_day_at_sea": (
             old.time.seconds_per_day_at_sea, new.time.seconds_per_day_at_sea
+        ),
+        "time.voyage_animation_seconds": (
+            old.time.voyage_animation_seconds,
+            new.time.voyage_animation_seconds,
         ),
         "pitch_lake.production_per_day": (
             old.pitch_lake.production_per_day, new.pitch_lake.production_per_day

@@ -42,6 +42,7 @@ def _valid_payload(**overrides) -> dict:
         "time": {
             "seconds_per_day_in_port": 180.0,
             "seconds_per_day_at_sea": 75.0,
+            "voyage_animation_seconds": 5.0,
         },
         "actions": {
             "day_budget_hours": 12.0,
