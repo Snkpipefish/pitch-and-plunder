@@ -622,6 +622,17 @@ Forventet gjeld ved 2.5-slutt:
 
 ## CHANGELOG
 
+- **v1.3** (2026-04-20) – Fase 2.5 lukket. 13 commits levert (C2.5-1
+  til C2.5-10 inkl. 2 vann-refleksjons-reverter C2.5-8a og C2.5-8d).
+  Vann-refleksjoner droppet fra scope og flyttet til Fase 3-gjeld —
+  fundamental parallax-lag-hastighets-mismatch (foregrunn 0.2 vs
+  gameplay 1.0) forhindret korrekt posisjonering; to forsøk feilet
+  tross grønne tester. Tester 577/577 (+159 fra 418). Brukertest:
+  alle 4 havner leses som tiltenkt identitet; dag/natt fungerer
+  (snap akseptert); Tortuga-tavern-silhuetter leses som "bordlampe"
+  (utsatt til Fase 3); bakgrunn-bygningslag identifisert som HØY
+  prioritet teknisk gjeld. Se `PHASE_2_5_RETROSPECTIVE.md` for
+  fullstendig historikk, designbeslutninger og Fase 3-kobling.
 - **v1.2** (2026-04-20) – Lagt til vann-refleksjoner som egen
   commit (C2.5-8). Ny §1.5, oppdatert §6 commit-plan.
   Fase 2.5 er nå 11 commits totalt. Animasjons-passet utvidet
