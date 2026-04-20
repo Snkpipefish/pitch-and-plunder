@@ -116,3 +116,4 @@ KEY_MENU = (pygame.K_ESCAPE,)
 KEY_CONFIRM = (pygame.K_RETURN,)
 KEY_FULLSCREEN = (pygame.K_F11,)
 KEY_DEV_RELOAD = (pygame.K_F5,)  # Dev-mode: last balance.json på nytt (Fase 2B C1a)
+KEY_RUMORS = (pygame.K_r,)  # Fase 3 C3-9: åpner RumorsDialog

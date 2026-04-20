@@ -393,6 +393,12 @@ def tick_all_ports_dawn(
     from systems.suspicion import on_dawn as suspicion_on_dawn
     suspicion_on_dawn(state)
 
+    # Fase 3 C3-9: rykte-TTL-decay. Dekrementerer days_remaining og
+    # fjerner utløpte rykter. Akkumuleres over multi-day voyage på
+    # samme måte som suspicion.
+    from systems.rumors import on_dawn as rumors_on_dawn
+    rumors_on_dawn(state)
+
     # C8: snapshot observed for current_port med dagens nye priser.
     # Bare når i havn — under reise har spilleren ikke direkte
     # marked-tilgang og from_port-snapshotet er fra avreise-tidspunktet.

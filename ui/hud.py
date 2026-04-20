@@ -9,6 +9,7 @@ Fargekoding er bevisst:
 - Bek (stopp)  (fog       ) : nøytral dempet, signaliserer manglende drift
 - Mistanke     (bånd-farge) : STONE_BRIGHT<30, LANTERN<70, EMBER<90, FLAME≥90
 - Rom          (bånd-farge) : STONE_BRIGHT≥50%, LANTERN≥20%, EMBER≥1%, FLAME<1%
+- Rykter       (stone-lit ) : teller aktive rykter (0 skjules)
 
 Tekst-surfaces caches og re-rendres bare når verdien endrer seg – settere
 er no-ops hvis input er likt forrige verdi.
@@ -57,6 +58,10 @@ class Hud:
         # Rom-linje (Fase 3 C3-8) — alltid synlig. Farge varierer per bånd
         # (STONE_BRIGHT≥50%, LANTERN≥20%, EMBER≥1%, FLAME<1% = utslitt).
         self._rest_surf: pygame.Surface | None = None
+        # Rykter-linje (Fase 3 C3-9) — skjult ved 0, ellers STONE_LIT
+        # informasjonsfarge. Sett via set_rumor_count().
+        self._rumor_count: int | None = None
+        self._rumor_surf: pygame.Surface | None = None
         # DEV-markør nederst til høyre. Rendres ÉN gang i __init__ og
         # caches som attributt — font.render per frame er dyrt på T4200
         # (PROSJEKT.md §14 feilmodus).
@@ -71,6 +76,7 @@ class Hud:
         self.set_pitch_status(pitch_per_day, pitch_upkeep, pitch_halted)
         self.set_suspicion(0.0)
         self.set_rest(1.0)
+        self.set_rumor_count(0)
 
     def set_place(self, place: str) -> None:
         if place == self._place:
@@ -196,6 +202,22 @@ class Hud:
             f"Rom: {pct}%", False, color,
         ).convert_alpha()
 
+    def set_rumor_count(self, count: int) -> None:
+        """Oppdater rykter-linja. Fase 3 C3-9.
+
+        Viser "Rykter: N" i STONE_LIT informasjons-farge. Count=0
+        skjuler linja (rumor_surf=None). Cache på int-verdi.
+        """
+        if count == self._rumor_count:
+            return
+        self._rumor_count = count
+        if count <= 0:
+            self._rumor_surf = None
+        else:
+            self._rumor_surf = self._font.render(
+                f"Rykter: {count}", False, constants.COLOR_STONE_LIT,
+            ).convert_alpha()
+
     def draw(self, surface: pygame.Surface) -> None:
         """Tegn HUD-linjene. Dynamisk y-beregning slik at mistanke-linja
         posisjoneres riktig selv når bek-linja er skjult."""
@@ -217,6 +239,9 @@ class Hud:
             y += LINE_HEIGHT
         if self._rest_surf is not None:
             surface.blit(self._rest_surf, (PADDING, y))
+            y += LINE_HEIGHT
+        if self._rumor_surf is not None:
+            surface.blit(self._rumor_surf, (PADDING, y))
             y += LINE_HEIGHT
         if self._dev_surf is not None:
             dev_x = constants.RENDER_WIDTH - self._dev_surf.get_width() - PADDING

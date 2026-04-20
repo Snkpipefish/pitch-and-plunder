@@ -553,7 +553,16 @@ def _parse_voyage(raw: Any) -> VoyageState | None:
 
 
 def _parse_active_rumors(raw: Any) -> list[ActiveRumor]:
-    """Fase 3 (v2) stub-parse. Ukjente/manglende nøkler → tom liste."""
+    """Fase 3 C3-9: aktive rykter-parse.
+
+    TTL-feltet het `expires_on_day` i C3-0-stub, ble omdøpt til
+    `days_remaining` i C3-9 for å matche TTL-teller-semantikken
+    (dekrementeres per dawn, ikke absolutt dag-nummer).
+
+    Backward-compat: hvis save-filen har `expires_on_day` men ikke
+    `days_remaining`, brukes den som fallback. Nye saves skriver
+    `days_remaining`.
+    """
     if not isinstance(raw, list):
         return []
     result: list[ActiveRumor] = []
@@ -561,12 +570,18 @@ def _parse_active_rumors(raw: Any) -> list[ActiveRumor]:
         if not isinstance(entry, dict):
             continue
         try:
+            # Prefer days_remaining (C3-9), fallback til expires_on_day
+            # (C3-0 stub-format for bakover-kompat).
+            if "days_remaining" in entry:
+                ttl = int(entry["days_remaining"])
+            else:
+                ttl = int(entry.get("expires_on_day", 0))
             result.append(
                 ActiveRumor(
                     rumor_type=str(entry.get("rumor_type", "regime_preview")),
                     port_id=str(entry.get("port_id", "tortuga")),
                     commodity_id=str(entry.get("commodity_id", "sugar")),
-                    expires_on_day=int(entry.get("expires_on_day", 0)),
+                    days_remaining=ttl,
                     payload=(
                         entry["payload"]
                         if isinstance(entry.get("payload"), dict)

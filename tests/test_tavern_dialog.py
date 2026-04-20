@@ -120,28 +120,38 @@ class TestDayEntries:
 
 
 class TestNightEntries:
-    def test_five_entries_fixed_order(self, font, state):
+    def test_six_entries_fixed_order(self, font, state):
+        """C3-9: natt-menyen har nå 6 entries (rom + to rykte-typer +
+        sabotasje/falskt-rykte/smugler stubbed)."""
+        from ui.tavern_dialog import (
+            ACTION_BUY_RUMOR_REGIME, ACTION_BUY_RUMOR_SPIKE,
+        )
         d = TavernNightDialog(font, state, port_id="tortuga")
         entries = d._build_entries()
-        assert len(entries) == 5
+        assert len(entries) == 6
         assert [e.action_id for e in entries] == [
             ACTION_BUY_ROOM,
-            ACTION_RUMOR_LISTEN_PAID,
+            ACTION_BUY_RUMOR_REGIME,
+            ACTION_BUY_RUMOR_SPIKE,
             ACTION_ORDER_SABOTAGE,
             ACTION_SPREAD_FALSE_RUMOR,
             "smuggler_contact",
         ]
 
-    def test_only_rom_is_active(self, font, state):
-        """C3-3: rom-kjøp er eneste aktive handling i natt-menyen.
-
-        Sabotasje (C3-10), rumor_listen_paid (C3-9), spread_false_rumor
-        (C3-10) og smuggler_contact (senere fase) er stubbed.
-        """
+    def test_rom_and_rumor_entries_active(self, font, state):
+        """C3-9: rom + begge rykte-entries er aktive. Sabotasje,
+        falskt-rykte og smugler er fortsatt stubbed."""
+        from ui.tavern_dialog import (
+            ACTION_BUY_RUMOR_REGIME, ACTION_BUY_RUMOR_SPIKE,
+        )
         d = TavernNightDialog(font, state, port_id="tortuga")
         entries = d._build_entries()
-        active_ids = [e.action_id for e in entries if e.active]
-        assert active_ids == [ACTION_BUY_ROOM]
+        active_ids = {e.action_id for e in entries if e.active}
+        assert active_ids == {
+            ACTION_BUY_ROOM,
+            ACTION_BUY_RUMOR_REGIME,
+            ACTION_BUY_RUMOR_SPIKE,
+        }
 
     def test_cost_label_includes_stub_tag(self, font, state):
         d = TavernNightDialog(font, state, port_id="tortuga")
@@ -202,13 +212,17 @@ class TestNavigationSkipsInactive:
         d.handle_event(_keydown(pygame.K_DOWN))
         assert d.selected == 0
 
-    def test_night_navigation_only_rom(self, font, state):
+    def test_night_navigation_cycles_three_active(self, font, state):
+        """C3-9: natt-meny har 3 aktive entries (rom, regime, spike).
+        Down cycler gjennom disse, hopper over stubbed entries."""
         d = TavernNightDialog(font, state, port_id="tortuga")
-        assert d.selected == 0
+        assert d.selected == 0  # rom
         d.handle_event(_keydown(pygame.K_DOWN))
-        assert d.selected == 0
+        assert d.selected == 1  # regime-rykte
         d.handle_event(_keydown(pygame.K_DOWN))
-        assert d.selected == 0
+        assert d.selected == 2  # spike-rykte
+        d.handle_event(_keydown(pygame.K_DOWN))
+        assert d.selected == 0  # wrap til rom
 
 
 # -----------------------------------------------------------------------------

@@ -33,6 +33,7 @@ from scenes.base_scene import BaseScene
 from scenes.exchange import ExchangeOverlay
 from ui.cache_dialog import CacheSubDialog
 from ui.harbormaster_dialog import HarbormasterDialog
+from ui.rumors_dialog import RumorsDialog
 from ui.tavern_dialog import TavernDayDialog, TavernDialog, TavernNightDialog
 from scenes.parallax_backdrops import (
     build_backdrop_variants,
@@ -316,6 +317,9 @@ class PortVillageScene(BaseScene):
         # HarbormasterDialog (ikke nested) per design. Åpnes etter at
         # HarbormasterDialog lukkes med `open_cache=True`.
         self._cache_dialog: CacheSubDialog | None = None
+        # Rykte-dialog (C3-9) — åpnes med R-tast, viser aktive rykter.
+        # Kun les-visning. Lukkes med ESC.
+        self._rumors_dialog: RumorsDialog | None = None
 
         # Hint-indikator (multi-tilstand). "near" er børs-hint (2A-kompat);
         # "near_dock" er kart-hint (C5); "near_tavern" er tavern-hint (C3-3).
@@ -387,9 +391,16 @@ class PortVillageScene(BaseScene):
         if self._cache_dialog is not None:
             self._cache_dialog.handle_event(event)
             return
+        # Rykte-dialog (C3-9) — samme mønster.
+        if self._rumors_dialog is not None:
+            self._rumors_dialog.handle_event(event)
+            return
         if event.type == pygame.KEYDOWN:
             if event.key in constants.KEY_MENU:
                 self.want_quit = True
+            elif event.key in constants.KEY_RUMORS:
+                # Fase 3 C3-9: R åpner RumorsDialog (rykte-liste).
+                self._open_rumors_dialog()
             elif event.key in constants.KEY_INTERACT:
                 # Prioritet: exchange > tavern > harbormaster > dock.
                 # Bygningene står på distinkte x-regioner (verifisert
@@ -478,6 +489,7 @@ class PortVillageScene(BaseScene):
             or self._tavern_dialog is not None
             or self._harbormaster_dialog is not None
             or self._cache_dialog is not None
+            or self._rumors_dialog is not None
         ):
             return "far"
         if self._player_can_interact_with_exchange():
@@ -534,6 +546,17 @@ class PortVillageScene(BaseScene):
             toasts=self._toasts,
         )
         self.autosave()
+
+    def _open_rumors_dialog(self) -> None:
+        """Åpne rykte-liste (Fase 3 C3-9). R-tast.
+
+        Kun les-visning — dialogen muterer ikke state, så ingen autosave
+        ved åpning/lukking. Ignorert hvis en annen dialog er åpen (R
+        gir da ingen effekt, siden handle_event sender events til den
+        åpne dialogen først).
+        """
+        self._player.press(0)
+        self._rumors_dialog = RumorsDialog(self._font, self._state)
 
     def _open_cache_dialog(self) -> None:
         """Åpne CacheSubDialog for gjeldende havn (Fase 3 C3-5).
@@ -623,6 +646,10 @@ class PortVillageScene(BaseScene):
         # kall fra dialog-handlerne (bek-kjøp, fast-travel, cache-
         # commit) og rest.restore fra rom-kjøp.
         self._hud.set_rest(self._state.player_state.rest)
+        # Fase 3 C3-9: rykter-linje. Teller aktive rykter (skjules ved 0).
+        self._hud.set_rumor_count(
+            len(self._state.player_state.active_rumors)
+        )
 
         if self._overlay is not None:
             self._overlay.update(dt, self._current_market_state())
@@ -660,6 +687,11 @@ class PortVillageScene(BaseScene):
             if self._cache_dialog.want_close:
                 self._cache_dialog = None
                 self.autosave()
+            return
+        if self._rumors_dialog is not None:
+            if self._rumors_dialog.want_close:
+                self._rumors_dialog = None
+                # Ingen autosave — rykte-dialogen muterer ikke state.
             return
         # Kun naar overlayet er lukket kan spilleren bevege seg.
         self._player.update(dt, self._player_min_x, self._player_max_x)
@@ -761,6 +793,8 @@ class PortVillageScene(BaseScene):
             self._harbormaster_dialog.draw(surface)
         elif self._cache_dialog is not None:
             self._cache_dialog.draw(surface)
+        elif self._rumors_dialog is not None:
+            self._rumors_dialog.draw(surface)
 
     # --- Lifecycle / save ---
 

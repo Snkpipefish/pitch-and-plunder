@@ -43,6 +43,7 @@ import constants
 from state import GameState
 from systems import balance as _balance
 from systems import rest as _rest
+from systems import rumors as _rumors
 from ui.dialog_overlay import DEFAULT_PANEL_H, DEFAULT_PANEL_W, DialogOverlay
 from ui.toast import Toast, ToastQueue
 
@@ -50,12 +51,17 @@ from ui.toast import Toast, ToastQueue
 #: Action-ID-er brukt i entry-aktivering. Ikke-aktive entries har sin id
 #: bare for debug-formål — de plukkes ikke opp av handle_event.
 ACTION_BUY_ROOM = "buy_room"
-ACTION_RUMOR_LISTEN_FREE = "rumor_listen_free"    # C3-9
-ACTION_RUMOR_LISTEN_PAID = "rumor_listen_paid"    # C3-9
+ACTION_RUMOR_LISTEN_FREE = "rumor_listen_free"    # stubbed senere
+ACTION_BUY_RUMOR_REGIME = "buy_rumor_regime"      # C3-9 (regime_preview)
+ACTION_BUY_RUMOR_SPIKE = "buy_rumor_spike"        # C3-9 (price_spike_warning)
 ACTION_PITCH_LAKE_PURCHASE = "pitch_lake_purchase"  # C3-6
 ACTION_ORDER_SABOTAGE = "order_sabotage"          # C3-10
 ACTION_SPREAD_FALSE_RUMOR = "spread_false_rumor"  # C3-10
 ACTION_SMUGGLER_CONTACT = "smuggler_contact"      # senere fase
+
+# Legacy-alias (C3-3 stub-navn). Brukes ikke lenger i kode, men imports
+# fra test-filer eller ekstern kode skal ikke bryte.
+ACTION_RUMOR_LISTEN_PAID = ACTION_BUY_RUMOR_REGIME
 
 
 @dataclass
@@ -240,6 +246,10 @@ class TavernDialog(DialogOverlay):
             self._do_buy_room()
         elif entry.action_id == ACTION_PITCH_LAKE_PURCHASE:
             self._do_purchase_pitch_lake()
+        elif entry.action_id == ACTION_BUY_RUMOR_REGIME:
+            self._do_buy_rumor_regime()
+        elif entry.action_id == ACTION_BUY_RUMOR_SPIKE:
+            self._do_buy_rumor_spike()
 
     # --- Aktive handlinger ---
 
@@ -317,6 +327,64 @@ class TavernDialog(DialogOverlay):
         self._selected = 0
         self._push_toast(
             "Bek-anlegget er ditt!",
+            constants.COLOR_LANTERN_BRIGHT,
+        )
+
+    def _do_buy_rumor_regime(self) -> None:
+        """Kjøp regime_preview-rykte. Alltid suksess (C3-9 #1).
+
+        Sampler tilfeldig annen havn + vare. Trekker gull, konsumerer
+        rest, legger til rykte i active_rumors.
+        """
+        bal = _balance.get()
+        cost_gold = bal.rumors.cost_gold
+        player = self._state.player_state
+        if player.gold < cost_gold:
+            self._push_toast(
+                f"For lite gull (trenger {cost_gold} d.)",
+                constants.COLOR_EMBER,
+            )
+            return
+        player.gold -= cost_gold
+        _rumors.buy_regime_preview(self._state)
+        _rest.consume_for_action(self._state, bal.rumors.cost_hours)
+        self._push_toast(
+            "Nytt rykte i lomma",
+            constants.COLOR_LANTERN_BRIGHT,
+        )
+
+    def _do_buy_rumor_spike(self) -> None:
+        """Kjøp price_spike_warning-rykte. Refund hvis ingen kandidater.
+
+        C3-9 #1: hvis ingen spike-kandidater (alle regimer stabile),
+        gis gull-refund og toast "Du hører ingen ferske rykter".
+        `systems.rumors.buy_price_spike_warning` returnerer None ved
+        dette tilfellet.
+        """
+        bal = _balance.get()
+        cost_gold = bal.rumors.cost_gold
+        player = self._state.player_state
+        if player.gold < cost_gold:
+            self._push_toast(
+                f"For lite gull (trenger {cost_gold} d.)",
+                constants.COLOR_EMBER,
+            )
+            return
+        # Trekk først, refund hvis ingen kandidater
+        player.gold -= cost_gold
+        rumor = _rumors.buy_price_spike_warning(self._state)
+        if rumor is None:
+            # Refund — gi gullet tilbake, toast-feedback
+            player.gold += cost_gold
+            self._push_toast(
+                "Du hører ingen ferske rykter",
+                constants.COLOR_FOG,
+            )
+            # INGEN rest-decay heller — handlingen ble avvist
+            return
+        _rest.consume_for_action(self._state, bal.rumors.cost_hours)
+        self._push_toast(
+            "Nytt rykte i lomma",
             constants.COLOR_LANTERN_BRIGHT,
         )
 
@@ -437,6 +505,9 @@ class TavernNightDialog(TavernDialog):
 
     def _build_entries(self) -> list[TavernEntry]:
         bal = _balance.get()
+        rumor_cost_label = (
+            f"{bal.rumors.cost_gold} gull, {bal.rumors.cost_hours:.1f} h"
+        )
         return [
             TavernEntry(
                 action_id=ACTION_BUY_ROOM,
@@ -444,11 +515,19 @@ class TavernNightDialog(TavernDialog):
                 cost_label=f"{bal.rest.room_cost_gold} gull, {bal.rest.room_cost_hours:.1f} h",
                 active=True,
             ),
+            # C3-9: regime-rykte (alltid suksess, sampler annen havn)
             TavernEntry(
-                action_id=ACTION_RUMOR_LISTEN_PAID,
-                label="Kjøpe rykter",
-                cost_label="(kommer i C3-9)",
-                active=False,
+                action_id=ACTION_BUY_RUMOR_REGIME,
+                label="Kjøpe regime-rykte",
+                cost_label=rumor_cost_label,
+                active=True,
+            ),
+            # C3-9: spike-rykte (kan gi refund hvis ingen kandidater)
+            TavernEntry(
+                action_id=ACTION_BUY_RUMOR_SPIKE,
+                label="Kjøpe spike-rykte",
+                cost_label=rumor_cost_label,
+                active=True,
             ),
             TavernEntry(
                 action_id=ACTION_ORDER_SABOTAGE,

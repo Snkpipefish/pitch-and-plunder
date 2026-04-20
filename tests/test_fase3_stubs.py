@@ -113,7 +113,7 @@ def test_roundtrip_preserves_stub_values(tmp_path: Path) -> None:
             rumor_type="regime_preview",
             port_id="havana",
             commodity_id="rum",
-            expires_on_day=5,
+            days_remaining=5,
             payload={"regime": "rising"},
         ),
     ]
@@ -150,7 +150,7 @@ def test_roundtrip_preserves_stub_values(tmp_path: Path) -> None:
     assert len(loaded.player_state.active_rumors) == 1
     assert loaded.player_state.active_rumors[0].port_id == "havana"
     assert loaded.player_state.active_rumors[0].commodity_id == "rum"
-    assert loaded.player_state.active_rumors[0].expires_on_day == 5
+    assert loaded.player_state.active_rumors[0].days_remaining == 5
     assert loaded.player_state.active_rumors[0].payload == {"regime": "rising"}
     assert len(loaded.economy_state.pending_sabotages) == 1
     assert loaded.economy_state.pending_sabotages[0].target_port == "port_royal"
@@ -300,7 +300,7 @@ def test_active_rumor_defaults() -> None:
     assert r.rumor_type == "regime_preview"
     assert r.port_id == "tortuga"
     assert r.commodity_id == "sugar"
-    assert r.expires_on_day == 0
+    assert r.days_remaining == 0
     assert r.payload == {}
 
 
