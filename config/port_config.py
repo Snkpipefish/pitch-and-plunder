@@ -188,9 +188,28 @@ class Alley:
     Spec §1.4 krever bredde 20-40 px. Parser aksepterer 16-40 px
     (grense-fleksibilitet når havne-layout er trang, f.eks. Nassau
     hvor signatur-bygningene dominerer).
+
+    `contents` (C2.5-7) legger valgfritt innhold i smuget — tønner,
+    ugress, blomster, palme, sand-drift. Gyldige verdier validert
+    mot `_VALID_ALLEY_CONTENTS`.
     """
     x: int
     w: int
+    contents: str | None = None
+
+
+@dataclass(frozen=True)
+class NatureElement:
+    """Natur-element (palme, fugl, blomster, ugress, etc).
+
+    Fase 2.5 C2.5-7 livfullhet. `kind` matcher
+    `entities.nature.VALID_NATURE_KINDS`. `y` er kontekst-avhengig:
+    for fugler plass på bygning; for vegetasjon/blomster y_top for
+    hengestart; for palmer ignoreres y (ground_top_y brukes).
+    """
+    kind: str
+    x: int
+    y: int = 0
 
 
 @dataclass(frozen=True)
@@ -297,6 +316,11 @@ class PortBuildings:
     #: bygning). Brukes av tester for å verifisere at havet er
     #: synlig gjennom forventede smug-posisjoner.
     alleys: tuple[Alley, ...] = ()
+    #: Natur-elementer (palmer, fugler, blomster, ugress).
+    #: Fase 2.5 C2.5-7. Bakes i gameplay-laget etter bygninger
+    #: slik at fugler på tak/mast og blomster på balkonger havner
+    #: over bygnings-silhuettene.
+    nature_elements: tuple[NatureElement, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -858,6 +882,17 @@ def _parse_fill_buildings(
     return tuple(result)
 
 
+#: Gyldige alley-contents-verdier (C2.5-7 smug-innhold).
+_VALID_ALLEY_CONTENTS: frozenset[str] = frozenset({
+    "ropes",          # Tortuga
+    "barrels",        # Tortuga
+    "weeds",          # Port Royal
+    "flower_pot",     # Havana
+    "palm",           # Nassau
+    "sand_drift",     # Nassau
+})
+
+
 def _parse_alleys(
     raw: Any, port_id: str,
 ) -> tuple[Alley, ...]:
@@ -886,7 +921,51 @@ def _parse_alleys(
             raise ValueError(
                 f"port '{port_id}': alleys[{i}].w={w} utenfor [16, 40]"
             )
-        result.append(Alley(x=x, w=w))
+        contents = entry.get("contents")
+        if contents is not None:
+            contents = str(contents)
+            if contents not in _VALID_ALLEY_CONTENTS:
+                raise ValueError(
+                    f"port '{port_id}': alleys[{i}].contents={contents!r} "
+                    f"ikke gyldig (må være en av "
+                    f"{sorted(_VALID_ALLEY_CONTENTS)})"
+                )
+        result.append(Alley(x=x, w=w, contents=contents))
+    return tuple(result)
+
+
+def _parse_nature_elements(
+    raw: Any, port_id: str,
+) -> tuple[NatureElement, ...]:
+    # Lazy import for å unngå top-level-avhengighet fra config/ til entities/
+    from entities.nature import VALID_NATURE_KINDS
+
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': nature_elements må være en liste"
+        )
+    result: list[NatureElement] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': nature_elements[{i}] må være et objekt"
+            )
+        try:
+            kind = str(entry["kind"])
+            x = int(entry["x"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': nature_elements[{i}] ugyldig: {exc}"
+            ) from exc
+        if kind not in VALID_NATURE_KINDS:
+            raise ValueError(
+                f"port '{port_id}': nature_elements[{i}].kind={kind!r} "
+                f"ikke gyldig (må være en av {sorted(VALID_NATURE_KINDS)})"
+            )
+        y = int(entry.get("y", 0))
+        result.append(NatureElement(kind=kind, x=x, y=y))
     return tuple(result)
 
 
@@ -1000,6 +1079,9 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
         raw.get("fill_buildings"), port_id,
     )
     alleys = _parse_alleys(raw.get("alleys"), port_id)
+    nature_elements = _parse_nature_elements(
+        raw.get("nature_elements"), port_id,
+    )
     return PortBuildings(
         ground_top_y=ground_top_y,
         player_start_x=player_start_x,
@@ -1012,6 +1094,7 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
         anchored_ships=anchored_ships,
         fill_buildings=fill_buildings,
         alleys=alleys,
+        nature_elements=nature_elements,
     )
 
 

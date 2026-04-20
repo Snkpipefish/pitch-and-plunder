@@ -764,15 +764,30 @@ def bake_port_royal_soldier_barracks(
     span = w - 2 * margin
     step = (span - win_w) // (count - 1)
     win_y = y_top + 6
+    # C2.5-7 statisk lys-karakter — Port Royal "kald overvåking":
+    # 4 av 5 vinduer kaldt STONE_LIT (institusjonelt), 1 LANTERN-
+    # varmt (midterste — "lone guard on duty").
+    lone_guard_idx = count // 2
     for i in range(count):
         wx = x + margin + i * step
         pygame.draw.rect(
             surface, constants.COLOR_STONE_DARKEST, (wx, win_y, win_w, win_h)
         )
-        pygame.draw.rect(
-            surface, constants.COLOR_STONE_LIT,
-            (wx + 1, win_y + 1, win_w - 2, win_h - 2),
-        )
+        if i == lone_guard_idx:
+            # Varm guard-vindu
+            pygame.draw.rect(
+                surface, constants.COLOR_LANTERN,
+                (wx + 1, win_y + 1, win_w - 2, win_h - 2),
+            )
+            pygame.draw.rect(
+                surface, constants.COLOR_LANTERN_BRIGHT,
+                (wx + 2, win_y + 2, win_w - 4, 2),
+            )
+        else:
+            pygame.draw.rect(
+                surface, constants.COLOR_STONE_LIT,
+                (wx + 1, win_y + 1, win_w - 2, win_h - 2),
+            )
     # Dør (enkel, sentrert)
     door_w, door_h = 8, 14
     door_x = x + w // 2 - door_w // 2

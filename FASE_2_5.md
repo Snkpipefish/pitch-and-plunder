@@ -154,6 +154,38 @@ Selv bygninger med samme funksjon skal se forskjellige ut per havn.
 Tortuga tømmerpakkhus ≠ Port Royal sivilt pakkhus. En spiller skal
 kunne se en bygning uten kontekst og vite hvilken havn den er fra.
 
+### 1.5 Vann-refleksjoner (fra v1.2)
+
+Vannet i havnene var per C2.5-6b tom plass. Refleksjoner av
+lyskilder gir havnene atmosfærisk dybde og Kingdom Two Crowns-
+kvalitet.
+
+**Refleksjoner er egen teknikk**, ikke del av livfullhet eller
+animasjon. Leveres i C2.5-8 mellom livfullhet (C2.5-7) og
+animasjon (C2.5-9).
+
+**Statisk base + animert bølge:**
+
+C2.5-8 leverer statisk refleksjons-lag (bakes ved scene-init).
+C2.5-9 animasjons-pass legger palette-cycling på deler av
+refleksjons-striper for bølge-bevegelse.
+
+**Per-havn karakter:**
+
+- Tortuga: varme taverna-refleksjoner, dempet blå-tone
+- Port Royal: kald månebane + institusjonelle lys, strekker seg
+- Havana: rike lanterne-refleksjoner, katedral-glød på havet
+- Nassau: bål-refleksjoner flimrende på sand-hav-kanten
+
+**Teknisk:**
+
+- Refleksjoner bakes som forskjøvet forvrengt palett-variant i
+  vann-regionen
+- Forvrengning: vertikal strekk, horisontal wobble (bølge-antydning)
+- Moderat scope per havn: signatur-dør + alle vindus-lys + måne +
+  ankrede skip-master (10-15 refleksjons-striper per havn)
+- Ytelse: bakes én gang ved on_enter. Ingen per-frame-kost.
+
 ---
 
 ## 2. Detaljspesifikasjon per havn
@@ -448,9 +480,10 @@ er for dyrt på GM45.
 
 ## 6. Commit-plan
 
-Fase 2.5 er 10 commits totalt. De første 5 er landet.
+Fase 2.5 er 11 commits totalt. De første 7 er landet
+(C2.5-1 til C2.5-6b).
 
-### Landet (C2.5-1 til C2.5-5)
+### Landet (C2.5-1 til C2.5-6b)
 
 - **C2.5-1** — Tortuga rekvisita-lag (21 nye tester)
 - **C2.5-2** — Port Royal signatur-bygninger (18 nye tester)
@@ -458,69 +491,10 @@ Fase 2.5 er 10 commits totalt. De første 5 er landet.
 - **C2.5-4** — Nassau markedsplass + Teach's hus + skipsverft
   (11 nye tester, lys-korrigering EMBER→LANTERN)
 - **C2.5-5** — Ankrede skip-silhuetter per havn (17 nye tester)
-
-### Gjenstående (C2.5-6a gjennom C2.5-9)
-
-#### C2.5-6a — Tortuga + Nassau fyll-bygninger + smug
-
-Mindre havner, prototyp for mønsteret. 9-13 bygninger totalt.
-
-**Tortuga fyll-bygninger (5 sikre + 2 valgfrie):**
-
-1. Fiskerhytte med tørke-nett (32-40 px)
-2. Boarding-hus, 2 etasjer (48-56 px)
-3. Tømmerpakkhus (36-44 px)
-4. Lite felt-hospital/barbeskjær (40 px)
-5. Smed-verksted med glødende kull (36-44 px)
-6. (Valgfri) Taverne nr 2
-7. (Valgfri) Privat rom-lager
-
-**Nassau fyll-bygninger (4 sikre + 2 valgfrie, taverne-cluster
-teller 2):**
-
-1. Taverne-cluster: 2 små taverner tett sammen (24-32 px hver)
-2. Improvisert pakkhus (28-36 px)
-3. Lappverks-hytte (32-40 px)
-4. Tauverks-verksted (24-32 px)
-5. (Valgfri) Seilmaker
-6. (Valgfri) Halvforlatt hus med natur som vokser inn
-
-**Smug:** 3 per havn, havn-spesifikk karakter per §1.4.
-
-**Filer:**
-- `entities/fill_buildings.py` (ny — per-havn bake-funksjoner)
-- `config/port_config.py` (FillBuilding + Alley dataclasses)
-- `data/ports.json` (fill_buildings og alleys-felt per havn)
-- `scenes/port_buildings.py` (utvid bake-pipeline)
-
-#### C2.5-6b — Port Royal + Havana fyll-bygninger + smug
-
-Større havner, etterfølger mønster fra 6a. 13-17 bygninger totalt.
-
-**Port Royal fyll-bygninger (6 sikre + 2 valgfrie):**
-
-1. Offisersbolig, murstein med jerngelénder (48-56 px)
-2. East India Co.-kontor med skilt (48-56 px)
-3. Soldat-arbeidsbrakke med identisk vindusrekke (40-48 px)
-4. Sivilt pakkhus ved kaia (36-44 px)
-5. Handelsmannsbolig, 2 etasjer (48-60 px)
-6. Legekontor/apotek med skilt (40-48 px)
-7. (Valgfri) Fengsels-anneks med jerngittere
-8. (Valgfri) Kirke-sakristi knyttet til klokketårn-kirken
-
-**Havana fyll-bygninger (7 sikre + 2 valgfrie):**
-
-1. Kloster-annex knyttet til katedralen (48-56 px)
-2. Handelsmannshus med balkong og blomster (48-60 px)
-3. Tobakks-pakkhus, stort lavt (40-48 px)
-4. Lite daglig-kapell (48-56 px)
-5. Borgerhus, 2 etasjer rik fasade (56-60 px)
-6. Gesellene-verksted med bronse-smie (40-48 px)
-7. Spansk vakthus, lite militært (40-48 px)
-8. (Valgfri) Blomster-marked (åpen struktur)
-9. (Valgfri) Sukker-lager
-
-**Smug:** 4 Port Royal, 4-5 Havana, per §1.4.
+- **C2.5-6a** — Tortuga + Nassau fyll-bygninger + smug
+  (26 nye tester)
+- **C2.5-6b** — Port Royal + Havana fyll-bygninger + smug
+  (5 nye tester)
 
 #### C2.5-7 — Livfullhet per havn (slitasje + natur + statisk lys)
 
@@ -550,25 +524,66 @@ Moderat omfang, per-havn rekkefølge i én commit.
 - Nassau: flimrende kaos — ulike vindus-farger (gul/rød) i Teach's
   hus, kaotisk belysning
 
-#### C2.5-8 — Animasjons-pass
+**Smug-innhold (utsatt fra C2.5-6a/6b):**
+Natur-innhold i smugene hører hjemme i denne commiten:
+- Tortuga: tønner eller tauverk i midten av smug
+- Port Royal: ugress langs smug-kanter
+- Havana: blomster-plantering i brede arkade-smug
+- Nassau: palmer eller sand-drift i midten
 
-Som opprinnelig planlagt:
+#### C2.5-8 — Vann-refleksjoner
+
+Egen teknikk per §1.5. Statisk base, bakes ved scene-init.
+
+**Per havn:**
+
+- Tortuga: taverna-dør + 4 vindus-lys + måne + 3 smugler-skip-master
+- Port Royal: Customs House kaldt dør-lys + klokketårn-vindu +
+  rum-magasin porter + måne + 3 fregatt-master
+- Havana: katedral-dør + palass-balkong lys + arkade-lys +
+  fontene-reflekt + måne + 3 galleon-master
+- Nassau: Teach's hus vinduer + markedsplass LANTERN + 2 bål +
+  måne + 5 pirat-skip-master
+
+**Teknisk:**
+
+- Bakes i foreground-lag under horisontlinjen
+- Forskjøvet palett (mørkere versjoner av kilde-lysets farge)
+- Vertikal strekk 2-3x kilde-høyde
+- Horisontal wobble: enkel sinuskurve-forskyvning per y-linje
+- Måne-bane: ett vertikal lys-bånd midt i vannet, bredere enn
+  vindus-refleksjoner
+
+**Akseptansekriterier:**
+
+- Alle 4 havner har distinkt refleksjons-karakter
+- Refleksjoner forvrenger, ikke speiler perfekt
+- Ytelse: bakes ved on_enter, ingen per-frame-kost
+- Palett-disiplin: kun master-palett-farger
+
+#### C2.5-9 — Animasjons-pass
+
+Som tidligere planlagt, utvidet med refleksjons-bølger:
+
 - Palette-cycling på bål (Nassau), røyk (Tortuga/Havana), fontene
   (Havana)
 - Alpha-pulsering på vinduer alle havner, asynkron 0.85-1.0 over
   2-3 sek
+- **Nytt:** palette-cycling på deler av refleksjons-striper for
+  bølge-bevegelse (2-3 piksel vertikal forskyvning sykliskt)
 - Data-drevet via ports.json `animations`-felt
 
-Maks 20 px palette-cycling per havn.
+Maks 25 px palette-cycling per havn (utvidet fra 20 for å
+inkludere refleksjons-bølger).
 
-#### C2.5-9 — Brukertest + retrospektiv
+#### C2.5-10 — Brukertest + retrospektiv
 
-Utvidet brukertest med eksplisitt spørsmål om havnen føles bebodd
-nok etter all livfullhet og animasjon er lagt på.
+Utvidet brukertest med eksplisitt spørsmål om vann-refleksjonene
+gir havnene den atmosfæriske dybden som var tiltenkt.
 
 PHASE_2_5_RETROSPECTIVE.md med per-commit-oversikt, brukertest-
-observasjoner, teknisk gjeld for Fase 3, oppdatering av PROSJEKT.md
-CHANGELOG til v2.5.
+observasjoner, teknisk gjeld for Fase 3, oppdatering av
+PROSJEKT.md CHANGELOG til v2.5.
 
 ---
 
@@ -607,8 +622,11 @@ Forventet gjeld ved 2.5-slutt:
 
 ## CHANGELOG
 
+- **v1.2** (2026-04-20) – Lagt til vann-refleksjoner som egen
+  commit (C2.5-8). Ny §1.5, oppdatert §6 commit-plan.
+  Fase 2.5 er nå 11 commits totalt. Animasjons-passet utvidet
+  med refleksjons-bølge-cycling.
 - **v1.1** (2026-04-20) – Utvidet scope etter brukersamtale:
   fyll-bygninger per havn, bystruktur med smug, silhuett-hierarki
-  (§1.4), 4 nye commits (C2.5-6a, C2.5-6b, C2.5-7, C2.5-8).
-  Fase 2.5 er nå 10 commits totalt.
+  (§1.4), 4 nye commits.
 - **v1.0** – Initial Fase 2.5-spesifikasjon.

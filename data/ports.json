@@ -38,9 +38,16 @@
           {"kind": "tortuga_smithy",          "x": 890, "w": 70, "h": 42}
         ],
         "alleys": [
-          {"x": 302, "w": 20},
-          {"x": 552, "w": 22},
-          {"x": 962, "w": 22}
+          {"x": 302, "w": 20, "contents": "ropes"},
+          {"x": 552, "w": 22, "contents": "barrels"},
+          {"x": 962, "w": 22, "contents": "ropes"}
+        ],
+        "nature_elements": [
+          {"kind": "palm_leaning", "x": 410},
+          {"kind": "palm",         "x": 840},
+          {"kind": "seagull",      "x": 110, "y": 220},
+          {"kind": "seagull",      "x": 350, "y": 225},
+          {"kind": "seaweed",      "x": 40}
         ],
         "props": {
           "ground_texture": "cobblestone_wet",
@@ -104,10 +111,17 @@
           {"kind": "port_royal_apothecary",         "x": 934, "w": 46, "h": 44}
         ],
         "alleys": [
-          {"x": 290, "w": 22},
-          {"x": 412, "w": 24},
-          {"x": 822, "w": 24},
-          {"x": 910, "w": 20}
+          {"x": 290, "w": 22, "contents": "weeds"},
+          {"x": 412, "w": 24, "contents": "weeds"},
+          {"x": 822, "w": 24, "contents": "weeds"},
+          {"x": 910, "w": 20, "contents": "weeds"}
+        ],
+        "nature_elements": [
+          {"kind": "palm",         "x": 130},
+          {"kind": "palm",         "x": 1160},
+          {"kind": "moss_patch",   "x": 322, "y": 256},
+          {"kind": "seagull",      "x": 110, "y": 222},
+          {"kind": "seagull",      "x": 310, "y": 222}
         ],
         "signature_buildings": [
           {"kind": "church_tower",  "x": 320, "y": 234, "w": 24, "h": 106},
@@ -176,10 +190,22 @@
           {"kind": "havana_chapel_small",       "x": 1134, "w": 38, "h": 52}
         ],
         "alleys": [
-          {"x": 290, "w": 22},
-          {"x": 848, "w": 28},
-          {"x": 930, "w": 34},
-          {"x": 1104, "w": 28}
+          {"x": 290, "w": 22, "contents": "flower_pot"},
+          {"x": 848, "w": 28, "contents": "flower_pot"},
+          {"x": 930, "w": 34, "contents": "flower_pot"},
+          {"x": 1104, "w": 28, "contents": "flower_pot"}
+        ],
+        "nature_elements": [
+          {"kind": "palm_tall",     "x": 840},
+          {"kind": "palm_tall",     "x": 870},
+          {"kind": "palm",          "x": 895},
+          {"kind": "bougainvillea", "x": 892, "y": 286},
+          {"kind": "bougainvillea", "x": 920, "y": 286},
+          {"kind": "hanging_plant", "x": 608, "y": 272},
+          {"kind": "hanging_plant", "x": 750, "y": 272},
+          {"kind": "dove",          "x": 348, "y": 218},
+          {"kind": "dove",          "x": 490, "y": 218},
+          {"kind": "dove",          "x": 414, "y": 214}
         ],
         "signature_buildings": [
           {"kind": "cathedral",        "x": 320, "y": 232, "w": 200, "h": 108},
@@ -253,9 +279,18 @@
           {"kind": "nassau_improvised_warehouse",  "x": 716, "w": 48, "h": 36}
         ],
         "alleys": [
-          {"x": 300, "w": 20},
-          {"x": 626, "w": 38},
-          {"x": 900, "w": 24}
+          {"x": 300, "w": 20, "contents": "palm"},
+          {"x": 626, "w": 38, "contents": "sand_drift"},
+          {"x": 900, "w": 24, "contents": "palm"}
+        ],
+        "nature_elements": [
+          {"kind": "palm_leaning", "x": 140},
+          {"kind": "palm",         "x": 530},
+          {"kind": "palm_tall",    "x": 930},
+          {"kind": "palm_leaning", "x": 1140},
+          {"kind": "pelican",      "x": 700, "y": 262},
+          {"kind": "seagull",      "x": 90, "y": 224},
+          {"kind": "seagull",      "x": 470, "y": 238}
         ],
         "signature_buildings": [
           {"kind": "teachs_house", "x": 320, "y": 252, "w": 180, "h": 88},

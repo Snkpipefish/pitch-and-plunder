@@ -23,9 +23,11 @@ import pygame
 
 import constants
 from config.port_config import (
-    FillBuilding, PortConfig, PortProps, SignatureBuilding,
+    Alley, FillBuilding, NatureElement, PortConfig, PortProps,
+    SignatureBuilding,
 )
 from entities import fill_buildings as fill_buildings_module
+from entities import nature as nature_module
 from entities import port_props as props_module
 
 
@@ -130,7 +132,7 @@ def _bake_tavern(
     # To opplyste vinduer (bakt varm glød – Commit 5 legger på dynamisk lys)
     window_w, window_h = 24, 28
     window_y = y + 14
-    for wx in (x + 40, x + w - 40 - window_w):
+    for wi, wx in enumerate((x + 40, x + w - 40 - window_w)):
         pygame.draw.rect(
             surface,
             constants.COLOR_LANTERN,
@@ -150,6 +152,45 @@ def _bake_tavern(
             surface, constants.COLOR_WOOD_DARKEST,
             (wx, window_y + window_h // 2 - 1, window_w, 2),
         )
+        # Silhuett inne i vindu (C2.5-7 livfullhet — Tortuga
+        # "klaustrofobisk varme"). Venstre vindu: hatt-silhuett.
+        # Høyre vindu: spillekort-form (pokerkveld).
+        if wi == 0:
+            # Tricorn-hatt
+            pygame.draw.rect(
+                surface, constants.COLOR_HAT,
+                (wx + 6, window_y + window_h // 2 + 4, 12, 3),
+            )
+            pygame.draw.rect(
+                surface, constants.COLOR_HAT,
+                (wx + 8, window_y + window_h // 2 + 2, 8, 3),
+            )
+        else:
+            # Spillekort-rektangler (to stk på rad)
+            pygame.draw.rect(
+                surface, constants.COLOR_SHIRT,
+                (wx + 6, window_y + window_h // 2 + 4, 4, 6),
+            )
+            pygame.draw.rect(
+                surface, constants.COLOR_SHIRT,
+                (wx + 14, window_y + window_h // 2 + 4, 4, 6),
+            )
+            # Kort-bakside (mørk)
+            pygame.draw.rect(
+                surface, constants.COLOR_EMBER,
+                (wx + 7, window_y + window_h // 2 + 5, 2, 1),
+            )
+
+    # Mose-patch på taket (C2.5-7 slitasje — Tortuga funksjonelt
+    # forfall). STONE_LIT-antydning ved venstre side av taket.
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_LIT,
+        (x + 12, y - 5, 6, 1),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID,
+        (x + 14, y - 4, 2, 1),
+    )
 
     # Skilt mellom vinduene
     sign_x, sign_y, sign_w, sign_h = x + w // 2 - 26, y + 16, 52, 10
@@ -280,6 +321,20 @@ def _bake_customs_house(
     pygame.draw.rect(
         surface, constants.COLOR_STONE_DARKEST, (x, y + 10, w, 1)
     )
+    # C2.5-7 slitasje — flassende hvitkalk: STONE_DARK-flekker der
+    # STONE_MID har falt av. "Pompøs nedslitthet" per Port Royal-
+    # karakter. Deterministiske posisjoner (ikke randomisert).
+    for fx_off, fy_off, fw in (
+        (20, 18, 8),
+        (60, 32, 6),
+        (110, 22, 10),
+        (w - 50, 40, 7),
+        (w - 90, 20, 5),
+    ):
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARK,
+            (x + fx_off, y + fy_off, fw, 2),
+        )
     # Trekantgavl (pediment) — bredere og lysere enn Tortugas for
     # britisk klassisk-revival-signal
     pediment = [
@@ -753,7 +808,23 @@ def _bake_cathedral(
     pygame.draw.circle(
         surface, constants.COLOR_LANTERN, (cx, rose_y + rose_r), rose_r - 1
     )
-    # Sentrum-glimt
+    # C2.5-7 statisk lys-karakter — Havana "katolsk varme":
+    # glass-mosaikk-antydning via forskjellige fargeflekker innenfor
+    # rose-vinduet. EMBER/FLAME/SHIRT-biter som antyder fargeglass.
+    mosaic_cy = rose_y + rose_r
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER, (cx - 4, mosaic_cy - 2, 2, 2)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_FLAME, (cx + 2, mosaic_cy - 3, 2, 2)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_SHIRT, (cx - 3, mosaic_cy + 1, 2, 2)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_LIT, (cx + 1, mosaic_cy + 2, 2, 2)
+    )
+    # Sentrum-glimt (etter mosaikk, for å bevare fokus)
     pygame.draw.circle(
         surface, constants.COLOR_LANTERN_BRIGHT, (cx, rose_y + rose_r), 2
     )
@@ -1080,14 +1151,17 @@ def _bake_teachs_house(
 
     # Skeive vinduer — to stk, forskyvet i høyde
     win_w, win_h = 16, 12
-    # Venstre vindu (litt høyere)
+    # C2.5-7 statisk lys-karakter — Nassau "flimrende kaos":
+    # venstre vindu LANTERN_BRIGHT-gul, høyre EMBER-rød
+    # (forskjellig stemning per sjener). Tredje vindu midt på taket
+    # med annen farge legges under.
+    # Venstre vindu (litt høyere) — LANTERN gul
     left_wx = x + 14
     left_wy = y + 10
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARKEST,
         (left_wx, left_wy, win_w, win_h),
     )
-    # Inne: varmt lys
     pygame.draw.rect(
         surface, constants.COLOR_LANTERN,
         (left_wx + 1, left_wy + 1, win_w - 2, win_h - 2),
@@ -1096,13 +1170,12 @@ def _bake_teachs_house(
         surface, constants.COLOR_LANTERN_BRIGHT,
         (left_wx + 2, left_wy + 2, win_w - 4, 3),
     )
-    # Trekant-ramme (skjevt)
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARKEST,
         (left_wx + win_w // 2 - 1, left_wy, 2, win_h),
     )
 
-    # Høyre vindu (litt lavere, samme stil men skjev)
+    # Høyre vindu (litt lavere) — EMBER rød-tonet
     right_wx = x + w - 14 - win_w
     right_wy = y + 14
     pygame.draw.rect(
@@ -1110,16 +1183,44 @@ def _bake_teachs_house(
         (right_wx, right_wy, win_w, win_h),
     )
     pygame.draw.rect(
-        surface, constants.COLOR_LANTERN,
+        surface, constants.COLOR_EMBER,
         (right_wx + 1, right_wy + 1, win_w - 2, win_h - 2),
     )
     pygame.draw.rect(
-        surface, constants.COLOR_LANTERN_BRIGHT,
+        surface, constants.COLOR_FLAME,
         (right_wx + 2, right_wy + 2, win_w - 4, 3),
     )
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARKEST,
         (right_wx + win_w // 2 - 1, right_wy, 2, win_h),
+    )
+
+    # Lite tredje vindu midt mellom de to — FLAME orange
+    mid_wx = x + w // 2 - 3
+    mid_wy = y + 24
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (mid_wx, mid_wy, 6, 6),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_FLAME,
+        (mid_wx + 1, mid_wy + 1, 4, 4),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN,
+        (mid_wx + 2, mid_wy + 2, 2, 1),
+    )
+
+    # C2.5-7 slitasje — "tre som vokser mellom planker":
+    # MOSS_DAMP-lapper (STONE_LIT-antydning) på lappverks-strukturen
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_LIT, (x + 50, y + 40, 3, 1)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID, (x + 50, y + 41, 3, 1)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_LIT, (x + w - 30, y + 50, 4, 1)
     )
 
     # Tak-trekk: seilstoff (SHIRT lys-farge — antyder skipsseil)
@@ -1297,6 +1398,84 @@ _SIGNATURE_BUILDING_BAKERS = {
 }
 
 
+def _bake_alley_contents(
+    surface: pygame.Surface,
+    alleys: tuple[Alley, ...],
+    ground_top_y: int,
+) -> None:
+    """Bake smug-innhold (C2.5-7).
+
+    Rekvisita/natur i midten av smug per havn-karakter:
+    - ropes: WOOD_LIGHT tau-sirkel (Tortuga)
+    - barrels: liten tønne (Tortuga)
+    - weeds: ugress-lapp (Port Royal)
+    - flower_pot: blomster-potte (Havana)
+    - palm: liten palme (Nassau)
+    - sand_drift: sand-haug (Nassau)
+    """
+    for alley in alleys:
+        if alley.contents is None:
+            continue
+        cx = alley.x + alley.w // 2
+        if alley.contents == "ropes":
+            # Tau-sirkel: WOOD_LIGHT på bakken
+            pygame.draw.rect(
+                surface, constants.COLOR_WOOD_LIGHT,
+                (cx - 3, ground_top_y - 3, 6, 3),
+            )
+            pygame.draw.rect(
+                surface, constants.COLOR_WOOD_DARKEST,
+                (cx - 3, ground_top_y - 3, 6, 1),
+            )
+            pygame.draw.rect(
+                surface, constants.COLOR_WOOD_DARK, (cx - 1, ground_top_y - 2, 2, 1)
+            )
+        elif alley.contents == "barrels":
+            # Én liten tønne
+            props_module.bake_barrel_stack(surface, cx - 5, ground_top_y, count=1)
+        elif alley.contents == "weeds":
+            nature_module.bake_weeds(surface, cx - 4, ground_top_y)
+        elif alley.contents == "flower_pot":
+            # Potte + EMBER-blomster
+            pot_y = ground_top_y - 5
+            pygame.draw.rect(
+                surface, constants.COLOR_WOOD_LIGHT, (cx - 3, pot_y, 6, 4)
+            )
+            pygame.draw.rect(
+                surface, constants.COLOR_WOOD_DARKEST, (cx - 3, pot_y, 6, 1)
+            )
+            # Blomster
+            for dx, color in (
+                (-2, constants.COLOR_EMBER),
+                (0, constants.COLOR_LANTERN_BRIGHT),
+                (2, constants.COLOR_EMBER),
+            ):
+                pygame.draw.rect(
+                    surface, color, (cx + dx, pot_y - 2, 1, 2),
+                )
+        elif alley.contents == "palm":
+            nature_module.bake_palm(surface, cx, ground_top_y, height=28, crown_spread=8)
+        elif alley.contents == "sand_drift":
+            nature_module.bake_sand_drift(surface, cx - 8, ground_top_y, width=16)
+
+
+def _bake_nature_elements(
+    surface: pygame.Surface,
+    nature_elements: tuple[NatureElement, ...],
+    ground_top_y: int,
+) -> None:
+    """Bake natur-elementer (palmer, fugler, blomster, ugress).
+
+    C2.5-7 livfullhet. Tegnes sist i pipelinen (etter signatur-
+    bygninger) slik at fugler på tak/mast og blomster på balkonger
+    havner over bygnings-silhuettene.
+    """
+    for ne in nature_elements:
+        nature_module.bake_nature_element(
+            surface, ne.kind, ne.x, ne.y, ground_top_y,
+        )
+
+
 def _bake_fill_buildings(
     surface: pygame.Surface,
     fill_buildings: tuple[FillBuilding, ...],
@@ -1386,5 +1565,14 @@ def build_port_gameplay_layer(port_config: PortConfig) -> pygame.Surface:
     # (tegnes over gameplay-laget av PortVillageRenderer).
     if b.props is not None:
         _bake_props(surf, b.props, b.ground_top_y)
+    # Smug-innhold (C2.5-7): tønner/ugress/blomster/palmer/sand i
+    # midten av smug, per havn-karakter.
+    if b.alleys:
+        _bake_alley_contents(surf, b.alleys, b.ground_top_y)
+    # Natur-elementer (C2.5-7): palmer, fugler, blomster, ugress.
+    # Tegnes sist for å legge over bygnings-silhuettene der relevant
+    # (fugler på tak/mast, blomster på balkonger).
+    if b.nature_elements:
+        _bake_nature_elements(surf, b.nature_elements, b.ground_top_y)
     surf.set_colorkey(COLORKEY)
     return surf
