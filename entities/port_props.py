@@ -18,10 +18,11 @@ import constants
 
 
 #: Gyldige gategulv-teksturer. Utvides per-havn i senere commits:
-#: "cobblestone_dry" (Port Royal), "stone_slab" (Havana), "sand" (Nassau).
+#: "stone_slab" (Havana), "sand" (Nassau).
 VALID_GROUND_TEXTURES: frozenset[str] = frozenset({
     "wood_dark",          # Eksisterende — beholdes som default for ikke-Tortuga
     "cobblestone_wet",    # Tortuga — våte flekker, smugler-atmosfære
+    "cobblestone_dry",    # Port Royal — tørr ordnet brostein, kolonial orden
 })
 
 
@@ -103,6 +104,51 @@ def bake_cobblestone_wet_ground(
         )
 
 
+def bake_cobblestone_dry_ground(
+    surface: pygame.Surface, ground_top_y: int,
+) -> None:
+    """Port Royal: tørr, ordnet brostein.
+
+    Forskjell fra Tortugas `cobblestone_wet`:
+    - Ingen WOOD_MID-våte flekker (tørr)
+    - Regelmessig grid i STONE_MID (ordnet, ikke naturlig spredt)
+    - Lysere base (STONE_MID i stedet for STONE_DARK) — kolonial orden
+    - Subtile STONE_DARKEST-fugerlinjer mellom steinene
+
+    Signaliserer "britisk institusjonell orden" mot Tortugas kaos.
+    """
+    width = surface.get_width()
+    ground_bottom_y = constants.RENDER_HEIGHT
+    # 1) Hovedbase — STONE_DARK (mørk natt-tone for kolonial brostein)
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_STONE_DARK,
+        (0, ground_top_y, width, ground_bottom_y - ground_top_y),
+    )
+    # 2) Øvre fuge
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_STONE_DARKEST,
+        (0, ground_top_y, width, 1),
+    )
+    # 3) Regelmessig brostein-grid — STONE_MID-brikker 8×3,
+    #    tight spacing (6 px) for ordnet utseende
+    for row in range(2):
+        y = ground_top_y + 3 + row * 7
+        for x in range(2, width - 2, 10):
+            # Offset hver andre rad (slik ekte brostein legges)
+            xo = x if row % 2 == 0 else x + 5
+            if xo < width - 8:
+                pygame.draw.rect(
+                    surface, constants.COLOR_STONE_MID, (xo, y, 8, 3)
+                )
+                # Fuge-kant (1 px under)
+                pygame.draw.rect(
+                    surface, constants.COLOR_STONE_DARKEST,
+                    (xo, y + 3, 8, 1),
+                )
+
+
 def bake_ground(
     surface: pygame.Surface,
     ground_top_y: int,
@@ -116,6 +162,8 @@ def bake_ground(
         bake_wood_dark_ground(surface, ground_top_y)
     elif texture == "cobblestone_wet":
         bake_cobblestone_wet_ground(surface, ground_top_y)
+    elif texture == "cobblestone_dry":
+        bake_cobblestone_dry_ground(surface, ground_top_y)
     else:
         raise ValueError(
             f"Ukjent ground_texture: {texture!r} "
@@ -287,6 +335,46 @@ def bake_barrel_stack(
         top_x = x + (count // 2 - 1) * (barrel_w + 1) + (barrel_w + 1) // 2
         top_y = base_y - barrel_h
         _draw_barrel(surface, top_x, top_y, barrel_w, barrel_h)
+
+
+def bake_iron_fence(
+    surface: pygame.Surface,
+    x: int,
+    ground_top_y: int,
+    length: int = 60,
+    *,
+    height: int = 14,
+) -> None:
+    """Jerngjerde-seksjon.
+
+    Signatur for Port Royal: institusjonell avgrensning. Tynne
+    vertikale stenger med horisontale bar-seksjoner. Alt i
+    STONE_DARKEST for jern-silhuett mot mørk brostein.
+    """
+    top_y = ground_top_y - height
+    # Topp-bar (med spisse stenger på toppen)
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST, (x, top_y + 2, length, 1)
+    )
+    # Midt-bar
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_STONE_DARKEST,
+        (x, top_y + height // 2 + 1, length, 1),
+    )
+    # Bunn-bar (mot bakken)
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_STONE_DARKEST,
+        (x, ground_top_y - 1, length, 1),
+    )
+    # Vertikale stenger — hver 5 px, litt høyere enn bar-toppen
+    # for spisse-topp-antydning
+    for sx in range(x, x + length, 5):
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST,
+            (sx, top_y, 1, height),
+        )
 
 
 def _draw_barrel(

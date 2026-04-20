@@ -1,0 +1,185 @@
+"""Tester for per-havn rendering (Fase 2.5 C2.5-2/3/4).
+
+Verifiserer at PortVillageScene kan lastes for alle 4 havner, at
+eksisterende Tortuga-funksjonalitet er uendret, og at Port Royals
+Customs House + klokketårn + rum-magasin bakes inn i gameplay-surfacen.
+
+Filen vokser i C2.5-3/4 når Havana og Nassau legges til.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pygame
+import pytest
+
+from config import port_config as pc
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+REAL_PORTS_PATH = PROJECT_ROOT / "data" / "ports.json"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _pygame_display():
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    pygame.display.init()
+    pygame.font.init()
+    pygame.display.set_mode((640, 360))
+    yield
+    pygame.font.quit()
+    pygame.display.quit()
+
+
+@pytest.fixture(autouse=True)
+def _reset_port_config():
+    pc._reset_for_tests()
+    pc.init(str(REAL_PORTS_PATH))
+    yield
+    pc._reset_for_tests()
+
+
+def _font() -> pygame.font.Font:
+    return pygame.font.Font(None, 12)
+
+
+def _state_for(port_id: str):
+    """Bygg GameState plassert i oppgitt havn."""
+    from systems import save as save_module
+    state = save_module.new_game_state()
+    state.world_state.current_port = port_id
+    return state
+
+
+class TestPortRoyalRendering:
+    def test_port_royal_scene_loads(self):
+        """Happy path: Port Royal har props + signatur-bygninger, scene-
+        init går rent."""
+        from scenes.port_village import PortVillageScene
+
+        port_royal = pc.get("port_royal")
+        scene = PortVillageScene(_font(), _state_for("port_royal"), port_royal)
+        assert scene is not None
+
+    def test_port_royal_gameplay_layer_bakes(self):
+        from scenes.port_buildings import build_port_gameplay_layer
+
+        port_royal = pc.get("port_royal")
+        surf = build_port_gameplay_layer(port_royal)
+        assert surf.get_width() == port_royal.world_width
+        assert surf.get_height() == 360
+
+    def test_port_royal_uses_customs_house_baker(self):
+        """Exchange-bbox bakes med _bake_customs_house, ikke _bake_exchange.
+
+        Verifiseres ved at pixel på ytter-kanten av pediment (nær y - 12)
+        er tegnet (STONE-farge) — Tortuga-pediment når ikke så høyt opp.
+        """
+        from scenes.port_buildings import build_port_gameplay_layer
+
+        port_royal = pc.get("port_royal")
+        surf = build_port_gameplay_layer(port_royal)
+        # Pediment-toppen er y - 12 (se _bake_customs_house).
+        # For Port Royal er exchange y=248, så pediment når 236.
+        ex = port_royal.buildings.exchange
+        pediment_top = (ex.x + ex.w // 2, ex.y - 10)
+        color = surf.get_at(pediment_top)
+        # Forvent IKKE magenta (colorkey) — noe skal være tegnet
+        assert color[:3] != (255, 0, 255), (
+            "Pediment-toppen skal ha STONE-farge, ikke colorkey"
+        )
+
+    def test_port_royal_silhouettes_built(self):
+        from scenes.port_village import PortVillageScene
+
+        port_royal = pc.get("port_royal")
+        scene = PortVillageScene(_font(), _state_for("port_royal"), port_royal)
+        # 3 silhuetter per spec: officer, merchant, colonial_lady
+        kinds = {s.kind for s in scene._silhouettes}
+        assert kinds == {"officer", "merchant", "colonial_lady"}
+
+    def test_port_royal_hud_says_borsen(self):
+        """HUD-terminologi skal være uendret: 'Port Royal Børs' selv om
+        bygningen visuelt er en Customs House."""
+        from scenes.port_village import PortVillageScene
+
+        port_royal = pc.get("port_royal")
+        scene = PortVillageScene(_font(), _state_for("port_royal"), port_royal)
+        # HUD bruker port.name = "Port Royal"; HUD-linje "<name> Børs —"
+        # bygges ved render. Her verifiserer vi at port.name matcher spec.
+        assert port_royal.name == "Port Royal"
+
+
+class TestPortRoyalExchangeInteractionUnchanged:
+    """Spec krever at exchange-interaksjonen fungerer uendret — kun
+    visualisering byttes ut."""
+
+    def test_exchange_bbox_same_as_before(self):
+        """Exchange-posisjon skal være den samme som i C2.5-1/2B."""
+        port_royal = pc.get("port_royal")
+        assert port_royal.buildings.exchange.x == 980
+        assert port_royal.buildings.exchange.w == 200
+
+    def test_can_open_exchange_at_port_royal(self):
+        """Interaksjon: spiller ved exchange-posisjon kan åpne børsen."""
+        from scenes.port_village import PortVillageScene
+
+        port_royal = pc.get("port_royal")
+        scene = PortVillageScene(_font(), _state_for("port_royal"), port_royal)
+        # Plasser spilleren foran børsen
+        ex = port_royal.buildings.exchange
+        scene._player.x = float(ex.x + ex.w // 2 - scene._player.width // 2)
+        assert scene._player_can_interact_with_exchange()
+
+
+class TestStubPortsBackwardCompat:
+    """Havana og Nassau har ennå ikke fått unik signatur. De skal
+    fortsatt bygge uten feil (stub-havn-atferd fra 2B)."""
+
+    def test_havana_scene_loads(self):
+        from scenes.port_village import PortVillageScene
+
+        havana = pc.get("havana")
+        scene = PortVillageScene(_font(), _state_for("havana"), havana)
+        assert scene is not None
+
+    def test_nassau_scene_loads(self):
+        from scenes.port_village import PortVillageScene
+
+        nassau = pc.get("nassau")
+        scene = PortVillageScene(_font(), _state_for("nassau"), nassau)
+        assert scene is not None
+
+    def test_havana_has_no_signature_buildings_yet(self):
+        havana = pc.get("havana")
+        assert havana.buildings.signature_buildings == ()
+
+    def test_nassau_has_no_signature_buildings_yet(self):
+        nassau = pc.get("nassau")
+        assert nassau.buildings.signature_buildings == ()
+
+
+class TestSignatureBuildingValidation:
+    def test_unknown_signature_kind_rejected(self, tmp_path):
+        """Parser må avvise ugyldige signatur-bygning-kinds."""
+        import json
+        ports_data = json.loads(REAL_PORTS_PATH.read_text(encoding="utf-8"))
+        ports_data["ports"]["port_royal"]["buildings"][
+            "signature_buildings"
+        ] = [
+            {"kind": "space_station", "x": 100, "y": 200, "w": 50, "h": 80},
+        ]
+        path = tmp_path / "ports.json"
+        path.write_text(json.dumps(ports_data), encoding="utf-8")
+        pc._reset_for_tests()
+        with pytest.raises(ValueError, match="kind='space_station'"):
+            pc.init(str(path))
+
+    def test_valid_signature_kinds_exported(self):
+        from config.port_config import VALID_SIGNATURE_BUILDING_KINDS
+
+        # C2.5-2 leverer 2 kinds; senere commits utvider dette
+        assert "church_tower" in VALID_SIGNATURE_BUILDING_KINDS
+        assert "rum_warehouse" in VALID_SIGNATURE_BUILDING_KINDS

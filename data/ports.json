@@ -72,7 +72,33 @@
         "tavern":   {"x": 20,  "y": 258, "w": 200, "h": 82},
         "exchange": {"x": 980, "y": 248, "w": 200, "h": 92},
         "npcs": {"hawkins": 1070},
-        "dock_interaction_range": [8, 80]
+        "dock_interaction_range": [8, 80],
+        "signature_buildings": [
+          {"kind": "church_tower",  "x": 320, "y": 234, "w": 24, "h": 106},
+          {"kind": "rum_warehouse", "x": 540, "y": 284, "w": 220, "h": 56}
+        ],
+        "props": {
+          "ground_texture": "cobblestone_dry",
+          "lanterns": [
+            {"x": 280},
+            {"x": 820}
+          ],
+          "market_stalls": [],
+          "barrel_stacks": [
+            {"x": 460, "count": 3},
+            {"x": 790, "count": 2}
+          ],
+          "iron_fences": [
+            {"x": 240, "length": 60},
+            {"x": 400, "length": 50},
+            {"x": 860, "length": 80}
+          ],
+          "silhouettes": [
+            {"kind": "officer",       "x": 260},
+            {"kind": "merchant",      "x": 450},
+            {"kind": "colonial_lady", "x": 900}
+          ]
+        }
       }
     },
     "havana": {

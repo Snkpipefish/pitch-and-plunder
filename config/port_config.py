@@ -99,10 +99,33 @@ class SilhouettePlacement:
 
     `kind` må være en gyldig silhuett-type per
     `entities.npc_silhouette.VALID_KINDS` ("standing", "sitting",
-    "group"). Validering skjer i `_parse_silhouette`.
+    "group", "officer", "merchant", "colonial_lady", ...).
+    Validering skjer i `_parse_silhouette`.
     """
     kind: str
     x: int
+
+
+@dataclass(frozen=True)
+class IronFence:
+    """Jerngjerde-seksjon (Port Royal). Start-x og lengde i piksler."""
+    x: int
+    length: int
+
+
+@dataclass(frozen=True)
+class SignatureBuilding:
+    """Havn-spesifikk signatur-bygning utover tavern + exchange.
+
+    `kind` dispatcher til en bake-funksjon i `scenes/port_buildings.py`.
+    Gyldige kinds valideres av `_parse_signature_building`.
+
+    Per FASE_2_5.md §1.2: hver havn har 2-3 signatur-bygninger.
+    Tavern og exchange er alltid på plass; ekstra signatur-bygninger
+    listes her (klokketårn, rum-magasin, katedral, osv.).
+    """
+    kind: str
+    placement: BuildingPlacement
 
 
 @dataclass(frozen=True)
@@ -120,6 +143,7 @@ class PortProps:
     market_stalls: tuple[MarketStall, ...] = ()
     barrel_stacks: tuple[BarrelStack, ...] = ()
     silhouettes: tuple[SilhouettePlacement, ...] = ()
+    iron_fences: tuple[IronFence, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -145,9 +169,13 @@ class PortBuildings:
     #: voyage-arbeidet.
     dock_interaction_range: tuple[int, int]
     #: Rekvisita-lag (gategulv-tekstur, lanterner, boder, tønner, NPC-
-    #: silhuetter). `None` = ingen rekvisita ennå (ikke-Tortuga i C2.5-1).
-    #: Tortuga får props-felt i C2.5-1; andre havner i C2.5-2/3/4.
+    #: silhuetter). `None` = ingen rekvisita ennå.
+    #: Tortuga: C2.5-1. Port Royal: C2.5-2. Havana: C2.5-3. Nassau: C2.5-4.
     props: PortProps | None = None
+    #: Havn-spesifikke signatur-bygninger utover tavern + exchange
+    #: (klokketårn, rum-magasin, katedral, guvernørpalass, etc).
+    #: Tom tuple = kun tavern + exchange (Tortuga i C2.5-1).
+    signature_buildings: tuple[SignatureBuilding, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -405,6 +433,41 @@ def _parse_silhouettes(
     return tuple(result)
 
 
+def _parse_iron_fences(
+    raw: Any, port_id: str,
+) -> tuple[IronFence, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': props.iron_fences må være en liste"
+        )
+    result: list[IronFence] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': props.iron_fences[{i}] må være et objekt"
+            )
+        try:
+            length = int(entry["length"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.iron_fences[{i}] ugyldig: {exc}"
+            ) from exc
+        if length <= 0:
+            raise ValueError(
+                f"port '{port_id}': props.iron_fences[{i}].length må være "
+                f"positiv, fikk {length}"
+            )
+        try:
+            result.append(IronFence(x=int(entry["x"]), length=length))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.iron_fences[{i}] ugyldig: {exc}"
+            ) from exc
+    return tuple(result)
+
+
 def _parse_props(raw: Any, port_id: str) -> PortProps | None:
     """Parse props-blokken. None hvis feltet mangler eller er null."""
     # Lazy import for å unngå top-level-avhengighet fra config/ til
@@ -434,7 +497,59 @@ def _parse_props(raw: Any, port_id: str) -> PortProps | None:
         market_stalls=_parse_market_stalls(raw.get("market_stalls"), port_id),
         barrel_stacks=_parse_barrel_stacks(raw.get("barrel_stacks"), port_id),
         silhouettes=_parse_silhouettes(raw.get("silhouettes"), port_id),
+        iron_fences=_parse_iron_fences(raw.get("iron_fences"), port_id),
     )
+
+
+#: Gyldige signatur-bygning-kinds. Matches mot bake-funksjoner i
+#: `scenes/port_buildings.py`. Utvides per commit:
+#: - C2.5-2: church_tower, rum_warehouse (Port Royal)
+#: - C2.5-3: cathedral, governor_palace (Havana)
+#: - C2.5-4: teachs_house, shipyard (Nassau)
+VALID_SIGNATURE_BUILDING_KINDS: frozenset[str] = frozenset({
+    "church_tower", "rum_warehouse",
+})
+
+
+def _parse_signature_buildings(
+    raw: Any, port_id: str,
+) -> tuple[SignatureBuilding, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': buildings.signature_buildings må være en liste"
+        )
+    result: list[SignatureBuilding] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': signature_buildings[{i}] må være et objekt"
+            )
+        try:
+            kind = str(entry["kind"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': signature_buildings[{i}] ugyldig: {exc}"
+            ) from exc
+        if kind not in VALID_SIGNATURE_BUILDING_KINDS:
+            raise ValueError(
+                f"port '{port_id}': signature_buildings[{i}].kind={kind!r} "
+                f"ikke gyldig (må være en av "
+                f"{sorted(VALID_SIGNATURE_BUILDING_KINDS)})"
+            )
+        try:
+            placement = BuildingPlacement(
+                x=int(entry["x"]), y=int(entry["y"]),
+                w=int(entry["w"]), h=int(entry["h"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': signature_buildings[{i}] ugyldig "
+                f"placement: {exc}"
+            ) from exc
+        result.append(SignatureBuilding(kind=kind, placement=placement))
+    return tuple(result)
 
 
 def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
@@ -493,6 +608,9 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
             f"({dock_range[1]})"
         )
     props = _parse_props(raw.get("props"), port_id)
+    signature_buildings = _parse_signature_buildings(
+        raw.get("signature_buildings"), port_id,
+    )
     return PortBuildings(
         ground_top_y=ground_top_y,
         player_start_x=player_start_x,
@@ -501,6 +619,7 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
         npcs=npcs,
         dock_interaction_range=dock_range,
         props=props,
+        signature_buildings=signature_buildings,
     )
 
 

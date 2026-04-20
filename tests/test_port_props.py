@@ -74,7 +74,30 @@ class TestSilhouetteFactories:
     def test_valid_kinds_exported(self):
         from entities.npc_silhouette import VALID_KINDS
 
-        assert VALID_KINDS == frozenset({"standing", "sitting", "group"})
+        # C2.5-1 leverte 3 generiske typer; C2.5-2 legger til 3 britiske.
+        expected = {
+            "standing", "sitting", "group",      # C2.5-1
+            "officer", "merchant", "colonial_lady",  # C2.5-2
+        }
+        assert VALID_KINDS == frozenset(expected)
+
+    def test_port_royal_specific_sprites_exist(self):
+        """Offiser, handelsmann, kolonial dame må kunne bygges."""
+        from entities.npc_silhouette import build_silhouette
+
+        for kind in ("officer", "merchant", "colonial_lady"):
+            sil = build_silhouette(kind, x=500, ground_top_y=340)
+            assert sil.sprite.get_width() > 0
+            assert sil.sprite.get_height() > 0
+
+    def test_colonial_lady_is_tallest(self):
+        """Parasoll-silhuett skal rage høyere enn andre figurer
+        (ikonografisk signatur)."""
+        from entities.npc_silhouette import build_silhouette
+
+        lady = build_silhouette("colonial_lady", 0, 340)
+        officer = build_silhouette("officer", 0, 340)
+        assert lady.sprite.get_height() > officer.sprite.get_height()
 
 
 # --- Ground-texture-dispatch ---
@@ -158,16 +181,46 @@ class TestPortPropsParser:
         assert len(props.barrel_stacks) == 2
         assert len(props.silhouettes) == 3
 
-    def test_real_non_tortuga_has_no_props(self):
-        """C2.5-1 leverer kun Tortuga-props. Andre havner er uendret."""
+    def test_real_port_royal_has_props(self):
+        """C2.5-2 leverer Port Royal-props: cobblestone_dry + britiske
+        signatur-bygninger + institusjonelle rekvisita."""
         pc.init(str(REAL_PORTS_PATH))
-        for pid in ("port_royal", "havana", "nassau"):
+        port_royal = pc.get("port_royal")
+        assert port_royal.buildings is not None
+        assert port_royal.buildings.props is not None
+        props = port_royal.buildings.props
+        assert props.ground_texture == "cobblestone_dry"
+        # Færre lanterner enn Tortuga (ordnet, ikke kaotisk)
+        assert len(props.lanterns) == 2
+        # Ingen markedsboder (Tortugas smugler-signatur, ikke Port Royal)
+        assert len(props.market_stalls) == 0
+        # Jerngjerder er Port Royal-signatur
+        assert len(props.iron_fences) > 0
+
+    def test_real_havana_nassau_still_no_props(self):
+        """C2.5-3/4 har ikke landet ennå. Havana og Nassau skal
+        fortsatt ha None."""
+        pc.init(str(REAL_PORTS_PATH))
+        for pid in ("havana", "nassau"):
             port = pc.get(pid)
             assert port.buildings is not None
-            # Stub-havner: props er None (får egne i C2.5-2/3/4)
             assert port.buildings.props is None, (
-                f"{pid} skal ikke ha props før C2.5-2/3/4"
+                f"{pid} skal ikke ha props før C2.5-3/4"
             )
+
+    def test_real_port_royal_has_signature_buildings(self):
+        """Port Royal har klokketårn + rum-magasin som signatur-bygninger."""
+        pc.init(str(REAL_PORTS_PATH))
+        port_royal = pc.get("port_royal")
+        kinds = [sb.kind for sb in port_royal.buildings.signature_buildings]
+        assert "church_tower" in kinds
+        assert "rum_warehouse" in kinds
+
+    def test_real_tortuga_no_signature_buildings(self):
+        """Tortuga beholder klassisk tavern+børs uten ekstra bygninger."""
+        pc.init(str(REAL_PORTS_PATH))
+        tortuga = pc.get("tortuga")
+        assert tortuga.buildings.signature_buildings == ()
 
     def test_silhouette_kinds_validated(self, tmp_path):
         """Ugyldig kind skal gi ValueError ved load."""
