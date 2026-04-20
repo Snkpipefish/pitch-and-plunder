@@ -37,6 +37,30 @@ from entities import port_props as props_module
 COLORKEY = (255, 0, 255)
 
 
+# -----------------------------------------------------------------------------
+# Dag/natt-hjelpefunksjoner (C2.5-8b)
+#
+# Hver bygnings-bake-funksjon som har tennbart lys tar en `night_lights: bool`-
+# parameter. `_nl(night_lights, lit, dark)` returnerer `lit`-farge om natten,
+# `dark`-farge om dagen. Dette gir to bygnings-varianter fra samme funksjon
+# uten å duplisere strukturkoden.
+# -----------------------------------------------------------------------------
+
+def _nl(
+    night_lights: bool,
+    lit_color: tuple[int, int, int],
+    dark_color: tuple[int, int, int],
+) -> tuple[int, int, int]:
+    """Velg lit_color ved natt, dark_color ved dag.
+
+    Brukes for vindus-fyll, dør-glød, skilt-bakgrunn, alter-lys osv. —
+    alle elementer som "tennes" om kvelden. Strukturelle elementer
+    (vegger, tak, søyler, rammer, dør-åpnings-kanter) bruker samme
+    farge i begge varianter og trenger ikke gå gjennom denne helperen.
+    """
+    return lit_color if night_lights else dark_color
+
+
 def _bake_ground(
     surface: pygame.Surface,
     ground_top_y: int,
@@ -112,8 +136,14 @@ def _bake_tavern(
     surface: pygame.Surface,
     x: int, y: int, w: int, h: int,
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
-    """Tavernaen: varmt tre med 2 opplyste vinduer, dør med varm gulv-glød."""
+    """Tavernaen: varmt tre med 2 opplyste vinduer, dør med varm gulv-glød.
+
+    `night_lights=True` (natt): vinduer har LANTERN-fyll, silhuetter
+    inne, dør har FLAME-glød. `False` (dag): vinduer er mørke
+    WOOD_DARKEST-rektangler, dør er WOOD_DARKEST-sprekke uten varme.
+    """
     # Veggen
     pygame.draw.rect(surface, constants.COLOR_WOOD_DARK, (x, y, w, h))
     # Horisontale plank-linjer
@@ -129,21 +159,22 @@ def _bake_tavern(
         surface, constants.COLOR_WOOD_MID, (x - 6, y - 6, w + 12, 1)
     )
 
-    # To opplyste vinduer (bakt varm glød – Commit 5 legger på dynamisk lys)
+    # To opplyste vinduer (natt: bakt varm glød; dag: mørke rektangler)
     window_w, window_h = 24, 28
     window_y = y + 14
     for wi, wx in enumerate((x + 40, x + w - 40 - window_w)):
+        # Vindus-fyll: LANTERN ved natt, WOOD_DARKEST ved dag
         pygame.draw.rect(
             surface,
-            constants.COLOR_LANTERN,
+            _nl(night_lights, constants.COLOR_LANTERN, constants.COLOR_WOOD_DARKEST),
             (wx, window_y, window_w, window_h),
         )
         pygame.draw.rect(
             surface,
-            constants.COLOR_LANTERN_BRIGHT,
+            _nl(night_lights, constants.COLOR_LANTERN_BRIGHT, constants.COLOR_WOOD_DARK),
             (wx + 2, window_y + 2, window_w - 4, window_h - 4),
         )
-        # Vindus-kors
+        # Vindus-kors (alltid samme farge — strukturell)
         pygame.draw.rect(
             surface, constants.COLOR_WOOD_DARKEST,
             (wx + window_w // 2 - 1, window_y, 2, window_h),
@@ -152,34 +183,33 @@ def _bake_tavern(
             surface, constants.COLOR_WOOD_DARKEST,
             (wx, window_y + window_h // 2 - 1, window_w, 2),
         )
-        # Silhuett inne i vindu (C2.5-7 livfullhet — Tortuga
-        # "klaustrofobisk varme"). Venstre vindu: hatt-silhuett.
-        # Høyre vindu: spillekort-form (pokerkveld).
-        if wi == 0:
-            # Tricorn-hatt
-            pygame.draw.rect(
-                surface, constants.COLOR_HAT,
-                (wx + 6, window_y + window_h // 2 + 4, 12, 3),
-            )
-            pygame.draw.rect(
-                surface, constants.COLOR_HAT,
-                (wx + 8, window_y + window_h // 2 + 2, 8, 3),
-            )
-        else:
-            # Spillekort-rektangler (to stk på rad)
-            pygame.draw.rect(
-                surface, constants.COLOR_SHIRT,
-                (wx + 6, window_y + window_h // 2 + 4, 4, 6),
-            )
-            pygame.draw.rect(
-                surface, constants.COLOR_SHIRT,
-                (wx + 14, window_y + window_h // 2 + 4, 4, 6),
-            )
-            # Kort-bakside (mørk)
-            pygame.draw.rect(
-                surface, constants.COLOR_EMBER,
-                (wx + 7, window_y + window_h // 2 + 5, 2, 1),
-            )
+        # Silhuett inne i vindu (KUN natt — livfullhet er et natt-fenomen;
+        # om dagen er folk ute på jobb i havnen).
+        if night_lights:
+            if wi == 0:
+                # Tricorn-hatt
+                pygame.draw.rect(
+                    surface, constants.COLOR_HAT,
+                    (wx + 6, window_y + window_h // 2 + 4, 12, 3),
+                )
+                pygame.draw.rect(
+                    surface, constants.COLOR_HAT,
+                    (wx + 8, window_y + window_h // 2 + 2, 8, 3),
+                )
+            else:
+                # Spillekort-rektangler (to stk på rad)
+                pygame.draw.rect(
+                    surface, constants.COLOR_SHIRT,
+                    (wx + 6, window_y + window_h // 2 + 4, 4, 6),
+                )
+                pygame.draw.rect(
+                    surface, constants.COLOR_SHIRT,
+                    (wx + 14, window_y + window_h // 2 + 4, 4, 6),
+                )
+                pygame.draw.rect(
+                    surface, constants.COLOR_EMBER,
+                    (wx + 7, window_y + window_h // 2 + 5, 2, 1),
+                )
 
     # Mose-patch på taket (C2.5-7 slitasje — Tortuga funksjonelt
     # forfall). STONE_LIT-antydning ved venstre side av taket.
@@ -201,31 +231,39 @@ def _bake_tavern(
         surface, constants.COLOR_WOOD_MID, (sign_x + 1, sign_y + 1, sign_w - 2, sign_h - 2)
     )
 
-    # Dør (åpen dør: varm glød-rektangel "fra innsiden")
+    # Dør (natt: varm glød fra innsiden; dag: lukket, bare mørk åpning)
     door_w, door_h = 24, 36
     door_x = x + w // 2 - door_w // 2
     door_y = ground_top_y - door_h
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARKEST, (door_x, door_y, door_w, door_h)
     )
-    pygame.draw.rect(
-        surface, constants.COLOR_FLAME, (door_x + 4, door_y + 8, door_w - 8, door_h - 8)
-    )
-    pygame.draw.rect(
-        surface, constants.COLOR_LANTERN_BRIGHT,
-        (door_x + 6, door_y + 10, door_w - 12, door_h - 14),
-    )
-    # Svak varm "teppe" av lys på gaten rett foran døren (baked, ikke dynamisk)
-    glow_rect = pygame.Rect(door_x - 8, ground_top_y, door_w + 16, 4)
-    pygame.draw.rect(surface, constants.COLOR_EMBER, glow_rect)
+    if night_lights:
+        pygame.draw.rect(
+            surface, constants.COLOR_FLAME,
+            (door_x + 4, door_y + 8, door_w - 8, door_h - 8),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN_BRIGHT,
+            (door_x + 6, door_y + 10, door_w - 12, door_h - 14),
+        )
+        # Svak varm "teppe" av lys på gaten rett foran døren
+        glow_rect = pygame.Rect(door_x - 8, ground_top_y, door_w + 16, 4)
+        pygame.draw.rect(surface, constants.COLOR_EMBER, glow_rect)
+    # (Dag: ingen glød, ingen gulv-teppe — stengt dør)
 
 
 def _bake_exchange(
     surface: pygame.Surface,
     x: int, y: int, w: int, h: int,
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
-    """Børshuset: kald stein med 3 vinduer, 4 søyler og trekantgavl."""
+    """Børshuset: kald stein med 3 vinduer, 4 søyler og trekantgavl.
+
+    `night_lights=True`: vinduer glitrer STONE_LIT/STONE_BRIGHT (kaldt
+    institusjonelt lys). `False`: vinduer er STONE_DARKEST-sprekker.
+    """
     # Base
     pygame.draw.rect(surface, constants.COLOR_STONE_DARK, (x, y + 10, w, h - 10))
     # Gulv-stripe (mørk)
@@ -270,11 +308,13 @@ def _bake_exchange(
     for wx in window_centers:
         wx0 = wx - window_w // 2
         pygame.draw.rect(
-            surface, constants.COLOR_STONE_LIT, (wx0, window_y, window_w, window_h)
+            surface,
+            _nl(night_lights, constants.COLOR_STONE_LIT, constants.COLOR_STONE_DARKEST),
+            (wx0, window_y, window_w, window_h),
         )
         pygame.draw.rect(
             surface,
-            constants.COLOR_STONE_BRIGHT,
+            _nl(night_lights, constants.COLOR_STONE_BRIGHT, constants.COLOR_STONE_DARK),
             (wx0 + 2, window_y + 2, window_w - 4, window_h - 4),
         )
         pygame.draw.rect(
@@ -288,17 +328,19 @@ def _bake_exchange(
     door_y = ground_top_y - door_h
     pygame.draw.rect(surface, constants.COLOR_STONE_DARKEST, (door_x, door_y, door_w, door_h))
     pygame.draw.rect(surface, constants.COLOR_STONE_MID, (door_x + 3, door_y + 3, door_w - 6, door_h - 6))
-    # Svak kald "spill-over"-glød på trapp
-    pygame.draw.rect(
-        surface, constants.COLOR_STONE_LIGHT,
-        (door_x - 4, ground_top_y, door_w + 8, 3),
-    )
+    # Svak kald "spill-over"-glød på trapp — kun ved natt
+    if night_lights:
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_LIGHT,
+            (door_x - 4, ground_top_y, door_w + 8, 3),
+        )
 
 
 def _bake_customs_house(
     surface: pygame.Surface,
     x: int, y: int, w: int, h: int,
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
     """Port Royal: Customs House — erstatter Tortuga-børshuset (C2.5-2).
 
@@ -395,19 +437,21 @@ def _bake_customs_house(
             (cx - 2, col_y + col_h - 2, col_w + 4, 2),
         )
 
-    # Mellom-søyle-vinduer: 2 kalde vinduer i intervallene mellom 2-3 og 4-5
-    # (sentrumsvinduet kuttes — der går døren)
+    # Mellom-søyle-vinduer: 2 kalde vinduer (tennes om natten)
     window_w, window_h = 14, 22
     window_y = y + 32
-    window_gap_indexes = [(1, 2), (3, 4)]  # Midt mellom søyle 1-2 og 3-4
+    window_gap_indexes = [(1, 2), (3, 4)]
     for a, b in window_gap_indexes:
         mid_x = (col_xs[a] + col_xs[b]) // 2 + col_w // 2
         wx0 = mid_x - window_w // 2
         pygame.draw.rect(
-            surface, constants.COLOR_STONE_LIT, (wx0, window_y, window_w, window_h)
+            surface,
+            _nl(night_lights, constants.COLOR_STONE_LIT, constants.COLOR_STONE_DARKEST),
+            (wx0, window_y, window_w, window_h),
         )
         pygame.draw.rect(
-            surface, constants.COLOR_STONE_BRIGHT,
+            surface,
+            _nl(night_lights, constants.COLOR_STONE_BRIGHT, constants.COLOR_STONE_DARK),
             (wx0 + 2, window_y + 2, window_w - 4, window_h - 4),
         )
         pygame.draw.rect(
@@ -446,6 +490,7 @@ def _bake_church_tower(
     surface: pygame.Surface,
     x: int, y: int, w: int, h: int,
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
     """Port Royal: klokketårn-kirke — smalt og høyt.
 
@@ -515,26 +560,29 @@ def _bake_church_tower(
     win_y = y + h - 24
     win_w, win_h = max(4, w - 10), 14
     win_x = x + (w - win_w) // 2
-    # Ramme
+    # Ramme (strukturelt)
     pygame.draw.rect(
         surface, constants.COLOR_STONE_DARKEST, (win_x, win_y, win_w, win_h)
     )
-    # Lys (svak månelys-refleksjon gjennom farget glass)
+    # Lys i glasset (tennbart)
     pygame.draw.rect(
-        surface, constants.COLOR_STONE_LIT,
+        surface,
+        _nl(night_lights, constants.COLOR_STONE_LIT, constants.COLOR_STONE_DARK),
         (win_x + 1, win_y + 1, win_w - 2, win_h - 2),
     )
-    # Varm kjerne (alterlys) — LANTERN glimt gjennom farget glass
-    pygame.draw.rect(
-        surface, constants.COLOR_LANTERN,
-        (win_x + win_w // 2 - 1, win_y + win_h // 2, 2, 2),
-    )
+    if night_lights:
+        # Alter-lys-glimt (bare om natten)
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN,
+            (win_x + win_w // 2 - 1, win_y + win_h // 2, 2, 2),
+        )
 
 
 def _bake_rum_warehouse(
     surface: pygame.Surface,
     x: int, y: int, w: int, h: int,
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
     """Port Royal: rum-magasin — lang, lav bygning i WOOD-familien.
 
@@ -593,17 +641,19 @@ def _bake_rum_warehouse(
             surface, constants.COLOR_WOOD_DARKEST,
             (barrel_x, barrel_y + 4, 8, 1),
         )
-        # EMBER-glimt ved port (antyder lantern-lys inne)
-        pygame.draw.rect(
-            surface, constants.COLOR_EMBER,
-            (px + 2, py + port_h - 4, port_w - 4, 1),
-        )
+        # EMBER-glimt ved port (antyder lantern-lys inne) — kun om natten
+        if night_lights:
+            pygame.draw.rect(
+                surface, constants.COLOR_EMBER,
+                (px + 2, py + port_h - 4, port_w - 4, 1),
+            )
 
 
 def _bake_trade_house(
     surface: pygame.Surface,
     x: int, y: int, w: int, h: int,
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
     """Havana: Handelshus — erstatter Tortuga-børshus-spriten (C2.5-3).
 
@@ -659,13 +709,15 @@ def _bake_trade_house(
         pygame.draw.rect(
             surface, constants.COLOR_WOOD_MID, (ax - 1, arch_y + 18, arch_w + 2, 1)
         )
-        # Varm glimt inne i buen (LANTERN — antyder lantern-lys inne)
-        pygame.draw.rect(
-            surface, constants.COLOR_EMBER, (ax + 2, arch_y + 14, arch_w - 4, 1)
-        )
+        # Varm glimt inne i buen — kun om natten
+        if night_lights:
+            pygame.draw.rect(
+                surface, constants.COLOR_EMBER,
+                (ax + 2, arch_y + 14, arch_w - 4, 1),
+            )
 
     # Vekter-signatur (symbolsk vekt-symbol på sentralt felt) —
-    # LANTERN (gyllen bronsevekt)
+    # LANTERN (gyllen bronsevekt) — metall-ornament, synlig dag og natt
     balance_x = x + w // 2
     balance_y = y + 16
     # Vekt-stokk
@@ -689,6 +741,7 @@ def _bake_cathedral(
     surface: pygame.Surface,
     x: int, y: int, w: int, h: int,
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
     """Havana: Katedral med to klokketårn — dominerende silhuett.
 
@@ -745,12 +798,12 @@ def _bake_cathedral(
             surface, constants.COLOR_STONE_DARKEST,
             (bell_x + 2, bell_y - 2, bell_w - 4, 2),
         )
-        # Klokke (LANTERN — gyllen bronse)
+        # Klokke (LANTERN bronse — metall-ornament, synlig dag og natt)
         pygame.draw.rect(
             surface, constants.COLOR_LANTERN,
             (bell_x + 3, bell_y + 2, bell_w - 6, bell_h - 6),
         )
-        # Klokke-høylys
+        # Klokke-høylys (metall-refleks, behold dag)
         pygame.draw.rect(
             surface, constants.COLOR_LANTERN_BRIGHT,
             (bell_x + 4, bell_y + 3, bell_w - 8, 2),
@@ -805,29 +858,32 @@ def _bake_cathedral(
     pygame.draw.circle(
         surface, constants.COLOR_STONE_DARKEST, (cx, rose_y + rose_r), rose_r + 1
     )
+    # Rose-vindu glass: tennbart. Om natten glød-LANTERN og mosaikk-
+    # farger. Om dagen: STONE_DARK-fyll (dempet glass mot mørke).
     pygame.draw.circle(
-        surface, constants.COLOR_LANTERN, (cx, rose_y + rose_r), rose_r - 1
+        surface,
+        _nl(night_lights, constants.COLOR_LANTERN, constants.COLOR_STONE_DARK),
+        (cx, rose_y + rose_r), rose_r - 1,
     )
-    # C2.5-7 statisk lys-karakter — Havana "katolsk varme":
-    # glass-mosaikk-antydning via forskjellige fargeflekker innenfor
-    # rose-vinduet. EMBER/FLAME/SHIRT-biter som antyder fargeglass.
-    mosaic_cy = rose_y + rose_r
-    pygame.draw.rect(
-        surface, constants.COLOR_EMBER, (cx - 4, mosaic_cy - 2, 2, 2)
-    )
-    pygame.draw.rect(
-        surface, constants.COLOR_FLAME, (cx + 2, mosaic_cy - 3, 2, 2)
-    )
-    pygame.draw.rect(
-        surface, constants.COLOR_SHIRT, (cx - 3, mosaic_cy + 1, 2, 2)
-    )
-    pygame.draw.rect(
-        surface, constants.COLOR_STONE_LIT, (cx + 1, mosaic_cy + 2, 2, 2)
-    )
-    # Sentrum-glimt (etter mosaikk, for å bevare fokus)
-    pygame.draw.circle(
-        surface, constants.COLOR_LANTERN_BRIGHT, (cx, rose_y + rose_r), 2
-    )
+    if night_lights:
+        # Glass-mosaikk-antydning (katolsk varme via farget glass)
+        mosaic_cy = rose_y + rose_r
+        pygame.draw.rect(
+            surface, constants.COLOR_EMBER, (cx - 4, mosaic_cy - 2, 2, 2)
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_FLAME, (cx + 2, mosaic_cy - 3, 2, 2)
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_SHIRT, (cx - 3, mosaic_cy + 1, 2, 2)
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_LIT, (cx + 1, mosaic_cy + 2, 2, 2)
+        )
+        # Sentrum-glimt
+        pygame.draw.circle(
+            surface, constants.COLOR_LANTERN_BRIGHT, (cx, rose_y + rose_r), 2
+        )
     # Kors-ribber inne i rosen (4 linjer)
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARK,
@@ -855,16 +911,22 @@ def _bake_cathedral(
         surface, constants.COLOR_STONE_DARKEST,
         (portal_x + 4, portal_y - 4, portal_w - 8, 2),
     )
-    # Dør (åpen — varm glød fra inne)
-    pygame.draw.rect(
-        surface, constants.COLOR_EMBER,
-        (portal_x + 3, portal_y + 3, portal_w - 6, portal_h - 6),
-    )
-    pygame.draw.rect(
-        surface, constants.COLOR_FLAME,
-        (portal_x + 6, portal_y + 8, portal_w - 12, portal_h - 14),
-    )
-    # Trapp
+    # Dør (natt: varm glød fra inne; dag: mørk bue med kun antydning)
+    if night_lights:
+        pygame.draw.rect(
+            surface, constants.COLOR_EMBER,
+            (portal_x + 3, portal_y + 3, portal_w - 6, portal_h - 6),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_FLAME,
+            (portal_x + 6, portal_y + 8, portal_w - 12, portal_h - 14),
+        )
+    else:
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARK,
+            (portal_x + 3, portal_y + 3, portal_w - 6, portal_h - 6),
+        )
+    # Trapp (strukturelt)
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_MID,
         (portal_x - 6, ground_top_y, portal_w + 12, 3),
@@ -875,6 +937,7 @@ def _bake_governor_palace(
     surface: pygame.Surface,
     x: int, y: int, w: int, h: int,
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
     """Havana: Guvernørpalass — bredt med arkade langs fronten.
 
@@ -930,11 +993,12 @@ def _bake_governor_palace(
             surface, constants.COLOR_WOOD_MID,
             (ax + arch_w, arch_y, 1, 22),
         )
-        # Varm glimt inne (lantern-lys)
-        pygame.draw.rect(
-            surface, constants.COLOR_EMBER,
-            (ax + 2, arch_y + 18, arch_w - 4, 1),
-        )
+        # Varm glimt inne (lantern-lys) — kun natt
+        if night_lights:
+            pygame.draw.rect(
+                surface, constants.COLOR_EMBER,
+                (ax + 2, arch_y + 18, arch_w - 4, 1),
+            )
 
     # Andre etasje-vinduer (4 — over arkadene)
     for i in range(arch_count):
@@ -947,13 +1011,15 @@ def _bake_governor_palace(
             (wx0, win_y, win_w, win_h),
         )
         pygame.draw.rect(
-            surface, constants.COLOR_LANTERN,
+            surface,
+            _nl(night_lights, constants.COLOR_LANTERN, constants.COLOR_STONE_DARK),
             (wx0 + 1, win_y + 1, win_w - 2, win_h - 2),
         )
-        pygame.draw.rect(
-            surface, constants.COLOR_LANTERN_BRIGHT,
-            (wx0 + 2, win_y + 2, win_w - 4, win_h - 6),
-        )
+        if night_lights:
+            pygame.draw.rect(
+                surface, constants.COLOR_LANTERN_BRIGHT,
+                (wx0 + 2, win_y + 2, win_w - 4, win_h - 6),
+            )
 
     # Sentral balkong (mellom midt-vinduene)
     balcony_x = x + w // 2 - 14
@@ -979,6 +1045,7 @@ def _bake_open_market(
     surface: pygame.Surface,
     x: int, y: int, w: int, h: int,
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
     """Nassau: åpen markedsplass — erstatter børs-BYGNING med en
     rekvisita-cluster.
@@ -1108,6 +1175,7 @@ def _bake_teachs_house(
     surface: pygame.Surface,
     x: int, y: int, w: int, h: int,
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
     """Nassau: Teach's hus — romslig trehus, lappverk-arkitektur.
 
@@ -1149,13 +1217,11 @@ def _bake_teachs_house(
             surface, constants.COLOR_WOOD_DARKEST, (x, y + dy, w, 1)
         )
 
-    # Skeive vinduer — to stk, forskyvet i høyde
+    # Skeive vinduer — to stk, forskyvet i høyde (C2.5-7 flimrende kaos)
+    # Natt: ulike fargepalletter per vindu. Dag: alle vinduer mørke
+    # WOOD_DARKEST (Teach er ikke hjemme, aktiviteten er på sjøen).
     win_w, win_h = 16, 12
-    # C2.5-7 statisk lys-karakter — Nassau "flimrende kaos":
-    # venstre vindu LANTERN_BRIGHT-gul, høyre EMBER-rød
-    # (forskjellig stemning per sjener). Tredje vindu midt på taket
-    # med annen farge legges under.
-    # Venstre vindu (litt høyere) — LANTERN gul
+    # Venstre vindu (litt høyere) — LANTERN gul ved natt
     left_wx = x + 14
     left_wy = y + 10
     pygame.draw.rect(
@@ -1163,19 +1229,21 @@ def _bake_teachs_house(
         (left_wx, left_wy, win_w, win_h),
     )
     pygame.draw.rect(
-        surface, constants.COLOR_LANTERN,
+        surface,
+        _nl(night_lights, constants.COLOR_LANTERN, constants.COLOR_WOOD_DARK),
         (left_wx + 1, left_wy + 1, win_w - 2, win_h - 2),
     )
-    pygame.draw.rect(
-        surface, constants.COLOR_LANTERN_BRIGHT,
-        (left_wx + 2, left_wy + 2, win_w - 4, 3),
-    )
+    if night_lights:
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN_BRIGHT,
+            (left_wx + 2, left_wy + 2, win_w - 4, 3),
+        )
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARKEST,
         (left_wx + win_w // 2 - 1, left_wy, 2, win_h),
     )
 
-    # Høyre vindu (litt lavere) — EMBER rød-tonet
+    # Høyre vindu — EMBER rød-tonet ved natt
     right_wx = x + w - 14 - win_w
     right_wy = y + 14
     pygame.draw.rect(
@@ -1183,33 +1251,36 @@ def _bake_teachs_house(
         (right_wx, right_wy, win_w, win_h),
     )
     pygame.draw.rect(
-        surface, constants.COLOR_EMBER,
+        surface,
+        _nl(night_lights, constants.COLOR_EMBER, constants.COLOR_WOOD_DARK),
         (right_wx + 1, right_wy + 1, win_w - 2, win_h - 2),
     )
-    pygame.draw.rect(
-        surface, constants.COLOR_FLAME,
-        (right_wx + 2, right_wy + 2, win_w - 4, 3),
-    )
+    if night_lights:
+        pygame.draw.rect(
+            surface, constants.COLOR_FLAME,
+            (right_wx + 2, right_wy + 2, win_w - 4, 3),
+        )
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARKEST,
         (right_wx + win_w // 2 - 1, right_wy, 2, win_h),
     )
 
-    # Lite tredje vindu midt mellom de to — FLAME orange
+    # Lite tredje vindu — FLAME orange ved natt
     mid_wx = x + w // 2 - 3
     mid_wy = y + 24
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARKEST,
         (mid_wx, mid_wy, 6, 6),
     )
-    pygame.draw.rect(
-        surface, constants.COLOR_FLAME,
-        (mid_wx + 1, mid_wy + 1, 4, 4),
-    )
-    pygame.draw.rect(
-        surface, constants.COLOR_LANTERN,
-        (mid_wx + 2, mid_wy + 2, 2, 1),
-    )
+    if night_lights:
+        pygame.draw.rect(
+            surface, constants.COLOR_FLAME,
+            (mid_wx + 1, mid_wy + 1, 4, 4),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN,
+            (mid_wx + 2, mid_wy + 2, 2, 1),
+        )
 
     # C2.5-7 slitasje — "tre som vokser mellom planker":
     # MOSS_DAMP-lapper (STONE_LIT-antydning) på lappverks-strukturen
@@ -1262,21 +1333,23 @@ def _bake_teachs_house(
         surface, constants.COLOR_STONE_DARKEST,
         (door_x, door_y, door_w, door_h),
     )
-    # Varm innvendig glød
-    pygame.draw.rect(
-        surface, constants.COLOR_EMBER,
-        (door_x + 2, door_y + 2, door_w - 4, door_h - 4),
-    )
-    pygame.draw.rect(
-        surface, constants.COLOR_LANTERN,
-        (door_x + 4, door_y + 4, door_w - 8, door_h - 8),
-    )
+    # Varm innvendig glød — kun natt
+    if night_lights:
+        pygame.draw.rect(
+            surface, constants.COLOR_EMBER,
+            (door_x + 2, door_y + 2, door_w - 4, door_h - 4),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN,
+            (door_x + 4, door_y + 4, door_w - 8, door_h - 8),
+        )
 
 
 def _bake_shipyard(
     surface: pygame.Surface,
     x: int, y: int, w: int, h: int,
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
     """Nassau: skipsverft i det fri.
 
@@ -1480,16 +1553,17 @@ def _bake_fill_buildings(
     surface: pygame.Surface,
     fill_buildings: tuple[FillBuilding, ...],
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
     """Bake per-havn fyll-bygninger (C2.5-6a/6b).
 
-    Rekkefølgen er deklarert rekkefølge i `ports.json`. Ved overlapp
-    (sjeldent, kun ved feil-data) vil senere bygning tegnes over.
+    `night_lights` (C2.5-8b) propageres til hver bygning slik at
+    vindus-lys/dør-glød tennes kun om natten.
     """
     for fb in fill_buildings:
         fill_buildings_module.bake_fill_building(
             surface, fb.kind, fb.x, fb.w, fb.h,
-            ground_top_y, fb.style_variant,
+            ground_top_y, fb.style_variant, night_lights,
         )
 
 
@@ -1497,13 +1571,9 @@ def _bake_signature_buildings(
     surface: pygame.Surface,
     signature_buildings: tuple[SignatureBuilding, ...],
     ground_top_y: int,
+    night_lights: bool = True,
 ) -> None:
-    """Bake per-havn signatur-bygninger (klokketårn, rum-magasin, osv)
-    inn i gameplay-surfacen.
-
-    Rekkefølgen er deklarert rekkefølge i `ports.json`. Hvis to bygninger
-    overlapper, vil den som er senere i listen tegnes over.
-    """
+    """Bake per-havn signatur-bygninger med dag/natt-lys-gating."""
     for sig in signature_buildings:
         baker = _SIGNATURE_BUILDING_BAKERS.get(sig.kind)
         if baker is None:
@@ -1512,67 +1582,75 @@ def _bake_signature_buildings(
                 f"(gyldige: {sorted(_SIGNATURE_BUILDING_BAKERS.keys())})"
             )
         p = sig.placement
-        baker(surface, p.x, p.y, p.w, p.h, ground_top_y)
+        baker(surface, p.x, p.y, p.w, p.h, ground_top_y, night_lights)
 
 
-def build_port_gameplay_layer(port_config: PortConfig) -> pygame.Surface:
-    """Pre-render gateplan + bygninger for hele verdens bredde i en havn.
+def _bake_single_gameplay_layer(
+    port_config: PortConfig,
+    night_lights: bool,
+) -> pygame.Surface:
+    """Bygger én gameplay-surface for oppgitt lys-state.
 
-    Leser layout fra `port_config.buildings`. Kaster ValueError hvis havnen
-    ikke har buildings-felt ennå (ikke-Tortuga før C6).
+    `night_lights=True`: alle lys tennes (natt-variant).
+    `night_lights=False`: bygnings-vinduer, dører og skilt er dempet
+    (dag-variant — mørke rektangler i stedet for LANTERN/FLAME-glød).
+    Strukturelle elementer (vegger, tak, fasader), smug-innhold,
+    natur-elementer og props er identiske i begge varianter.
 
-    Returnerer en `convert()`-et Surface med COLORKEY satt slik at
-    transparente områder (himmel over bygningene) vises gjennom.
+    Permanente lys (Tortuga smed-esse, Nassau-bål, katedralens alter
+    via dekorative varme mosaikk-rammer, metall-ornamenter som klokker
+    og kors) lyser 24/7 per spec-beslutning.
+    """
+    b = port_config.buildings
+    surf = pygame.Surface(
+        (port_config.world_width, constants.RENDER_HEIGHT)
+    ).convert()
+    surf.fill(COLORKEY)
+    texture = b.props.ground_texture if b.props is not None else "wood_dark"
+    _bake_ground(surf, b.ground_top_y, texture=texture)
+    if b.fill_buildings:
+        _bake_fill_buildings(
+            surf, b.fill_buildings, b.ground_top_y, night_lights,
+        )
+    _bake_tavern(
+        surf, b.tavern.x, b.tavern.y, b.tavern.w, b.tavern.h,
+        b.ground_top_y, night_lights,
+    )
+    exchange_baker = _EXCHANGE_BAKERS.get(port_config.id, _bake_exchange)
+    exchange_baker(
+        surf, b.exchange.x, b.exchange.y, b.exchange.w, b.exchange.h,
+        b.ground_top_y, night_lights,
+    )
+    if b.signature_buildings:
+        _bake_signature_buildings(
+            surf, b.signature_buildings, b.ground_top_y, night_lights,
+        )
+    if b.props is not None:
+        _bake_props(surf, b.props, b.ground_top_y)
+    if b.alleys:
+        _bake_alley_contents(surf, b.alleys, b.ground_top_y)
+    if b.nature_elements:
+        _bake_nature_elements(surf, b.nature_elements, b.ground_top_y)
+    surf.set_colorkey(COLORKEY)
+    return surf
+
+
+def build_port_gameplay_layer(
+    port_config: PortConfig,
+) -> tuple[pygame.Surface, pygame.Surface]:
+    """Pre-render gameplay-lag i to dag/natt-varianter (C2.5-8b).
+
+    Returnerer `(day_surface, night_surface)`. PortVillageScene holder
+    begge og cross-fader basert på night_factor per frame.
+
+    Leser layout fra `port_config.buildings`. Kaster ValueError hvis
+    havnen ikke har buildings-felt ennå (edge-case i tidlige faser).
     """
     if port_config.buildings is None:
         raise ValueError(
             f"Port '{port_config.id}' has no buildings layout — "
             f"cannot build gameplay layer"
         )
-    b = port_config.buildings
-    surf = pygame.Surface(
-        (port_config.world_width, constants.RENDER_HEIGHT)
-    ).convert()
-    surf.fill(COLORKEY)
-    # Gategulv-tekstur kommer fra props hvis den finnes; ellers eksisterende
-    # "wood_dark" (beholder backward-kompatibilitet for havner uten props).
-    texture = b.props.ground_texture if b.props is not None else "wood_dark"
-    _bake_ground(surf, b.ground_top_y, texture=texture)
-    # Fyll-bygninger (C2.5-6a/6b) bakes FØR signatur-bygninger slik at
-    # signatur dekker ved x-overlapp. Dette gir "bybakgrunn" → "viktige
-    # bygninger" dybde-lesing. Smug (alleys) er naturlig fravær — ingen
-    # eksplisitt tegning; havet skinner gjennom via colorkey.
-    if b.fill_buildings:
-        _bake_fill_buildings(surf, b.fill_buildings, b.ground_top_y)
-    _bake_tavern(
-        surf, b.tavern.x, b.tavern.y, b.tavern.w, b.tavern.h,
-        b.ground_top_y,
-    )
-    # Exchange-bbox-bake-routing (C2.5-2): per-havn signatur-bygning
-    # over samme bounding-boks. HUD og E-interaksjon er uendret; kun
-    # visuelt utseende endres.
-    exchange_baker = _EXCHANGE_BAKERS.get(port_config.id, _bake_exchange)
-    exchange_baker(
-        surf, b.exchange.x, b.exchange.y, b.exchange.w, b.exchange.h,
-        b.ground_top_y,
-    )
-    # Havn-spesifikke signatur-bygninger utover tavern + exchange
-    # (klokketårn, rum-magasin, katedral, etc).
-    if b.signature_buildings:
-        _bake_signature_buildings(surf, b.signature_buildings, b.ground_top_y)
-    # Rekvisita bakes sist slik at gjerder og lanterne-stolper havner
-    # øverst i gameplay-laget. NPC-silhuetter er runtime-entiteter
-    # (tegnes over gameplay-laget av PortVillageRenderer).
-    if b.props is not None:
-        _bake_props(surf, b.props, b.ground_top_y)
-    # Smug-innhold (C2.5-7): tønner/ugress/blomster/palmer/sand i
-    # midten av smug, per havn-karakter.
-    if b.alleys:
-        _bake_alley_contents(surf, b.alleys, b.ground_top_y)
-    # Natur-elementer (C2.5-7): palmer, fugler, blomster, ugress.
-    # Tegnes sist for å legge over bygnings-silhuettene der relevant
-    # (fugler på tak/mast, blomster på balkonger).
-    if b.nature_elements:
-        _bake_nature_elements(surf, b.nature_elements, b.ground_top_y)
-    surf.set_colorkey(COLORKEY)
-    return surf
+    day_surface = _bake_single_gameplay_layer(port_config, night_lights=False)
+    night_surface = _bake_single_gameplay_layer(port_config, night_lights=True)
+    return day_surface, night_surface

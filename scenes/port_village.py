@@ -41,7 +41,7 @@ from scenes.port_village_renderer import PortVillageRenderer
 from state import GameState
 from state.market_state import MarketState
 from systems import save as save_module
-from systems.day_cycle import DayCycle
+from systems.day_cycle import DayCycle, compute_night_factor
 from systems.economy import Market, load_base_prices, tick_all_ports_dawn
 from systems.lighting import Light, LightingSystem
 from systems.parallax import Camera, ParallaxLayer, ParallaxRenderer
@@ -111,11 +111,20 @@ class PortVillageScene(BaseScene):
         # silhuetter bakt inn (C2.5-5). 4 havner × 6 dag-faser = 24
         # pre-rendringer ved init; per-frame-blit er uendret.
         self._foregrounds = build_foreground_variants(port)
-        gameplay_layer = ParallaxLayer(
-            build_port_gameplay_layer(port), speed=1.0
+        # C2.5-8b: build_port_gameplay_layer returnerer (day, night)-tuple.
+        # PortVillageScene holder begge og bytter mellom dem hver frame
+        # basert på night_factor (threshold 0.5 — MVP-snap). Cross-fade-
+        # tilstanden vises under kort sunrise/sunset-overgang (~1 sek
+        # på 180 s/dag ved threshold 0.5).
+        (
+            self._gameplay_day_surface,
+            self._gameplay_night_surface,
+        ) = build_port_gameplay_layer(port)
+        self._gameplay_layer = ParallaxLayer(
+            self._gameplay_night_surface, speed=1.0
         )
         fg_layer = ParallaxLayer(build_empty_layer(1.3), speed=1.3)
-        parallax_renderer = ParallaxRenderer([gameplay_layer, fg_layer])
+        parallax_renderer = ParallaxRenderer([self._gameplay_layer, fg_layer])
         self._celestial = Celestial()
 
         self._camera = Camera(port.world_width, constants.RENDER_WIDTH)
@@ -490,6 +499,17 @@ class PortVillageScene(BaseScene):
         snapshot = DayCycle.compute_snapshot(
             self._state.world_state.clock, celestial_cfg
         )
+        # C2.5-8b: dag/natt-lys-gating. Bytt gameplay-lag-surface basert
+        # på night_factor. Threshold 0.5 gir snap-overgang i løpet av
+        # ~1 sekund midt i sunrise/sunset. De 3 dynamiske lysene (taverna-
+        # lanterne/dør/exchange-vindu) får samme gating via
+        # LightingSystem.draw's night_factor-parameter.
+        night_factor = compute_night_factor(snapshot.day_fraction)
+        self._gameplay_layer.surface = (
+            self._gameplay_night_surface
+            if night_factor >= 0.5
+            else self._gameplay_day_surface
+        )
         # Verdens-laget (bakgrunn → forgrunn) tegnes av renderen.
         self._renderer.draw(
             surface=surface,
@@ -503,6 +523,7 @@ class PortVillageScene(BaseScene):
             particles=self._particles,
             hint_state=self._compute_hint_state(),
             silhouettes=self._silhouettes,
+            night_factor=night_factor,
         )
         # HUD (oeverst venstre) og toasts (bunn-sentrert) tegnes over
         # verden men under bors-overlay.

@@ -315,7 +315,7 @@ class TestGameplayLayerWithProps:
 
         pc.init(str(REAL_PORTS_PATH))
         tortuga = pc.get("tortuga")
-        surf = build_port_gameplay_layer(tortuga)
+        _, surf = build_port_gameplay_layer(tortuga)  # night-variant
         assert surf.get_width() == tortuga.world_width
         assert surf.get_height() == 360
 
@@ -326,7 +326,7 @@ class TestGameplayLayerWithProps:
         pc.init(str(REAL_PORTS_PATH))
         for pid in ("port_royal", "havana", "nassau"):
             port = pc.get(pid)
-            surf = build_port_gameplay_layer(port)
+            _, surf = build_port_gameplay_layer(port)  # night-variant
             assert surf is not None
 
 

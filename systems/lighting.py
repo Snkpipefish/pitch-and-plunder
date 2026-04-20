@@ -105,9 +105,23 @@ class LightingSystem:
         lights: list[Light],
         camera_x: float,
         elapsed: float,
+        night_factor: float = 1.0,
     ) -> None:
-        """Tegn alle lys med `BLEND_RGB_ADD` i én fblits-batch."""
-        if not lights:
+        """Tegn alle lys med `BLEND_RGB_ADD` i én fblits-batch.
+
+        `night_factor` (C2.5-8b) gater lysene etter dag/natt-syklusen:
+        - 1.0 (full natt): alle lys tegnes
+        - 0.0 (full dag): ingen lys tegnes
+        - Delvis (sunset/sunrise): threshold 0.5 for snap-on/off
+
+        Threshold-modellen er pragmatisk MVP — BLEND_RGB_ADD støtter
+        ikke enkel alpha-skalering uten intermediate surface. En
+        smooth-fade-implementering (cached dimmed gradients) kan
+        legges til i senere polish hvis snap er synlig plagsom.
+        Sunset/sunrise-perioden er ~8% av dagen (ca 14 sek på 180 s/
+        dag), så snap vil være over på et øyeblikk.
+        """
+        if not lights or night_factor < 0.5:
             return
         batch: list[tuple[pygame.Surface, tuple[int, int]]] = []
         for light in lights:

@@ -203,7 +203,7 @@ class TestBakePipelineWithNature:
 
         pc.init(str(REAL_PORTS_PATH))
         for pid in ("tortuga", "port_royal", "havana", "nassau"):
-            surf = build_port_gameplay_layer(pc.get(pid))
+            _, surf = build_port_gameplay_layer(pc.get(pid))  # night-variant
             assert surf is not None
 
     def test_silhouette_hierarchy_preserved(self):
@@ -228,7 +228,7 @@ class TestBakePipelineWithNature:
         pc.init(str(REAL_PORTS_PATH))
         for pid in ("tortuga", "port_royal", "havana", "nassau"):
             port = pc.get(pid)
-            surf = build_port_gameplay_layer(port)
+            _, surf = build_port_gameplay_layer(port)  # night-variant
             for i, a in enumerate(port.buildings.alleys):
                 # Sjekk øvre del av smug (y=260, over eventuelt innhold
                 # som er ved bakken y~330-340)

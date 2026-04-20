@@ -136,6 +136,63 @@ def _lerp(a: float, b: float, t: float) -> float:
     return a * (1.0 - t) + b * t
 
 
+def _smoothstep(t: float) -> float:
+    """3*t^2 - 2*t^3 — myk S-kurve for naturlig fade."""
+    if t <= 0.0:
+        return 0.0
+    if t >= 1.0:
+        return 1.0
+    return t * t * (3.0 - 2.0 * t)
+
+
+# -----------------------------------------------------------------------------
+# Night factor (for dag/natt-lys-gating — C2.5-8b)
+# -----------------------------------------------------------------------------
+
+#: Sunset-overgang: fra dag til natt
+NIGHT_FADE_IN_START = SUN_FADE_OUT_START   # 0.80
+NIGHT_FADE_IN_END = SUN_FADE_OUT_END       # 0.88
+#: Sunrise-overgang: fra natt til dag
+NIGHT_FADE_OUT_START = MOON_FADE_OUT_START  # 0.08 — måne begynner å fade ut
+NIGHT_FADE_OUT_END = SUN_VISIBLE_START     # 0.17 — sol full alpha
+
+
+def compute_night_factor(day_fraction: float) -> float:
+    """Returner dag/natt-vekt: 0.0 ved full dag, 1.0 ved full natt.
+
+    Overgangene matcher celestial-vinduene i day_cycle:
+    - [0.00, 0.08]: 1.0 (full natt — måne synlig)
+    - [0.08, 0.17]: 1.0 → 0.0 (sunrise — måne fader ut, sol stiger)
+    - [0.17, 0.80]: 0.0 (full dag — sol synlig)
+    - [0.80, 0.88]: 0.0 → 1.0 (sunset — sol fader ut, måne begynner)
+    - [0.88, 1.00]: 1.0 (full natt)
+
+    Smoothstep-kurve for begge overgangene gir mer naturlig "dimming"-
+    følelse enn lineær. Det er samme funksjon som `_smoothstep` brukt
+    for sol-bane-y.
+    """
+    f = day_fraction % 1.0
+    # Sunrise: 1.0 → 0.0 over [NIGHT_FADE_OUT_START, NIGHT_FADE_OUT_END]
+    if f < NIGHT_FADE_OUT_START:
+        return 1.0
+    if f < NIGHT_FADE_OUT_END:
+        t = (f - NIGHT_FADE_OUT_START) / (
+            NIGHT_FADE_OUT_END - NIGHT_FADE_OUT_START
+        )
+        return 1.0 - _smoothstep(t)
+    # Dag-periode
+    if f < NIGHT_FADE_IN_START:
+        return 0.0
+    # Sunset: 0.0 → 1.0 over [NIGHT_FADE_IN_START, NIGHT_FADE_IN_END]
+    if f < NIGHT_FADE_IN_END:
+        t = (f - NIGHT_FADE_IN_START) / (
+            NIGHT_FADE_IN_END - NIGHT_FADE_IN_START
+        )
+        return _smoothstep(t)
+    # Full natt
+    return 1.0
+
+
 # -----------------------------------------------------------------------------
 # Himmel-farge (avhenger av fase)
 # -----------------------------------------------------------------------------

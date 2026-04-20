@@ -32,6 +32,24 @@ import pygame
 import constants
 
 
+#: Colorkey for fyll-bygnings-sprite-funksjoner (deler det med gameplay-laget).
+_CK = (255, 0, 255)
+
+
+def _nl(
+    night_lights: bool,
+    lit_color: tuple[int, int, int],
+    dark_color: tuple[int, int, int],
+) -> tuple[int, int, int]:
+    """Velg lit_color ved natt, dark_color ved dag (C2.5-8b).
+
+    Brukes for vindus-fyll, skilt-bakgrunn, dør-glød — alle elementer
+    som tennes om kvelden. Strukturelle elementer (vegger, tak,
+    rammer) bruker samme farge i begge varianter.
+    """
+    return lit_color if night_lights else dark_color
+
+
 # ============================================================================
 # Tortuga fyll-bygninger
 # Stil: WOOD_DARK/MID, skjevt, uformelt, lite LANTERN
@@ -42,6 +60,7 @@ def bake_tortuga_fishers_hut(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Fiskerhytte med tørke-nett hengende foran. 32-40 px høy.
 
@@ -106,6 +125,7 @@ def bake_tortuga_boarding_house(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Boarding-hus, 2 etasjer. 48-56 px høy.
 
@@ -130,32 +150,25 @@ def bake_tortuga_boarding_house(
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARKEST, (x, mid_y, w, 2)
     )
-    # 4 vinduer (2x2 grid), små og skjeve
+    # 4 vinduer (2x2 grid), små og skjeve — LANTERN ved natt, WOOD_DARK ved dag
     win_w, win_h = 10, 7
+    win_fill = _nl(night_lights, constants.COLOR_LANTERN, constants.COLOR_WOOD_DARKEST)
     # Øvre rad
-    for wx_off, wy_off_skew in (
-        (8, 0), (w - 18, 1),
-    ):
+    for wx_off, wy_off_skew in ((8, 0), (w - 18, 1)):
         wx = x + wx_off
         wy = y_top + 4 + wy_off_skew
         pygame.draw.rect(
             surface, constants.COLOR_WOOD_DARKEST, (wx, wy, win_w, win_h)
         )
-        pygame.draw.rect(
-            surface, constants.COLOR_LANTERN, (wx + 1, wy + 1, win_w - 2, win_h - 2)
-        )
+        pygame.draw.rect(surface, win_fill, (wx + 1, wy + 1, win_w - 2, win_h - 2))
     # Nedre rad
-    for wx_off, wy_off_skew in (
-        (8, 1), (w - 18, 0),
-    ):
+    for wx_off, wy_off_skew in ((8, 1), (w - 18, 0)):
         wx = x + wx_off
         wy = mid_y + 4 + wy_off_skew
         pygame.draw.rect(
             surface, constants.COLOR_WOOD_DARKEST, (wx, wy, win_w, win_h)
         )
-        pygame.draw.rect(
-            surface, constants.COLOR_LANTERN, (wx + 1, wy + 1, win_w - 2, win_h - 2)
-        )
+        pygame.draw.rect(surface, win_fill, (wx + 1, wy + 1, win_w - 2, win_h - 2))
     # Dør med LANTERN over
     door_w, door_h = 10, 16
     door_x = x + w // 2 - door_w // 2
@@ -167,11 +180,12 @@ def bake_tortuga_boarding_house(
         surface, constants.COLOR_WOOD_LIGHT,
         (door_x + 2, door_y + 2, door_w - 4, door_h - 4),
     )
-    # LANTERN over døren
-    pygame.draw.rect(
-        surface, constants.COLOR_LANTERN_BRIGHT,
-        (door_x + door_w // 2 - 1, door_y - 3, 2, 2),
-    )
+    # LANTERN over døren — kun natt
+    if night_lights:
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN_BRIGHT,
+            (door_x + door_w // 2 - 1, door_y - 3, 2, 2),
+        )
 
 
 def bake_tortuga_lumber_warehouse(
@@ -179,6 +193,7 @@ def bake_tortuga_lumber_warehouse(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Tømmerpakkhus: stort lavt bygg, åpen port.
 
@@ -227,6 +242,7 @@ def bake_tortuga_field_hospital(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Lite felt-hospital/barbeskjær. 40 px høy.
 
@@ -280,6 +296,7 @@ def bake_tortuga_smithy(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Smed-verksted med glødende kull. 36-44 px høy.
 
@@ -347,6 +364,7 @@ def bake_nassau_tavern_small(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Liten taverne (del av cluster). 24-32 px høy.
 
@@ -377,7 +395,7 @@ def bake_nassau_tavern_small(
     pygame.draw.rect(
         surface, constants.COLOR_STONE_DARK, (x - 1, y_top - 3, w + 2, 1)
     )
-    # Lite vindu (LANTERN — varm taverne)
+    # Lite vindu (LANTERN — varm taverne ved natt, WOOD_DARK ved dag)
     win_w, win_h = 6, 6
     win_x = x + 4 if style_variant == 0 else x + w - 10
     win_y = y_top + 6
@@ -385,12 +403,15 @@ def bake_nassau_tavern_small(
         surface, constants.COLOR_WOOD_DARKEST, (win_x, win_y, win_w, win_h)
     )
     pygame.draw.rect(
-        surface, constants.COLOR_LANTERN, (win_x + 1, win_y + 1, win_w - 2, win_h - 2)
+        surface,
+        _nl(night_lights, constants.COLOR_LANTERN, constants.COLOR_WOOD_DARK),
+        (win_x + 1, win_y + 1, win_w - 2, win_h - 2),
     )
-    pygame.draw.rect(
-        surface, constants.COLOR_LANTERN_BRIGHT,
-        (win_x + 2, win_y + 2, win_w - 4, win_h - 4),
-    )
+    if night_lights:
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN_BRIGHT,
+            (win_x + 2, win_y + 2, win_w - 4, win_h - 4),
+        )
     # Liten skjev dør
     door_w, door_h = 6, 12
     door_x = (
@@ -400,11 +421,12 @@ def bake_nassau_tavern_small(
     pygame.draw.rect(
         surface, constants.COLOR_STONE_DARKEST, (door_x, door_y, door_w, door_h)
     )
-    # Varm glød fra døren
-    pygame.draw.rect(
-        surface, constants.COLOR_EMBER,
-        (door_x + 1, door_y + 1, door_w - 2, door_h - 2),
-    )
+    # Varm glød fra døren — kun natt
+    if night_lights:
+        pygame.draw.rect(
+            surface, constants.COLOR_EMBER,
+            (door_x + 1, door_y + 1, door_w - 2, door_h - 2),
+        )
 
 
 def bake_nassau_improvised_warehouse(
@@ -412,6 +434,7 @@ def bake_nassau_improvised_warehouse(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Improvisert pakkhus. 28-36 px høy.
 
@@ -471,6 +494,7 @@ def bake_nassau_patchwork_hut(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Lappverks-hytte. 32-40 px høy.
 
@@ -503,6 +527,7 @@ def bake_nassau_patchwork_hut(
         (6, 8, 7, 6),    # lavere vindu
         (w - 14, 4, 6, 6),   # høyere vindu
     ]
+    win_fill = _nl(night_lights, constants.COLOR_LANTERN, constants.COLOR_WOOD_DARK)
     for wx_off, wy_off, win_w, win_h in win_positions:
         wx = x + wx_off
         wy = y_top + wy_off
@@ -512,20 +537,20 @@ def bake_nassau_patchwork_hut(
             surface, constants.COLOR_WOOD_DARKEST, (wx, wy, win_w, win_h)
         )
         pygame.draw.rect(
-            surface, constants.COLOR_LANTERN, (wx + 1, wy + 1, win_w - 2, win_h - 2)
+            surface, win_fill, (wx + 1, wy + 1, win_w - 2, win_h - 2)
         )
     # Skjev dør
     door_w, door_h = 8, 14
     door_x = x + w // 2 - door_w // 2 + 2
     door_y = ground_top_y - door_h
-    # Skjev: døren starter 1 px til høyre nederst
     pygame.draw.rect(
         surface, constants.COLOR_STONE_DARKEST, (door_x, door_y, door_w, door_h)
     )
-    pygame.draw.rect(
-        surface, constants.COLOR_EMBER,
-        (door_x + 2, door_y + 2, door_w - 3, door_h - 4),
-    )
+    if night_lights:
+        pygame.draw.rect(
+            surface, constants.COLOR_EMBER,
+            (door_x + 2, door_y + 2, door_w - 3, door_h - 4),
+        )
 
 
 def bake_nassau_rope_workshop(
@@ -533,6 +558,7 @@ def bake_nassau_rope_workshop(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Tauverks-verksted. 24-32 px høy.
 
@@ -588,6 +614,7 @@ def bake_port_royal_officers_residence(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Offisersbolig, murstein + jerngelénder. 48-56 px høy.
 
@@ -666,6 +693,7 @@ def bake_port_royal_east_india_company(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """East India Co.-kontor med skilt. 48-56 px høy.
 
@@ -740,6 +768,7 @@ def bake_port_royal_soldier_barracks(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Soldat-arbeidsbrakke med identisk vindusrekke. 40-48 px høy.
 
@@ -806,6 +835,7 @@ def bake_port_royal_civil_warehouse(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Sivilt pakkhus ved kaia. 36-44 px høy.
 
@@ -854,6 +884,7 @@ def bake_port_royal_merchants_house(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Handelsmannsbolig, 2 etasjer rik fasade. 48-60 px høy.
 
@@ -928,6 +959,7 @@ def bake_port_royal_apothecary(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Legekontor/apotek med skilt. 40-48 px høy.
 
@@ -996,6 +1028,7 @@ def bake_havana_borger_house(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Borgerhus, 2 etasjer rik fasade. 56-60 px høy.
 
@@ -1073,6 +1106,7 @@ def bake_havana_cloister_annex(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Kloster-anneks knyttet til katedralen. 48-56 px høy.
 
@@ -1132,6 +1166,7 @@ def bake_havana_merchants_house(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Handelsmannshus med balkong og blomster. 48-60 px høy.
 
@@ -1210,6 +1245,7 @@ def bake_havana_artisans_workshop(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Gesellene-verksted med bronse-smie. 40-48 px høy.
 
@@ -1264,6 +1300,7 @@ def bake_havana_guard_house(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Spansk vakthus, lite militært. 40-48 px høy.
 
@@ -1324,6 +1361,7 @@ def bake_havana_tobacco_warehouse(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Tobakks-pakkhus, stort lavt. 40-48 px høy.
 
@@ -1376,6 +1414,7 @@ def bake_havana_chapel_small(
     x: int, w: int, h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Lite daglig-kapell. 48-56 px høy.
 
@@ -1493,8 +1532,12 @@ def bake_fill_building(
     h: int,
     ground_top_y: int,
     style_variant: int = 0,
+    night_lights: bool = True,
 ) -> None:
     """Dispatch til riktig bake-funksjon basert på `kind`.
+
+    `night_lights` (C2.5-8b) propageres til valgt baker slik at dag/
+    natt-lys-gating fungerer per-bygning.
 
     Kaster `ValueError` hvis `kind` er ukjent eller `h` overstiger
     `MAX_FILL_BUILDING_HEIGHT` (silhuett-hierarki-regel).
@@ -1510,4 +1553,4 @@ def bake_fill_building(
             f"Ukjent fill_building.kind={kind!r} "
             f"(gyldige: {sorted(VALID_FILL_BUILDING_KINDS)})"
         )
-    baker(surface, x, w, h, ground_top_y, style_variant)
+    baker(surface, x, w, h, ground_top_y, style_variant, night_lights)

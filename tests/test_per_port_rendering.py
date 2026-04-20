@@ -67,7 +67,7 @@ class TestPortRoyalRendering:
         from scenes.port_buildings import build_port_gameplay_layer
 
         port_royal = pc.get("port_royal")
-        surf = build_port_gameplay_layer(port_royal)
+        _, surf = build_port_gameplay_layer(port_royal)  # night-variant
         assert surf.get_width() == port_royal.world_width
         assert surf.get_height() == 360
 
@@ -80,7 +80,7 @@ class TestPortRoyalRendering:
         from scenes.port_buildings import build_port_gameplay_layer
 
         port_royal = pc.get("port_royal")
-        surf = build_port_gameplay_layer(port_royal)
+        _, surf = build_port_gameplay_layer(port_royal)  # night-variant
         # Pediment-toppen er y - 12 (se _bake_customs_house).
         # For Port Royal er exchange y=248, så pediment når 236.
         ex = port_royal.buildings.exchange
@@ -146,7 +146,7 @@ class TestHavanaRendering:
         from scenes.port_buildings import build_port_gameplay_layer
 
         havana = pc.get("havana")
-        surf = build_port_gameplay_layer(havana)
+        _, surf = build_port_gameplay_layer(havana)  # night-variant
         assert surf.get_width() == havana.world_width
 
     def test_havana_uses_trade_house_baker(self):
@@ -154,7 +154,7 @@ class TestHavanaRendering:
         from scenes.port_buildings import build_port_gameplay_layer
 
         havana = pc.get("havana")
-        surf = build_port_gameplay_layer(havana)
+        _, surf = build_port_gameplay_layer(havana)  # night-variant
         # Arkade-buene går ned fra y + h - 30 (i _bake_trade_house).
         # For Havana er exchange y=248, h=92 — så arkaden er ved y=310.
         # Sjekk at noe er tegnet der (IKKE colorkey).
@@ -226,7 +226,7 @@ class TestNassauRendering:
         from scenes.port_buildings import build_port_gameplay_layer
 
         nassau = pc.get("nassau")
-        surf = build_port_gameplay_layer(nassau)
+        _, surf = build_port_gameplay_layer(nassau)  # night-variant
         ex = nassau.buildings.exchange
         # Midt i der eksisterende _bake_exchange ville tegnet vegg
         # (y + 20 er inni søyleradens topp) — skal være colorkey

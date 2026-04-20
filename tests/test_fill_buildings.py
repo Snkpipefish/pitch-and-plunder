@@ -276,14 +276,14 @@ class TestGameplayLayerWithFillBuildings:
         from scenes.port_buildings import build_port_gameplay_layer
 
         pc.init(str(REAL_PORTS_PATH))
-        surf = build_port_gameplay_layer(pc.get("tortuga"))
+        _, surf = build_port_gameplay_layer(pc.get("tortuga"))  # night-variant
         assert surf is not None
 
     def test_nassau_gameplay_bakes_with_fill_buildings(self):
         from scenes.port_buildings import build_port_gameplay_layer
 
         pc.init(str(REAL_PORTS_PATH))
-        surf = build_port_gameplay_layer(pc.get("nassau"))
+        _, surf = build_port_gameplay_layer(pc.get("nassau"))  # night-variant
         assert surf is not None
 
     def test_alleys_remain_transparent_in_gameplay_layer(self):
@@ -298,7 +298,7 @@ class TestGameplayLayerWithFillBuildings:
         pc.init(str(REAL_PORTS_PATH))
         for pid in ("tortuga", "nassau"):
             port = pc.get(pid)
-            surf = build_port_gameplay_layer(port)
+            _, surf = build_port_gameplay_layer(port)  # night-variant
             for i, a in enumerate(port.buildings.alleys):
                 # Sjekk midten av alley, på bygnings-høyde (y=260 —
                 # over ground_top_y=340 så det er i bygnings-sonen,
@@ -317,7 +317,7 @@ class TestGameplayLayerWithFillBuildings:
 
         pc.init(str(REAL_PORTS_PATH))
         for pid in ("tortuga", "port_royal", "havana", "nassau"):
-            surf = build_port_gameplay_layer(pc.get(pid))
+            _, surf = build_port_gameplay_layer(pc.get(pid))  # night-variant
             assert surf is not None
 
     def test_alleys_transparent_in_all_4_ports(self):
@@ -327,7 +327,7 @@ class TestGameplayLayerWithFillBuildings:
         pc.init(str(REAL_PORTS_PATH))
         for pid in ("tortuga", "port_royal", "havana", "nassau"):
             port = pc.get(pid)
-            surf = build_port_gameplay_layer(port)
+            _, surf = build_port_gameplay_layer(port)  # night-variant
             for i, a in enumerate(port.buildings.alleys):
                 check_x = a.x + a.w // 2
                 check_y = 260

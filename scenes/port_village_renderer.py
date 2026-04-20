@@ -177,6 +177,7 @@ class PortVillageRenderer:
         particles: "ParticleSystem",
         hint_state: "bool | str" = False,
         silhouettes: Sequence["NPCSilhouette"] = (),
+        night_factor: float = 1.0,
     ) -> None:
         # 1) Himmel-lag (cross-fade mellom to nærmeste varianter)
         self._draw_backdrop(surface, cam_x, snapshot)
@@ -216,7 +217,7 @@ class PortVillageRenderer:
 
         # 6) Dynamiske lys (BLEND_RGB_ADD) – legger seg over bygninger og
         # entiteter slik at lyset "faller på" spilleren.
-        lighting.draw(surface, lights, cam_x, elapsed)
+        lighting.draw(surface, lights, cam_x, elapsed, night_factor=night_factor)
 
         # 7) Partikler: taake (normal blit) + ildfluer (BLEND_RGB_ADD).
         particles.draw(surface, cam_x)
