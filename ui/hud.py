@@ -1,5 +1,5 @@
-"""HUD for village-scenen: Tortuga / gull / dag / bek-drift / mistanke,
-øverst venstre.
+"""HUD for village-scenen: Tortuga / gull / dag / bek-drift / mistanke /
+rom, øverst venstre.
 
 Fargekoding er bevisst:
 - Sted         (moon-halo ) : "dette er et sted"
@@ -8,6 +8,7 @@ Fargekoding er bevisst:
 - Bek (drift)  (ember     ) : varm-rød, tied til Pitch Lake og råvare-strøm
 - Bek (stopp)  (fog       ) : nøytral dempet, signaliserer manglende drift
 - Mistanke     (bånd-farge) : STONE_BRIGHT<30, LANTERN<70, EMBER<90, FLAME≥90
+- Rom          (bånd-farge) : STONE_BRIGHT≥50%, LANTERN≥20%, EMBER≥1%, FLAME<1%
 
 Tekst-surfaces caches og re-rendres bare når verdien endrer seg – settere
 er no-ops hvis input er likt forrige verdi.
@@ -44,6 +45,7 @@ class Hud:
         self._day: int | None = None
         self._pitch_key: tuple[int, int, bool] | None = None
         self._suspicion_value: int | None = None
+        self._rest_pct: int | None = None
         self._place_surf: pygame.Surface | None = None
         self._gold_surf: pygame.Surface | None = None
         self._day_surf: pygame.Surface | None = None
@@ -52,6 +54,9 @@ class Hud:
         # Mistanke-linje (Fase 3 C3-7) — alltid synlig. Farge varierer
         # per bånd (STONE_BRIGHT<30, LANTERN<70, EMBER<90, FLAME≥90).
         self._suspicion_surf: pygame.Surface | None = None
+        # Rom-linje (Fase 3 C3-8) — alltid synlig. Farge varierer per bånd
+        # (STONE_BRIGHT≥50%, LANTERN≥20%, EMBER≥1%, FLAME<1% = utslitt).
+        self._rest_surf: pygame.Surface | None = None
         # DEV-markør nederst til høyre. Rendres ÉN gang i __init__ og
         # caches som attributt — font.render per frame er dyrt på T4200
         # (PROSJEKT.md §14 feilmodus).
@@ -65,6 +70,7 @@ class Hud:
         self.set_day(day)
         self.set_pitch_status(pitch_per_day, pitch_upkeep, pitch_halted)
         self.set_suspicion(0.0)
+        self.set_rest(1.0)
 
     def set_place(self, place: str) -> None:
         if place == self._place:
@@ -156,6 +162,40 @@ class Hud:
             f"Mistanke: {value}", False, color,
         ).convert_alpha()
 
+    @staticmethod
+    def _rest_color(pct: int) -> tuple[int, int, int]:
+        """Farge-bånd per presisering C3-8 #3.
+
+        Prosent-verdier (int): ≥50 rolig, ≥20 merkbart sliten, ≥1 sliten,
+        <1 utslitt (penalty aktiv i rest.effective_cost). FLAME-båndet
+        (<1%) matcher `rest.is_exhausted` sin 0.01-terskel — konsistent
+        UX mellom display og penalty-semantikk.
+        """
+        if pct >= 50:
+            return constants.COLOR_STONE_BRIGHT
+        if pct >= 20:
+            return constants.COLOR_LANTERN
+        if pct >= 1:
+            return constants.COLOR_EMBER
+        return constants.COLOR_FLAME  # utslitt, penalty aktiv
+
+    def set_rest(self, rest: float) -> None:
+        """Oppdater rom-linja. Farge per bånd. Fase 3 C3-8.
+
+        Verdien vises som prosent (int). Cache-nøkkel er prosent-int,
+        så minor flytpunkt-støy ikke trigger re-render.
+        """
+        pct = int(rest * 100)
+        # Klamp defensivt til [0, 100] for visning.
+        pct = max(0, min(100, pct))
+        if pct == self._rest_pct:
+            return
+        self._rest_pct = pct
+        color = self._rest_color(pct)
+        self._rest_surf = self._font.render(
+            f"Rom: {pct}%", False, color,
+        ).convert_alpha()
+
     def draw(self, surface: pygame.Surface) -> None:
         """Tegn HUD-linjene. Dynamisk y-beregning slik at mistanke-linja
         posisjoneres riktig selv når bek-linja er skjult."""
@@ -174,6 +214,9 @@ class Hud:
             y += LINE_HEIGHT
         if self._suspicion_surf is not None:
             surface.blit(self._suspicion_surf, (PADDING, y))
+            y += LINE_HEIGHT
+        if self._rest_surf is not None:
+            surface.blit(self._rest_surf, (PADDING, y))
             y += LINE_HEIGHT
         if self._dev_surf is not None:
             dev_x = constants.RENDER_WIDTH - self._dev_surf.get_width() - PADDING

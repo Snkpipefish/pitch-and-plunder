@@ -42,6 +42,7 @@ import pygame
 import constants
 from state import GameState
 from systems import balance as _balance
+from systems import rest as _rest
 from ui.dialog_overlay import DEFAULT_PANEL_H, DEFAULT_PANEL_W, DialogOverlay
 from ui.toast import Toast, ToastQueue
 
@@ -243,11 +244,14 @@ class TavernDialog(DialogOverlay):
     # --- Aktive handlinger ---
 
     def _do_buy_room(self) -> None:
-        """Rom-kjøp: trekk gull, sett rest=1.0, toast-feedback.
+        """Rom-kjøp: trekk gull, gjenopprett rest til 1.0, toast-feedback.
 
         INGEN handlings-tid-konsum i C3-3 (presisering #2). Cost_hours
-        i label er informativ tekst — faktisk tid-konsum wires når
-        ActionBudget kobles til scene i senere commit (C3-7/C3-8).
+        i label er informativ tekst — ActionBudget-wiring venter.
+
+        Rom-kjøp setter rest=1.0 direkte via `rest.restore()` (ikke
+        decay-basert). Rommet gir full restitusjon uavhengig av pre-
+        rest-nivå.
         """
         cost_gold = _balance.get().rest.room_cost_gold
         if self._state.player_state.gold < cost_gold:
@@ -257,7 +261,7 @@ class TavernDialog(DialogOverlay):
             )
             return
         self._state.player_state.gold -= cost_gold
-        self._state.player_state.rest = 1.0
+        _rest.restore(self._state)
         # Gold-surface er cachet per gold-value i _ensure_gold; vil re-
         # rendere neste draw automatisk.
         self._push_toast(
@@ -298,6 +302,12 @@ class TavernDialog(DialogOverlay):
         pls.purchased = True
         pls.production_per_day = bal.pitch_lake.production_per_day
         pls.upkeep_per_day = bal.pitch_lake.upkeep_per_day
+        # Fase 3 C3-8: rom-decay for tids-kostbar handling (1.0 h).
+        # Direkte rest-endring, ikke via ActionBudget (som ikke er wiret).
+        purchase_hours = bal.actions.cost_hours_per_action.get(
+            "pitch_lake_purchase", 1.0
+        )
+        _rest.consume_for_action(self._state, purchase_hours)
         # Invalidér entry-cache slik at "Invester ..."-oppføringen
         # forsvinner fra menyen neste draw-kall (siden
         # `_build_entries()` skjuler den når purchased=True).

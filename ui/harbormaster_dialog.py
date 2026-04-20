@@ -46,6 +46,7 @@ import constants
 from config import port_config
 from state import GameState
 from systems import balance as _balance
+from systems import rest as _rest
 from systems import voyage as _voyage
 from ui.dialog_overlay import DEFAULT_PANEL_H, DEFAULT_PANEL_W, DialogOverlay
 from ui.toast import Toast, ToastQueue
@@ -312,6 +313,12 @@ class HarbormasterDialog(DialogOverlay):
                     constants.COLOR_EMBER,
                 )
             return
+        # Fase 3 C3-8: reise-rom-decay (sleep-at-sea-modellert).
+        # Kalles etter at start_voyage har returnert en gyldig VoyageState
+        # — ingen decay hvis reise-start feilet (atomisk).
+        route = _voyage.get_route(bal, self._port_id, entry.dest_port_id)
+        if route is not None:
+            _rest.consume_for_voyage(self._state, route.days)
         # Voyage startet. Signalér scene-transisjon.
         self._want_close = True
         self.requested_next_scene = "voyage"

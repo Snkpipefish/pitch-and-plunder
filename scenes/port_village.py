@@ -618,6 +618,11 @@ class PortVillageScene(BaseScene):
         # int-value uendret). Verdien endres kun ved dawn-decay eller
         # eksplisitt suspicion.increase-kall fra dialog-handlinger.
         self._hud.set_suspicion(self._state.player_state.suspicion)
+        # Fase 3 C3-8: rom-linje. Oppdateres per frame (no-op hvis
+        # pct-int uendret). Verdien endres via rest.consume_for_*-
+        # kall fra dialog-handlerne (bek-kjøp, fast-travel, cache-
+        # commit) og rest.restore fra rom-kjøp.
+        self._hud.set_rest(self._state.player_state.rest)
 
         if self._overlay is not None:
             self._overlay.update(dt, self._current_market_state())

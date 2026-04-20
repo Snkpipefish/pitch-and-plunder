@@ -47,6 +47,8 @@ import pygame
 import constants
 from config import port_config
 from state import GameState
+from systems import balance as _balance
+from systems import rest as _rest
 from ui.dialog_overlay import DEFAULT_PANEL_H, DEFAULT_PANEL_W, DialogOverlay
 from ui.toast import Toast, ToastQueue
 
@@ -256,6 +258,12 @@ class CacheSubDialog(DialogOverlay):
                 f"Tatt ut {self._amount} d.",
                 _SUCCESS_COLOR,
             )
+        # Fase 3 C3-8: rom-decay per cache-commit. Kost leses fra balance
+        # slik at deposit og withdraw bruker samme cost_hours-nøkkel.
+        cost_hours = _balance.get().actions.cost_hours_per_action.get(
+            "cache_deposit", 0.25
+        )
+        _rest.consume_for_action(self._state, cost_hours)
         # Nullstill beløp etter commit
         self._amount = 0
 
