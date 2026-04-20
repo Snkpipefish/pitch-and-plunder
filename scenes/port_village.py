@@ -41,6 +41,7 @@ from scenes.port_village_renderer import PortVillageRenderer
 from state import GameState
 from state.market_state import MarketState
 from systems import save as save_module
+from systems.animations import PaletteCycleSource, apply_palette_cycles
 from systems.day_cycle import DayCycle, compute_night_factor
 from systems.economy import Market, load_base_prices, tick_all_ports_dawn
 from systems.lighting import Light, LightingSystem
@@ -123,6 +124,23 @@ class PortVillageScene(BaseScene):
         self._gameplay_layer = ParallaxLayer(
             self._gameplay_night_surface, speed=1.0
         )
+        # C2.5-9 palette-cycling — konverter PaletteCycle-config til
+        # PaletteCycleSource-runtime-objekter. Cycling muterer
+        # gameplay-night-surfacen per frame (billig for <25 px totalt).
+        # Permanent-cycles (smithy-esse, bål) gjelder også day-surface
+        # siden disse er 24/7-lys.
+        self._palette_cycles: list[PaletteCycleSource] = []
+        self._palette_cycles_permanent: list[PaletteCycleSource] = []
+        if self._buildings.animations.palette_cycles:
+            for pc in self._buildings.animations.palette_cycles:
+                src = PaletteCycleSource(
+                    x=pc.x, y=pc.y, w=pc.w, h=pc.h,
+                    palette=pc.palette, fps=pc.fps,
+                    permanent=pc.permanent,
+                )
+                self._palette_cycles.append(src)
+                if pc.permanent:
+                    self._palette_cycles_permanent.append(src)
         fg_layer = ParallaxLayer(build_empty_layer(1.3), speed=1.3)
         parallax_renderer = ParallaxRenderer([self._gameplay_layer, fg_layer])
         self._celestial = Celestial()
@@ -510,6 +528,23 @@ class PortVillageScene(BaseScene):
             if night_factor >= 0.5
             else self._gameplay_day_surface
         )
+        # C2.5-9 palette-cycling — muterer valgt gameplay-surface per
+        # frame. I natt-surface: alle cycles (gated + permanent). I
+        # day-surface: kun permanent (smithy-esse, bål brenner 24/7).
+        if night_factor >= 0.5:
+            apply_palette_cycles(
+                self._gameplay_night_surface,
+                self._palette_cycles,
+                self._elapsed,
+                night_factor,
+            )
+        elif self._palette_cycles_permanent:
+            apply_palette_cycles(
+                self._gameplay_day_surface,
+                self._palette_cycles_permanent,
+                self._elapsed,
+                night_factor,
+            )
         # Verdens-laget (bakgrunn → forgrunn) tegnes av renderen.
         self._renderer.draw(
             surface=surface,

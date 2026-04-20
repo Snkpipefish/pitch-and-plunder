@@ -70,6 +70,16 @@
             {"kind": "group",    "x": 830},
             {"kind": "sitting",  "x": 1180}
           ]
+        },
+        "animations": {
+          "palette_cycles": [
+            {"x": 944, "y": 335, "w": 6, "h": 2,
+             "palette": ["FLAME", "EMBER", "LANTERN_BRIGHT"],
+             "fps": 6, "permanent": true},
+            {"x": 947, "y": 337, "w": 4, "h": 1,
+             "palette": ["LANTERN_BRIGHT", "FLAME", "EMBER"],
+             "fps": 8, "permanent": true}
+          ]
         }
       }
     },
@@ -147,6 +157,13 @@
             {"kind": "officer",       "x": 260},
             {"kind": "merchant",      "x": 450},
             {"kind": "colonial_lady", "x": 900}
+          ]
+        },
+        "animations": {
+          "palette_cycles": [
+            {"x": 1074, "y": 294, "w": 4, "h": 2,
+             "palette": ["STONE_LIT", "STONE_BRIGHT", "STONE_MID"],
+             "fps": 3, "permanent": false}
           ]
         }
       }
@@ -237,6 +254,16 @@
             {"kind": "spanish_merchant", "x": 790},
             {"kind": "mantilla_woman",   "x": 1020}
           ]
+        },
+        "animations": {
+          "palette_cycles": [
+            {"x": 416, "y": 306, "w": 8, "h": 2,
+             "palette": ["FLAME", "EMBER", "LANTERN_BRIGHT"],
+             "fps": 5, "permanent": false},
+            {"x": 998, "y": 330, "w": 4, "h": 1,
+             "palette": ["FLAME", "EMBER", "LANTERN_BRIGHT"],
+             "fps": 7, "permanent": true}
+          ]
         }
       }
     },
@@ -322,6 +349,16 @@
           "silhouettes": [
             {"kind": "barefoot_sailor",  "x": 270},
             {"kind": "woman_with_child", "x": 440}
+          ]
+        },
+        "animations": {
+          "palette_cycles": [
+            {"x": 244, "y": 330, "w": 6, "h": 2,
+             "palette": ["FLAME", "EMBER", "LANTERN_BRIGHT"],
+             "fps": 6, "permanent": true},
+            {"x": 904, "y": 330, "w": 6, "h": 2,
+             "palette": ["EMBER", "FLAME", "LANTERN_BRIGHT"],
+             "fps": 5, "permanent": true}
           ]
         }
       }

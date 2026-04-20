@@ -23,7 +23,7 @@ import json
 import logging
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -199,6 +199,36 @@ class Alley:
 
 
 @dataclass(frozen=True)
+class PaletteCycle:
+    """Palette-cycling-region (Fase 2.5 C2.5-9).
+
+    Matcher `systems.animations.PaletteCycleSource`. Rektangel på
+    gameplay-surface fylles syklisk med `palette`-fargene.
+
+    `permanent=True` = kjører 24/7 (bål, smithy). `False` = gates
+    av night_factor.
+    """
+    x: int
+    y: int
+    w: int
+    h: int
+    palette: tuple[str, ...]
+    fps: float = 6.0
+    permanent: bool = False
+
+
+@dataclass(frozen=True)
+class PortAnimations:
+    """Per-havn animasjons-konfigurasjon (C2.5-9).
+
+    Kun palette-cycling i C2.5-9. Alpha-pulsering flagg lagret men
+    ikke implementert (utsatt til Fase 3).
+    """
+    palette_cycles: tuple[PaletteCycle, ...] = ()
+    alpha_pulse_windows: bool = False
+
+
+@dataclass(frozen=True)
 class NatureElement:
     """Natur-element (palme, fugl, blomster, ugress, etc).
 
@@ -321,6 +351,10 @@ class PortBuildings:
     #: slik at fugler på tak/mast og blomster på balkonger havner
     #: over bygnings-silhuettene.
     nature_elements: tuple[NatureElement, ...] = ()
+    #: Palette-cycling-animasjoner (C2.5-9). Bål, smithy-esse,
+    #: katedral-portal, markedsplass-LANTERN. Muterer gameplay-
+    #: surface per frame; billig med <25 px per havn totalt.
+    animations: PortAnimations = field(default_factory=PortAnimations)
 
 
 @dataclass(frozen=True)
@@ -934,6 +968,75 @@ def _parse_alleys(
     return tuple(result)
 
 
+def _parse_palette_cycles(
+    raw: Any, port_id: str,
+) -> tuple[PaletteCycle, ...]:
+    # Lazy import for å unngå top-level-avhengighet
+    from systems.animations import PALETTE_NAMES
+
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': animations.palette_cycles må være en liste"
+        )
+    result: list[PaletteCycle] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': palette_cycles[{i}] må være et objekt"
+            )
+        try:
+            x = int(entry["x"])
+            y = int(entry["y"])
+            w = int(entry["w"])
+            h = int(entry["h"])
+            palette_list = entry["palette"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': palette_cycles[{i}] ugyldig: {exc}"
+            ) from exc
+        if not isinstance(palette_list, list) or len(palette_list) < 2:
+            raise ValueError(
+                f"port '{port_id}': palette_cycles[{i}].palette må være "
+                f"liste med minst 2 farger"
+            )
+        palette_tuple: tuple[str, ...] = tuple(str(c) for c in palette_list)
+        for color_name in palette_tuple:
+            if color_name not in PALETTE_NAMES:
+                raise ValueError(
+                    f"port '{port_id}': palette_cycles[{i}] har ukjent "
+                    f"palett-navn {color_name!r} (gyldige: "
+                    f"{sorted(PALETTE_NAMES.keys())})"
+                )
+        fps = float(entry.get("fps", 6.0))
+        permanent = bool(entry.get("permanent", False))
+        result.append(PaletteCycle(
+            x=x, y=y, w=w, h=h, palette=palette_tuple,
+            fps=fps, permanent=permanent,
+        ))
+    return tuple(result)
+
+
+def _parse_animations(
+    raw: Any, port_id: str,
+) -> PortAnimations:
+    if raw is None:
+        return PortAnimations()
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"port '{port_id}': animations må være et objekt"
+        )
+    palette_cycles = _parse_palette_cycles(
+        raw.get("palette_cycles"), port_id,
+    )
+    alpha_pulse = bool(raw.get("alpha_pulse_windows", False))
+    return PortAnimations(
+        palette_cycles=palette_cycles,
+        alpha_pulse_windows=alpha_pulse,
+    )
+
+
 def _parse_nature_elements(
     raw: Any, port_id: str,
 ) -> tuple[NatureElement, ...]:
@@ -1082,6 +1185,7 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
     nature_elements = _parse_nature_elements(
         raw.get("nature_elements"), port_id,
     )
+    animations = _parse_animations(raw.get("animations"), port_id)
     return PortBuildings(
         ground_top_y=ground_top_y,
         player_start_x=player_start_x,
@@ -1095,6 +1199,7 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
         fill_buildings=fill_buildings,
         alleys=alleys,
         nature_elements=nature_elements,
+        animations=animations,
     )
 
 
