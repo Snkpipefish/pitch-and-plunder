@@ -18,6 +18,12 @@ Tastatur:
 - Right/D: kjøp 1 (Shift = 10)
 - Left/A : selg 1 (Shift = 10)
 - Esc    : lukk
+
+Fase 3 C3-2: arver nå fra `ui.dialog_overlay.DialogOverlay` for panel-
+bygging, want_close/ESC og up/down-navigasjon. Public API uendret —
+existing callers (PortVillageScene, tester) merker ingen forskjell.
+Lokale modul-konstanter (PANEL_X, NAME_X, ...) beholdes for layout-
+kontinuitet. A/D-kjøp/salg-logikk forblir Exchange-spesifikk.
 """
 
 from __future__ import annotations
@@ -30,6 +36,7 @@ from state import GameState
 from state.market_state import MarketState
 from systems import balance as _balance
 from systems.economy import Market
+from ui.dialog_overlay import DialogOverlay
 from ui.toast import Toast, ToastQueue
 
 
@@ -59,22 +66,7 @@ _TREND_COLORS = {
 }
 
 
-def _build_panel_surface() -> pygame.Surface:
-    """Semi-transparent stein-panel med ramme. Bygges én gang."""
-    panel = pygame.Surface((PANEL_W, PANEL_H), pygame.SRCALPHA)
-    # COLOR_STONE_DARK = (31, 37, 56), 95% opacity = 242/255
-    panel.fill((*constants.COLOR_STONE_DARK, 242))
-    pygame.draw.rect(
-        panel, constants.COLOR_STONE_LIT, (0, 0, PANEL_W, PANEL_H), 2
-    )
-    # Subtil ny-ramme innenfor (gir ekstra "marmor"-preg)
-    pygame.draw.rect(
-        panel, constants.COLOR_STONE_MID, (4, 4, PANEL_W - 8, PANEL_H - 8), 1
-    )
-    return panel
-
-
-class ExchangeOverlay:
+class ExchangeOverlay(DialogOverlay):
     """UI-overlay for kjøp/salg.
 
     Refactored i Fase 2B C4: tar IKKE MarketState i __init__.
@@ -82,6 +74,11 @@ class ExchangeOverlay:
     Dette gjør at samme overlay følger havn-bytte transparent når C5+
     legger til scene-bytter — overlayet binder seg aldri til en spesifikk
     havns MarketState-referanse.
+
+    Fase 3 C3-2: arver fra DialogOverlay. Panel, `_want_close`,
+    `_selected`, `_handle_navigation` kommer fra base. Exchange beholder
+    egne modul-konstanter for kolonne-layout (NAME_X/PRICE_X/osv) og
+    sin A/D-kjøp/salg-aktiverings-logikk.
     """
 
     def __init__(
@@ -92,7 +89,9 @@ class ExchangeOverlay:
         toasts: ToastQueue | None = None,
         port_name: str = "Tortuga",
     ) -> None:
-        self._font = font
+        # Base gir self._font, self._panel_surface, self._want_close,
+        # self._selected, self._balance_tick_id_seen + navigation/panel.
+        super().__init__(font, panel_w=PANEL_W, panel_h=PANEL_H)
         self._market = market
         self._state = state
         self._port_name = port_name
@@ -100,9 +99,6 @@ class ExchangeOverlay:
         # leses fra market_state per call.
         self._commodities = market.commodities
         self._n = len(self._commodities)
-        self._selected = 0
-        self._panel = _build_panel_surface()
-        self._want_close = False
         # ToastQueue delt med VillageScene – brukes for feilhint
         # (gullmangel) ved mislykket kjøp. None = ingen toasts (testmodus).
         self._toasts = toasts
@@ -161,30 +157,22 @@ class ExchangeOverlay:
         self._trend_tick_id: int = -1
         self._trend_surfs: dict[str, pygame.Surface | None] = {}
 
-    # --- Lifecycle ---
-
-    @property
-    def want_close(self) -> bool:
-        return self._want_close
-
     # --- Input ---
+    # want_close arves fra DialogOverlay.
 
     def handle_event(
         self, event: pygame.event.Event, market_state: MarketState
     ) -> None:
+        # Base-navigasjon: ESC (want_close) og up/down (selected).
+        if self._handle_navigation(event, self._n):
+            return
+        # Exchange-spesifikke activation-keys: A/D for kjøp/salg.
         if event.type != pygame.KEYDOWN:
             return
         key = event.key
         shift_held = bool(event.mod & pygame.KMOD_SHIFT)
         amount = 10 if shift_held else 1
-
-        if key == pygame.K_ESCAPE:
-            self._want_close = True
-        elif key in (pygame.K_UP, pygame.K_w):
-            self._selected = (self._selected - 1) % self._n
-        elif key in (pygame.K_DOWN, pygame.K_s):
-            self._selected = (self._selected + 1) % self._n
-        elif key in (pygame.K_RIGHT, pygame.K_d):
+        if key in (pygame.K_RIGHT, pygame.K_d):
             self._buy(amount, market_state)
         elif key in (pygame.K_LEFT, pygame.K_a):
             self._sell(amount, market_state)
@@ -373,7 +361,7 @@ class ExchangeOverlay:
         self._ensure_cargo()
         self._ensure_trends(market_state)
 
-        surface.blit(self._panel, (PANEL_X, PANEL_Y))
+        surface.blit(self._panel_surface, (PANEL_X, PANEL_Y))
         assert self._title_surf is not None
         surface.blit(self._title_surf, (PANEL_X + 16, PANEL_Y + 14))
 

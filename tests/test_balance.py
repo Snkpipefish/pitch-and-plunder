@@ -352,3 +352,56 @@ def test_reload_v2_actions_cost_live(tmp_path: Path) -> None:
     result = bal.reload()
     assert result.success is True
     assert "actions.cost_hours_per_action" in result.live_changes
+
+
+# --- Fase 3 C3-2: tick_id for hot-reload-cache-invalidation ---
+
+
+def test_tick_id_starts_at_zero_after_reset() -> None:
+    """Etter _reset_for_tests skal tick_id være 0."""
+    # _reset_balance fixture kaller _reset_for_tests før testen
+    assert bal.tick_id() == 0
+
+
+def test_tick_id_unchanged_by_init(tmp_path: Path) -> None:
+    """init() endrer ikke tick_id — kun reload() bumper."""
+    path = tmp_path / "balance.json"
+    _write_json(path, _valid_payload())
+    assert bal.tick_id() == 0
+    bal.init(str(path))
+    assert bal.tick_id() == 0
+
+
+def test_tick_id_bumps_on_successful_reload(tmp_path: Path) -> None:
+    """Hver vellykkede reload() øker tick_id med 1."""
+    path = tmp_path / "balance.json"
+    _write_json(path, _valid_payload())
+    bal.init(str(path))
+    assert bal.tick_id() == 0
+
+    # Første reload (selv uten endringer) bumper tick_id
+    result1 = bal.reload()
+    assert result1.success is True
+    assert bal.tick_id() == 1
+
+    # Andre reload bumper igjen
+    modified = _valid_payload()
+    modified["economy"]["transaction_fee"] = 7
+    _write_json(path, modified)
+    result2 = bal.reload()
+    assert result2.success is True
+    assert bal.tick_id() == 2
+
+
+def test_tick_id_not_bumped_on_failed_reload(tmp_path: Path) -> None:
+    """Failed reload (ødelagt fil) bumper IKKE tick_id."""
+    path = tmp_path / "balance.json"
+    _write_json(path, _valid_payload())
+    bal.init(str(path))
+
+    # Ødelegg filen
+    path.write_text("{broken json", encoding="utf-8")
+    result = bal.reload()
+    assert result.success is False
+    # Singleton uendret, og tick_id uendret
+    assert bal.tick_id() == 0

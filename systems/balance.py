@@ -435,6 +435,27 @@ def load_from_path(path: str) -> Balance:
 _instance: Balance | None = None
 _path: str = DEFAULT_BALANCE_PATH
 
+#: Monotonisk teller som inkrementeres ved hver vellykkede reload().
+#: Dialog-overlays bruker denne til pull-ved-draw-cache-invalidation
+#: (Fase 3 C3-2) — konsistent med MarketState.tick_id-mønsteret. Bumpes
+#: ETTER in-place-swap slik at konsumenter ser nye verdier når de
+#: oppdager endret tick_id.
+_reload_counter: int = 0
+
+
+def tick_id() -> int:
+    """Returnér monotonisk teller som inkrementeres per vellykkede reload.
+
+    Brukes av dialog-overlays (DialogOverlay._balance_changed) til å
+    invalidere cached tekst-surfaces uten å sammenligne individuelle
+    felt-verdier. Subscribe-infrastruktur ville vært overkill når
+    balance sjelden endres (kun F5 i dev-mode).
+
+    Start-verdi er 0 ved modul-init; blir 1 etter første reload, osv.
+    Reset-ved-test-fixture nullstiller til 0.
+    """
+    return _reload_counter
+
 
 def init(path: str = DEFAULT_BALANCE_PATH) -> Balance:
     """Last balance.json eksplisitt ved oppstart. Kalles fra main.py før
@@ -631,9 +652,15 @@ def reload() -> ReloadResult:
     for f in fields(_instance):
         setattr(_instance, f.name, getattr(new, f.name))
 
+    # Bump tick_id ETTER swap slik at dialog-overlays som kaller
+    # `tick_id()` deretter leser fra oppdatert singleton.
+    global _reload_counter
+    _reload_counter += 1
+
     log.info(
-        "Balance reloadet: %d live, %d session, %d newgame endringer",
+        "Balance reloadet: %d live, %d session, %d newgame endringer (tick_id=%d)",
         len(diff["live"]), len(diff["session"]), len(diff["newgame"]),
+        _reload_counter,
     )
     return ReloadResult(
         success=True,
@@ -644,7 +671,8 @@ def reload() -> ReloadResult:
 
 
 def _reset_for_tests() -> None:
-    """Tøm singleton. Kun for bruk i tester."""
-    global _instance, _path
+    """Tøm singleton og tick_id. Kun for bruk i tester."""
+    global _instance, _path, _reload_counter
     _instance = None
     _path = DEFAULT_BALANCE_PATH
+    _reload_counter = 0
