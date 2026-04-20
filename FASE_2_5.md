@@ -111,6 +111,49 @@ enn de andre". Vi holder linjen: fraværet ER signalet. Når spillere
 reiser mellom Port Royal (kolonial orden) og Nassau (lovløs kaos),
 skal forskjellen være umiddelbar.
 
+### 1.4 Bystruktur og silhuett-hierarki (fra v1.1)
+
+Etter brukersamtale er fyll-bygninger og bystruktur lagt til scope.
+Havnene skal leses som bebodde byer, ikke bare samlinger av
+signatur-bygninger.
+
+**Bygningsantall per havn:**
+
+| Havn | Signatur | Fyll-bygninger | Smug | Totalt |
+|------|----------|----------------|------|--------|
+| Tortuga | 2 | 5-7 | 3 | 7-9 |
+| Port Royal | 3 | 6-8 | 4 | 9-11 |
+| Havana | 3 | 7-9 | 4-5 | 10-12 |
+| Nassau | 3 | 4-6 | 3 | 7-9 |
+
+**Silhuett-hierarki (4 nivåer):**
+
+| Nivå | Høyde (px) | Hvem |
+|------|-----------|------|
+| Dominant | 96-108 | Taverna, katedral, Customs House-pediment |
+| Signatur | 72-84 | Rum-magasin, palass, handelshus, Teach's hus |
+| Fyll-høy | 48-60 | Borgerhus, offisersbolig, kloster-annex, boarding-hus |
+| Fyll-lav | 32-44 | Fiskerhytter, pakkhus, lappverks-hytter, taverne-cluster |
+
+Hierarkiet lar spilleren lese bygnings-viktighet ved first glance.
+Fyll-bygninger må aldri overstige signatur-bygningenes høyde.
+
+**Smug (åpninger mellom bygninger):**
+
+- Bredde 20-40 px, nok til å leses som "åpning"
+- Viser havet og ankrede skip gjennom
+- Havn-spesifikk karakter:
+  - Tortuga: uregelmessige, kan ha tønne eller tauverk i midten
+  - Port Royal: ordnede, jevne avstander (britisk urbanisme)
+  - Havana: brede arkade-lignende, noen med blomster-plantering
+  - Nassau: uregelmessige med palmer eller sand-drift
+
+**Havn-spesifikk stil per bygnings-type:**
+
+Selv bygninger med samme funksjon skal se forskjellige ut per havn.
+Tortuga tømmerpakkhus ≠ Port Royal sivilt pakkhus. En spiller skal
+kunne se en bygning uten kontekst og vite hvilken havn den er fra.
+
 ---
 
 ## 2. Detaljspesifikasjon per havn
@@ -405,137 +448,127 @@ er for dyrt på GM45.
 
 ## 6. Commit-plan
 
-### C2.5-1 — Tortuga rekvisita-lag
+Fase 2.5 er 10 commits totalt. De første 5 er landet.
 
-**Hva:** gategulv, lanterne-stolper, markedsboder, stablede varer,
-3 NPC-silhuetter mellom taverna og børs. Røyk fra taverna-skorstein
-(palette-cycling).
+### Landet (C2.5-1 til C2.5-5)
 
-**Filer:**
+- **C2.5-1** — Tortuga rekvisita-lag (21 nye tester)
+- **C2.5-2** — Port Royal signatur-bygninger (18 nye tester)
+- **C2.5-3** — Havana signatur-bygninger (11 nye tester)
+- **C2.5-4** — Nassau markedsplass + Teach's hus + skipsverft
+  (11 nye tester, lys-korrigering EMBER→LANTERN)
+- **C2.5-5** — Ankrede skip-silhuetter per havn (17 nye tester)
 
-- `entities/port_props.py` (ny — rekvisita-sprites)
-- `scenes/port_village_renderer.py` (utvid bake-funksjoner)
-- `data/ports.json` (Tortuga buildings-felt utvides med props-liste)
+### Gjenstående (C2.5-6a gjennom C2.5-9)
 
-**Tester:**
+#### C2.5-6a — Tortuga + Nassau fyll-bygninger + smug
 
-- `test_port_props.py`: props lastes, pre-rendres korrekt,
-  plasseringer matcher config
-- `test_port_village_scene.py` (utvid): Tortuga-scene inkluderer
-  nye elementer, benchmark uendret
+Mindre havner, prototyp for mønsteret. 9-13 bygninger totalt.
 
-**Akseptansekriterier:**
+**Tortuga fyll-bygninger (5 sikre + 2 valgfrie):**
 
-- Tortuga føles befolket, ikke lenger "liten strek på gaten"
-- Taverna og børs forblir visuelle hovedanker
-- Frame time uendret
+1. Fiskerhytte med tørke-nett (32-40 px)
+2. Boarding-hus, 2 etasjer (48-56 px)
+3. Tømmerpakkhus (36-44 px)
+4. Lite felt-hospital/barbeskjær (40 px)
+5. Smed-verksted med glødende kull (36-44 px)
+6. (Valgfri) Taverne nr 2
+7. (Valgfri) Privat rom-lager
 
-### C2.5-2 — Port Royal signatur-bygninger + rekvisita
+**Nassau fyll-bygninger (4 sikre + 2 valgfrie, taverne-cluster
+teller 2):**
 
-**Hva:** Customs House (erstatter børshus-sprite), klokketårn-kirke,
-rum-magasin. Brosteinsgater, jerngjerder, kolonial-lamper. 3 NPC-
-silhuetter.
+1. Taverne-cluster: 2 små taverner tett sammen (24-32 px hver)
+2. Improvisert pakkhus (28-36 px)
+3. Lappverks-hytte (32-40 px)
+4. Tauverks-verksted (24-32 px)
+5. (Valgfri) Seilmaker
+6. (Valgfri) Halvforlatt hus med natur som vokser inn
 
-**Filer:**
-
-- `entities/port_buildings.py` (ny eller utvid eksisterende —
-  bygnings-sprites per havn)
-- `data/ports.json` (Port Royal buildings-felt)
-- `scenes/port_village_renderer.py` (port-spesifikk routing basert
-  på `port_config.id`)
-
-**Tester:**
-
-- `test_port_royal_rendering.py` (ny): scene laster med PR-
-  spesifikke bygninger, pre-render-surfaces korrekte
-
-**Akseptansekriterier:**
-
-- Port Royal ser institusjonell-kald og britisk ut
-- Tydelig distinkt fra Tortuga ved første øyekast
-- Customs House erstatter generisk børshus-sprite (HUD sier fortsatt
-  "Port Royal Børs")
-
-### C2.5-3 — Havana signatur-bygninger + rekvisita
-
-**Hva:** Katedral, guvernørpalass, handelshus. Steinheller, fontene
-(palette-cycling), 4 NPC-silhuetter.
-
-**Filer:** som C2.5-2 men for Havana.
-
-**Akseptansekriterier:**
-
-- Havana ser spansk-barokk ut
-- Mest befolket og visuelt rikest
-- Varmeste palett av de fire
-
-### C2.5-4 — Nassau markedsplass + rekvisita
-
-**Hva:** Åpen markedsplass (erstatter børs-bygning), Teach's hus,
-skipsverft. Sand-gater, improviserte lanterner, bål (palette-cycling),
-2 NPC-silhuetter.
-
-**Filer:** som C2.5-2 men for Nassau.
-
-**Akseptansekriterier:**
-
-- Nassau ser lovløs og kaotisk ut
-- INGEN dominant bygning (designet)
-- Tydelig kontrast mot Port Royals orden
-
-### C2.5-5 — Ankrede skip-silhuetter per havn
-
-**Hva:** skip-silhuetter i havnen for alle 4 havner. Tematisk
-variasjon i antall og stil:
-
-- Tortuga: utvid til 3 smugler-skuter
-- Port Royal: 3 britiske fregatter, ordnet
-- Havana: 1-2 galleoner + 1 mindre, imperiell
-- Nassau: 4-5 små, kaotisk
+**Smug:** 3 per havn, havn-spesifikk karakter per §1.4.
 
 **Filer:**
+- `entities/fill_buildings.py` (ny — per-havn bake-funksjoner)
+- `config/port_config.py` (FillBuilding + Alley dataclasses)
+- `data/ports.json` (fill_buildings og alleys-felt per havn)
+- `scenes/port_buildings.py` (utvid bake-pipeline)
 
-- `entities/anchored_ship.py` (ny — silhuett-sprites)
-- `data/ports.json` (ship-felt per havn: antall, stil, plasseringer)
-- `scenes/port_village_renderer.py` (inkluder i bake)
+#### C2.5-6b — Port Royal + Havana fyll-bygninger + smug
 
-### C2.5-6 — Animasjons-pass
+Større havner, etterfølger mønster fra 6a. 13-17 bygninger totalt.
 
-**Hva:** alpha-pulsering på vinduer i alle havner, palette-cycling
-på eventuelle flagg, bål for Nassau, røyk for havner som har det.
+**Port Royal fyll-bygninger (6 sikre + 2 valgfrie):**
 
-**Filer:**
+1. Offisersbolig, murstein med jerngelénder (48-56 px)
+2. East India Co.-kontor med skilt (48-56 px)
+3. Soldat-arbeidsbrakke med identisk vindusrekke (40-48 px)
+4. Sivilt pakkhus ved kaia (36-44 px)
+5. Handelsmannsbolig, 2 etasjer (48-60 px)
+6. Legekontor/apotek med skilt (40-48 px)
+7. (Valgfri) Fengsels-anneks med jerngittere
+8. (Valgfri) Kirke-sakristi knyttet til klokketårn-kirken
 
-- `systems/palette_cycling.py` (ny eller utvid eksisterende lanterne-
-  system)
-- `scenes/port_village.py` (per-frame cycling-oppdatering)
+**Havana fyll-bygninger (7 sikre + 2 valgfrie):**
 
-**Akseptansekriterier:**
+1. Kloster-annex knyttet til katedralen (48-56 px)
+2. Handelsmannshus med balkong og blomster (48-60 px)
+3. Tobakks-pakkhus, stort lavt (40-48 px)
+4. Lite daglig-kapell (48-56 px)
+5. Borgerhus, 2 etasjer rik fasade (56-60 px)
+6. Gesellene-verksted med bronse-smie (40-48 px)
+7. Spansk vakthus, lite militært (40-48 px)
+8. (Valgfri) Blomster-marked (åpen struktur)
+9. (Valgfri) Sukker-lager
 
-- Subtil bevegelse i alle havner
-- Frame time uendret
-- Ingen distraksjon fra gameplay (effektene er støttende, ikke
-  fremtredende)
+**Smug:** 4 Port Royal, 4-5 Havana, per §1.4.
 
-### C2.5-7 — Brukertest + retrospektiv
+#### C2.5-7 — Livfullhet per havn (slitasje + natur + statisk lys)
 
-**Brukertest-protokoll:**
+Moderat omfang, per-havn rekkefølge i én commit.
 
-- Besøk alle 4 havner via debug-teleport (F1-F4)
-- Minst 2 minutter i hver (se på detaljer, la palette-cycling
-  kjøre)
-- Subjektive vurderinger:
-  1. Føles hver havn unik ved første øyekast?
-  2. Klarer du å identifisere hvilken havn du er i uten å lese
-     HUD-teksten?
-  3. Er NPC-tettheten tematisk riktig (Havana travel, Nassau glissent)?
-  4. Fungerer Nassaus fravær av børs-bygning, eller leses det
-     som "ufullstendig"?
-  5. Er animasjons-elementene subtile nok, eller distraherer de?
+**Slitasje per havn:**
+- Tortuga: forfall i funksjon — mose, rust på jern, slitasje
+- Port Royal: pompøs nedslitthet — flassende hvitkalk, salt-ringer
+- Havana: rik pato — værtmerkede farger, grønnskyggestreif
+- Nassau: organisk villskap — tre som vokser mellom planker
 
-**Retrospektiv:** `PHASE_2_5_RETROSPECTIVE.md` med per-commit-oversikt,
-brukertest-observasjoner, teknisk gjeld for Fase 3, oppdatering av
-`PROSJEKT.md` CHANGELOG til v2.5.
+**Natur-elementer:**
+- Palmer (1-2 Tortuga / 1-2 Port Royal utkant / 2-3 Havana
+  plantet / 3-4 Nassau ukontrollerte)
+- Bougainvillea og hengeplanter (Havana-signatur)
+- Mose/lav (Port Royal salt-grønn, Tortuga våt-grønn)
+- Fugler: måker på master, duer på katedraltårn, pelikan ved
+  Nassau-kai
+- Ugress mellom brosteiner (Port Royal), mellom sand (Nassau)
+
+**Statisk lys-karakter per havn (bakt inn, ikke dynamisk):**
+- Tortuga: klaustrofobisk varme — antydning av silhuetter i vinduer
+- Port Royal: kald overvåking — ordnet lys-plassering, kaldt hvitt
+  institusjonelt, ett lone-guard varmt vindu
+- Havana: katolsk varme — glass-mosaikk-antydning i katedralvinduer,
+  lanterne-mønster projisert på palassbakke
+- Nassau: flimrende kaos — ulike vindus-farger (gul/rød) i Teach's
+  hus, kaotisk belysning
+
+#### C2.5-8 — Animasjons-pass
+
+Som opprinnelig planlagt:
+- Palette-cycling på bål (Nassau), røyk (Tortuga/Havana), fontene
+  (Havana)
+- Alpha-pulsering på vinduer alle havner, asynkron 0.85-1.0 over
+  2-3 sek
+- Data-drevet via ports.json `animations`-felt
+
+Maks 20 px palette-cycling per havn.
+
+#### C2.5-9 — Brukertest + retrospektiv
+
+Utvidet brukertest med eksplisitt spørsmål om havnen føles bebodd
+nok etter all livfullhet og animasjon er lagt på.
+
+PHASE_2_5_RETROSPECTIVE.md med per-commit-oversikt, brukertest-
+observasjoner, teknisk gjeld for Fase 3, oppdatering av PROSJEKT.md
+CHANGELOG til v2.5.
 
 ---
 
@@ -574,5 +607,8 @@ Forventet gjeld ved 2.5-slutt:
 
 ## CHANGELOG
 
-- **v1.0** – Initial Fase 2.5-spesifikasjon (Fase 2.5-planlegging
-  gjennom samtale med bruker).
+- **v1.1** (2026-04-20) – Utvidet scope etter brukersamtale:
+  fyll-bygninger per havn, bystruktur med smug, silhuett-hierarki
+  (§1.4), 4 nye commits (C2.5-6a, C2.5-6b, C2.5-7, C2.5-8).
+  Fase 2.5 er nå 10 commits totalt.
+- **v1.0** – Initial Fase 2.5-spesifikasjon.

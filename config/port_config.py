@@ -154,6 +154,46 @@ class ChestStack:
 
 
 @dataclass(frozen=True)
+class FillBuilding:
+    """Fyll-bygning for bystruktur (Fase 2.5 C2.5-6a/6b).
+
+    Utover signatur-bygningene skal hver havn ha 4-9 fyll-bygninger
+    som gir scenen karakter av bebodd by. `kind` matcher mot bake-
+    funksjoner i `entities/fill_buildings.py` via
+    `VALID_FILL_BUILDING_KINDS`.
+
+    `style_variant` bytter små visuelle detaljer (f.eks. speilvendt
+    vindu/dør-plassering) slik at to cluster-bygninger av samme
+    `kind` ikke er identiske.
+
+    `h` må være ≤ `MAX_FILL_BUILDING_HEIGHT` (60 px) for å holde
+    silhuett-hierarkiet per FASE_2_5.md §1.4.
+    """
+    kind: str
+    x: int
+    w: int
+    h: int
+    style_variant: int = 0
+
+
+@dataclass(frozen=True)
+class Alley:
+    """Smug mellom bygninger (Fase 2.5 C2.5-6a/6b).
+
+    Representerer en åpning der havet/skip bak er synlig gjennom.
+    Alley er dokumentasjons-struktur: bake-pipelinen tegner ikke
+    alleys eksplisitt — de oppstår naturlig som tomrom mellom
+    fill_buildings og signatur-bygninger.
+
+    Spec §1.4 krever bredde 20-40 px. Parser aksepterer 16-40 px
+    (grense-fleksibilitet når havne-layout er trang, f.eks. Nassau
+    hvor signatur-bygningene dominerer).
+    """
+    x: int
+    w: int
+
+
+@dataclass(frozen=True)
 class AnchoredShip:
     """Ankrede skip-silhuett i havnen (Fase 2.5 C2.5-5).
 
@@ -248,6 +288,15 @@ class PortBuildings:
     #: Tematisk variasjon: Tortuga 3 smugler, Port Royal 3 fregatt,
     #: Havana 2-3 imperiell, Nassau 4-5 kaotisk små.
     anchored_ships: tuple[AnchoredShip, ...] = ()
+    #: Fyll-bygninger for bystruktur (Fase 2.5 C2.5-6a/6b).
+    #: Bakes i gameplay-laget før signatur-bygninger. Tortuga og
+    #: Nassau i 6a; Port Royal og Havana i 6b.
+    fill_buildings: tuple[FillBuilding, ...] = ()
+    #: Smug (åpninger) mellom bygninger. Dokumentasjons-felt;
+    #: ikke brukt av bake-pipelinen direkte (smug er fravær av
+    #: bygning). Brukes av tester for å verifisere at havet er
+    #: synlig gjennom forventede smug-posisjoner.
+    alleys: tuple[Alley, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -756,6 +805,91 @@ def _parse_signature_buildings(
     return tuple(result)
 
 
+def _parse_fill_buildings(
+    raw: Any, port_id: str,
+) -> tuple[FillBuilding, ...]:
+    # Lazy import for å unngå top-level-avhengighet fra config/ til entities/
+    from entities.fill_buildings import (
+        VALID_FILL_BUILDING_KINDS,
+        MAX_FILL_BUILDING_HEIGHT,
+    )
+
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': fill_buildings må være en liste"
+        )
+    result: list[FillBuilding] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': fill_buildings[{i}] må være et objekt"
+            )
+        try:
+            kind = str(entry["kind"])
+            x = int(entry["x"])
+            w = int(entry["w"])
+            h = int(entry["h"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': fill_buildings[{i}] ugyldig: {exc}"
+            ) from exc
+        style_variant = int(entry.get("style_variant", 0))
+        if kind not in VALID_FILL_BUILDING_KINDS:
+            raise ValueError(
+                f"port '{port_id}': fill_buildings[{i}].kind={kind!r} "
+                f"ikke gyldig (må være en av "
+                f"{sorted(VALID_FILL_BUILDING_KINDS)})"
+            )
+        if h > MAX_FILL_BUILDING_HEIGHT:
+            raise ValueError(
+                f"port '{port_id}': fill_buildings[{i}] h={h} > maks "
+                f"{MAX_FILL_BUILDING_HEIGHT} (silhuett-hierarki-brudd)"
+            )
+        if h < 16:
+            raise ValueError(
+                f"port '{port_id}': fill_buildings[{i}] h={h} < 16 "
+                f"(for lav for bygning)"
+            )
+        result.append(FillBuilding(
+            kind=kind, x=x, w=w, h=h, style_variant=style_variant,
+        ))
+    return tuple(result)
+
+
+def _parse_alleys(
+    raw: Any, port_id: str,
+) -> tuple[Alley, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': alleys må være en liste"
+        )
+    result: list[Alley] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': alleys[{i}] må være et objekt"
+            )
+        try:
+            x = int(entry["x"])
+            w = int(entry["w"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': alleys[{i}] ugyldig: {exc}"
+            ) from exc
+        # Spec §1.4 krever 20-40 px; vi aksepterer 16-40 for grense-
+        # fleksibilitet i trange havner (Nassau).
+        if not (16 <= w <= 40):
+            raise ValueError(
+                f"port '{port_id}': alleys[{i}].w={w} utenfor [16, 40]"
+            )
+        result.append(Alley(x=x, w=w))
+    return tuple(result)
+
+
 def _parse_anchored_ships(
     raw: Any, port_id: str,
 ) -> tuple[AnchoredShip, ...]:
@@ -862,6 +996,10 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
     anchored_ships = _parse_anchored_ships(
         raw.get("anchored_ships"), port_id,
     )
+    fill_buildings = _parse_fill_buildings(
+        raw.get("fill_buildings"), port_id,
+    )
+    alleys = _parse_alleys(raw.get("alleys"), port_id)
     return PortBuildings(
         ground_top_y=ground_top_y,
         player_start_x=player_start_x,
@@ -872,6 +1010,8 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
         props=props,
         signature_buildings=signature_buildings,
         anchored_ships=anchored_ships,
+        fill_buildings=fill_buildings,
+        alleys=alleys,
     )
 
 

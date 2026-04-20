@@ -23,8 +23,9 @@ import pygame
 
 import constants
 from config.port_config import (
-    PortConfig, PortProps, SignatureBuilding,
+    FillBuilding, PortConfig, PortProps, SignatureBuilding,
 )
+from entities import fill_buildings as fill_buildings_module
 from entities import port_props as props_module
 
 
@@ -1296,6 +1297,23 @@ _SIGNATURE_BUILDING_BAKERS = {
 }
 
 
+def _bake_fill_buildings(
+    surface: pygame.Surface,
+    fill_buildings: tuple[FillBuilding, ...],
+    ground_top_y: int,
+) -> None:
+    """Bake per-havn fyll-bygninger (C2.5-6a/6b).
+
+    Rekkefølgen er deklarert rekkefølge i `ports.json`. Ved overlapp
+    (sjeldent, kun ved feil-data) vil senere bygning tegnes over.
+    """
+    for fb in fill_buildings:
+        fill_buildings_module.bake_fill_building(
+            surface, fb.kind, fb.x, fb.w, fb.h,
+            ground_top_y, fb.style_variant,
+        )
+
+
 def _bake_signature_buildings(
     surface: pygame.Surface,
     signature_buildings: tuple[SignatureBuilding, ...],
@@ -1341,6 +1359,12 @@ def build_port_gameplay_layer(port_config: PortConfig) -> pygame.Surface:
     # "wood_dark" (beholder backward-kompatibilitet for havner uten props).
     texture = b.props.ground_texture if b.props is not None else "wood_dark"
     _bake_ground(surf, b.ground_top_y, texture=texture)
+    # Fyll-bygninger (C2.5-6a/6b) bakes FØR signatur-bygninger slik at
+    # signatur dekker ved x-overlapp. Dette gir "bybakgrunn" → "viktige
+    # bygninger" dybde-lesing. Smug (alleys) er naturlig fravær — ingen
+    # eksplisitt tegning; havet skinner gjennom via colorkey.
+    if b.fill_buildings:
+        _bake_fill_buildings(surf, b.fill_buildings, b.ground_top_y)
     _bake_tavern(
         surf, b.tavern.x, b.tavern.y, b.tavern.w, b.tavern.h,
         b.ground_top_y,

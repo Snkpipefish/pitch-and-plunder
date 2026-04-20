@@ -30,6 +30,18 @@
           {"kind": "smuggler", "x": 340, "y": 240, "flipped": true},
           {"kind": "smuggler", "x": 580, "y": 228}
         ],
+        "fill_buildings": [
+          {"kind": "tortuga_fishers_hut",     "x": 240, "w": 60, "h": 38},
+          {"kind": "tortuga_boarding_house",  "x": 322, "w": 80, "h": 54},
+          {"kind": "tortuga_lumber_warehouse","x": 460, "w": 90, "h": 42},
+          {"kind": "tortuga_field_hospital",  "x": 574, "w": 70, "h": 40},
+          {"kind": "tortuga_smithy",          "x": 890, "w": 70, "h": 42}
+        ],
+        "alleys": [
+          {"x": 302, "w": 20},
+          {"x": 552, "w": 22},
+          {"x": 962, "w": 22}
+        ],
         "props": {
           "ground_texture": "cobblestone_wet",
           "lanterns": [
@@ -203,6 +215,18 @@
           {"kind": "pirate", "x": 320, "y": 224, "flipped": true, "tilted": true},
           {"kind": "pirate", "x": 470, "y": 242},
           {"kind": "pirate", "x": 610, "y": 230, "flipped": true}
+        ],
+        "fill_buildings": [
+          {"kind": "nassau_tavern_small",          "x": 232, "w": 30, "h": 30, "style_variant": 0},
+          {"kind": "nassau_tavern_small",          "x": 266, "w": 30, "h": 30, "style_variant": 1},
+          {"kind": "nassau_patchwork_hut",         "x": 580, "w": 42, "h": 38},
+          {"kind": "nassau_rope_workshop",         "x": 668, "w": 35, "h": 30},
+          {"kind": "nassau_improvised_warehouse",  "x": 716, "w": 48, "h": 36}
+        ],
+        "alleys": [
+          {"x": 300, "w": 20},
+          {"x": 626, "w": 38},
+          {"x": 900, "w": 24}
         ],
         "signature_buildings": [
           {"kind": "teachs_house", "x": 320, "y": 252, "w": 180, "h": 88},
