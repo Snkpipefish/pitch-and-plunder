@@ -349,6 +349,83 @@ def _make_mantilla_woman_sprite() -> pygame.Surface:
     return surf
 
 
+def _make_barefoot_sailor_sprite() -> pygame.Surface:
+    """Barfot sjømann — 8×17. Kort over bukse, bar overkropp,
+    hodetørkle.
+
+    Signaturen for Nassau: "ikke-formell" figur som ikke passer i
+    Port Royals kolonial-system eller Havanas katolsk. Barfot
+    (ingen svart støvel-silhuett nederst — bare SKIN-farge på
+    tærne) er et distinkt ikonografisk signal som ingen annen
+    figur deler.
+    """
+    w, h = 8, 17
+    surf = pygame.Surface((w, h)).convert()
+    surf.fill(_CK)
+    # Hodetørkle (bandana — EMBER rød/oker, piratstil)
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (1, 0, w - 2, 2))
+    # Tørkle-knute på høyre side
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (w - 1, 1, 1, 2))
+    # Ansikt + nakke
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (2, 2, w - 4, 3))
+    # Bar overkropp (SKIN med WOOD_MID-skygger — solbrent)
+    pygame.draw.rect(surf, constants.COLOR_WOOD_LIGHT, (2, 5, w - 4, 6))
+    # Arm-aksent (venstre)
+    pygame.draw.rect(surf, constants.COLOR_WOOD_LIGHT, (0, 6, 2, 4))
+    # Arm-aksent (høyre)
+    pygame.draw.rect(surf, constants.COLOR_WOOD_LIGHT, (w - 2, 6, 2, 4))
+    # Belte — STONE_DARKEST
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARKEST, (1, 10, w - 2, 1))
+    # Korte bukser (WOOD_DARK)
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (2, 11, w - 4, 4))
+    # Barfot — SKIN-tær direkte på bakken (ingen støvel-silhuett)
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (2, 15, 2, 2))
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (4, 15, 2, 2))
+    surf.set_colorkey(_CK)
+    return surf
+
+
+def _make_woman_with_child_sprite() -> pygame.Surface:
+    """Kvinne med barn — 12×18. Antyder at Nassau faktisk er bebodd,
+    ikke bare ransom-base. Eneste gruppe-silhuett i Nassau (som er
+    minst befolket).
+
+    Kvinnen er sentral, barnet er mindre og holder hånden hennes.
+    Palett: LANTERN/WOOD — varm og tematisk "hjemme-aktig" mot
+    Nassaus ellers tøffe figurer.
+    """
+    w, h = 12, 18
+    surf = pygame.Surface((w, h)).convert()
+    surf.fill(_CK)
+    # Kvinnens hode og sjal — EMBER
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (1, 0, 5, 1))
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (0, 1, 6, 2))
+    # Ansikt
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (1, 3, 4, 2))
+    # Sjal faller ned
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (0, 5, 6, 3))
+    # Kjole (LANTERN)
+    pygame.draw.rect(surf, constants.COLOR_LANTERN, (0, 8, 6, 7))
+    # Sko-silhuett
+    pygame.draw.rect(surf, constants.COLOR_HAT, (1, 15, 2, 3))
+    pygame.draw.rect(surf, constants.COLOR_HAT, (3, 15, 2, 3))
+
+    # Barn (høyre halvdel, lavere silhuett — starter ~8 px over bakken)
+    # Hode
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (7, 8, 3, 2))
+    # Hår (enkelt mørk topp)
+    pygame.draw.rect(surf, constants.COLOR_HAT, (7, 7, 3, 1))
+    # Kropp (WOOD_LIGHT — slitt barneklær)
+    pygame.draw.rect(surf, constants.COLOR_WOOD_LIGHT, (7, 10, 3, 4))
+    # Ben
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (7, 14, 1, 4))
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (9, 14, 1, 4))
+    # Kvinnens hånd holder barnet (prikker WOOD_LIGHT mellom dem)
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (5, 10, 2, 1))
+    surf.set_colorkey(_CK)
+    return surf
+
+
 _SPRITE_FACTORIES = {
     "standing": _make_standing_sprite,
     "sitting": _make_sitting_sprite,
@@ -360,6 +437,8 @@ _SPRITE_FACTORIES = {
     "spanish_officer": _make_spanish_officer_sprite,
     "spanish_merchant": _make_spanish_merchant_sprite,
     "mantilla_woman": _make_mantilla_woman_sprite,
+    "barefoot_sailor": _make_barefoot_sailor_sprite,
+    "woman_with_child": _make_woman_with_child_sprite,
 }
 
 #: Gyldige silhuett-typer. Brukes av port_config.py for validering.

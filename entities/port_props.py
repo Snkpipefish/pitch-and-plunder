@@ -17,13 +17,13 @@ import pygame
 import constants
 
 
-#: Gyldige gategulv-teksturer. Utvides per-havn i senere commits:
-#: "sand" (Nassau).
+#: Gyldige gategulv-teksturer.
 VALID_GROUND_TEXTURES: frozenset[str] = frozenset({
     "wood_dark",          # Eksisterende — beholdes som default for ikke-Tortuga
     "cobblestone_wet",    # Tortuga — våte flekker, smugler-atmosfære
     "cobblestone_dry",    # Port Royal — tørr ordnet brostein, kolonial orden
     "stone_slab",         # Havana — lyse varme heller, solvarme lagret i steinen
+    "sand",               # Nassau — lovløs strand, fotspor, usorterte flekker
 })
 
 
@@ -203,6 +203,65 @@ def bake_stone_slab_ground(
         )
 
 
+def bake_sand_ground(
+    surface: pygame.Surface, ground_top_y: int,
+) -> None:
+    """Nassau: sand-gate.
+
+    Ikke stein, ikke brostein — Nassau er en pirat-republikk bygd
+    på strand. Palett: WOOD_LIGHT (sollys-beige) med uordnede
+    WOOD_MID-flekker (sandgraver, fotspor) og enkelte WOOD_DARK-
+    mørkere flekker (hvor noen har helt rom eller lignende —
+    "brukt strand").
+    """
+    width = surface.get_width()
+    ground_bottom_y = constants.RENDER_HEIGHT
+    # 1) Hovedbase — WOOD_LIGHT (sollys-beige sand)
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_WOOD_LIGHT,
+        (0, ground_top_y, width, ground_bottom_y - ground_top_y),
+    )
+    # 2) Øvre fuge (1 px WOOD_DARK)
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_WOOD_DARK,
+        (0, ground_top_y, width, 1),
+    )
+    # 3) Uordnede sandgraver (WOOD_MID) — deterministisk pseudo-random
+    #    via x*prime mod konstruksjon
+    import hashlib  # For deterministisk "kaos" på tvers av kjøringer
+    for x in range(10, width - 10, 14):
+        # Deterministisk hash for y-offset og bredde
+        h = int(hashlib.md5(str(x).encode()).hexdigest()[:4], 16)
+        y_off = (h % 6) + 2
+        w_off = (h % 5) + 3
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_MID,
+            (x, ground_top_y + y_off, w_off, 1),
+        )
+    # 4) Mørke flekker (spilt rom, kull-rester) — sparse
+    for x in range(40, width - 40, 80):
+        h = int(hashlib.md5(f"dark_{x}".encode()).hexdigest()[:4], 16)
+        y_off = (h % 8) + 2
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARK,
+            (x, ground_top_y + y_off, 2, 1),
+        )
+    # 5) Fotspor-antydning (små STONE_DARKEST-par) — sparse
+    for x in range(70, width - 50, 120):
+        h = int(hashlib.md5(f"step_{x}".encode()).hexdigest()[:4], 16)
+        y_off = (h % 6) + 5
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST,
+            (x, ground_top_y + y_off, 1, 1),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST,
+            (x + 3, ground_top_y + y_off + 2, 1, 1),
+        )
+
+
 def bake_ground(
     surface: pygame.Surface,
     ground_top_y: int,
@@ -220,6 +279,8 @@ def bake_ground(
         bake_cobblestone_dry_ground(surface, ground_top_y)
     elif texture == "stone_slab":
         bake_stone_slab_ground(surface, ground_top_y)
+    elif texture == "sand":
+        bake_sand_ground(surface, ground_top_y)
     else:
         raise ValueError(
             f"Ukjent ground_texture: {texture!r} "
@@ -548,6 +609,191 @@ def bake_planter(
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARK,
         (x + width - 3, bush_y + 2, 1, 3),
+    )
+
+
+def bake_bamboo_lantern(
+    surface: pygame.Surface,
+    x: int,
+    ground_top_y: int,
+    *,
+    height: int = 34,
+) -> None:
+    """Nassau: improvisert lanterne på bambus-stang / skipsmast-rest.
+
+    Forskjell fra Tortugas jern-lantern-post:
+    - Tynnere stolpe (WOOD_MID i stedet for STONE_DARKEST)
+    - Skeiv (ikke helt vertikal — 1 px forskyvning)
+    - Enklere lanterne (hengende, ikke boks)
+    - Antyder "improvisert av det man har"
+    """
+    post_h = height - 6
+    top_y = ground_top_y - height
+    # Stolpe — WOOD_MID for bambus/tre. Skeivt (1 px forskyvning i toppen)
+    for dy in range(0, post_h):
+        # Skeivt: øvre del er 1 px til venstre
+        offset = -1 if dy < post_h // 3 else 0
+        pygame.draw.rect(
+            surface,
+            constants.COLOR_WOOD_MID,
+            (x + offset, ground_top_y - post_h + dy, 1, 1),
+        )
+    # Base (fot på bakken — stabel av småstein?)
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST,
+        (x - 1, ground_top_y - 1, 3, 1),
+    )
+    # Horisontalt tverrstag
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_WOOD_DARK,
+        (x - 2, top_y + 5, 5, 1),
+    )
+    # Hengende lanterne (enkelt hull)
+    lantern_x = x - 1
+    lantern_y = top_y + 6
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST, (lantern_x, lantern_y, 3, 5)
+    )
+    # Varm kjerne
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN,
+        (lantern_x, lantern_y + 1, 3, 3),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT,
+        (lantern_x + 1, lantern_y + 2, 1, 1),
+    )
+    # Enkelt EMBER-glimt rundt
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER, (lantern_x - 1, lantern_y + 2, 1, 1)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER, (lantern_x + 3, lantern_y + 2, 1, 1)
+    )
+
+
+def bake_campfire(
+    surface: pygame.Surface,
+    x: int,
+    ground_top_y: int,
+    *,
+    width: int = 14,
+) -> None:
+    """Nassau: åpent bål på gaten.
+
+    Spec §3.1: palette-cycling på flammepiksler kommer i C2.5-6
+    (tre FLAME/EMBER-varianter som roterer hvert 200 ms). I C2.5-4
+    bakes en statisk "fasit"-flamme (LANTERN_BRIGHT-kjerne, FLAME-
+    ytring, EMBER-kanter) slik at plasseringen er riktig og
+    C2.5-6 kun trenger å erstatte pikslene.
+    """
+    # Vedhaug-base: stokker i kryss (WOOD_DARKEST)
+    stack_w = width
+    stack_y = ground_top_y - 4
+    # To horisontale stokker
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (x, stack_y + 2, stack_w, 2),
+    )
+    # Kryss-stokker (2 stk vertikalt skåret gjennom)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID,
+        (x + stack_w // 3, stack_y, 2, 4),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID,
+        (x + 2 * stack_w // 3, stack_y, 2, 4),
+    )
+    # Glør (EMBER) på toppen av vedhaugen
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER, (x + 2, stack_y, stack_w - 4, 1)
+    )
+
+    # Flamme (statisk "fasit") — 3 lag, LANTERN_BRIGHT i kjernen
+    flame_bottom_y = stack_y - 1
+    cx = x + stack_w // 2
+    # EMBER-base (nederst, bredest)
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER,
+        (cx - 4, flame_bottom_y - 4, 8, 4),
+    )
+    # FLAME midten
+    pygame.draw.rect(
+        surface, constants.COLOR_FLAME,
+        (cx - 3, flame_bottom_y - 6, 6, 4),
+    )
+    # LANTERN-ring
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN,
+        (cx - 2, flame_bottom_y - 8, 4, 4),
+    )
+    # LANTERN_BRIGHT kjerne
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT,
+        (cx - 1, flame_bottom_y - 9, 2, 4),
+    )
+    # Øvre tunge (smalest)
+    pygame.draw.rect(
+        surface, constants.COLOR_FLAME,
+        (cx, flame_bottom_y - 11, 1, 2),
+    )
+
+
+def bake_chest_stack(
+    surface: pygame.Surface,
+    x: int,
+    ground_top_y: int,
+    count: int = 1,
+    *,
+    chest_w: int = 14,
+    chest_h: int = 9,
+) -> None:
+    """Nassau: kaotisk stablede kister.
+
+    Antall 1-3. Hver kiste har WOOD_DARK-kropp med LANTERN-lås
+    og LANTERN_BRIGHT-høylys på låsen. Stablingen er LITT skjev
+    (2 px x-forskyvning mellom lag) for å antyde kaos.
+    """
+    count = max(1, min(count, 3))
+    for i in range(count):
+        # Skeivstacking: hvert lag forskjøvet 2 px i forskjellig retning
+        dx = (i % 2) * 2 - (1 if i > 0 else 0)
+        cy = ground_top_y - (i + 1) * chest_h
+        cx = x + dx * (i > 0)
+        _draw_chest(surface, cx, cy, chest_w, chest_h)
+
+
+def _draw_chest(
+    surface: pygame.Surface,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+) -> None:
+    """Én kiste: WOOD_DARK-kropp, WOOD_DARKEST-bånd, LANTERN-lås."""
+    # Kropp
+    pygame.draw.rect(surface, constants.COLOR_WOOD_DARK, (x, y, w, h))
+    # Topp-lokk (delt horisontalt) — WOOD_MID
+    pygame.draw.rect(surface, constants.COLOR_WOOD_MID, (x, y, w, 3))
+    # Skygge-kant høyre
+    pygame.draw.rect(surface, constants.COLOR_WOOD_DARKEST, (x + w - 1, y, 1, h))
+    # Lys-kant venstre
+    pygame.draw.rect(surface, constants.COLOR_WOOD_LIGHT, (x, y, 1, h))
+    # Bånd (WOOD_DARKEST) — vertikale + horisontal lokk-linje
+    pygame.draw.rect(surface, constants.COLOR_WOOD_DARKEST, (x + 3, y, 1, h))
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST, (x + w - 4, y, 1, h)
+    )
+    pygame.draw.rect(surface, constants.COLOR_WOOD_DARKEST, (x, y + 3, w, 1))
+    # Lås (LANTERN, midtstilt, lokk-linje-høyde)
+    lock_x = x + w // 2 - 1
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN, (lock_x, y + 2, 2, 3)
+    )
+    # Høylys på låsen
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT, (lock_x, y + 2, 1, 1)
     )
 
 

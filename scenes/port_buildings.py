@@ -89,6 +89,18 @@ def _bake_props(
     # nærme busker kan skjære over basseng-skygger.
     for planter in props.planters:
         props_module.bake_planter(surface, planter.x, ground_top_y)
+    # Kister (Nassau) — kaotisk stablede.
+    for stack in props.chest_stacks:
+        props_module.bake_chest_stack(
+            surface, stack.x, ground_top_y, stack.count,
+        )
+    # Bål (Nassau) — statisk i C2.5-4, palette-cycling i C2.5-6.
+    # Tegnes før lanterner slik at lanterne-glimt kan overlappe.
+    for fire in props.campfires:
+        props_module.bake_campfire(surface, fire.x, ground_top_y)
+    # Bambus-lanterne-stenger (Nassau — improviserte).
+    for bl in props.bamboo_lanterns:
+        props_module.bake_bamboo_lantern(surface, bl.x, ground_top_y)
     for lantern in props.lanterns:
         props_module.bake_lantern_post(surface, lantern.x, ground_top_y)
 
@@ -891,16 +903,386 @@ def _bake_governor_palace(
         )
 
 
+def _bake_open_market(
+    surface: pygame.Surface,
+    x: int, y: int, w: int, h: int,
+    ground_top_y: int,
+) -> None:
+    """Nassau: åpen markedsplass — erstatter børs-BYGNING med en
+    rekvisita-cluster.
+
+    Per FASE_2_5.md §2.4: "INGEN bygning ... Teltduker, vekter på
+    bord, kister og bytte-stabler". Fraværet av vegger er designet.
+
+    Element-plassering i bbox (200x92 for Nassau):
+    - 3 tent-kledde bord fordelt over bredden
+    - En stor vekt-stokk (LANTERN) sentralt
+    - Kaotisk plasserte tønner/kister ved fot
+    - Presenning i forgrunn for "tak"-antydning men IKKE vegger
+    """
+    # Ingen vegg! Kun base-linje av presenning-duker som antyder
+    # "her er handels-senteret" uten å være en bygning.
+
+    # 3 bord-silhuetter fordelt jevnt
+    bord_count = 3
+    bord_w = 32
+    margin = 16
+    span = w - 2 * margin
+    step = (span - bord_w) / (bord_count - 1) if bord_count > 1 else 0
+    for i in range(bord_count):
+        bx = x + margin + int(i * step)
+        by = ground_top_y - 18
+        # Bord-plate (WOOD_MID, flat)
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_MID, (bx, by, bord_w, 3)
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARK, (bx, by + 2, bord_w, 1)
+        )
+        # Bein (2 stk)
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARKEST,
+            (bx + 3, by + 3, 2, 15),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARKEST,
+            (bx + bord_w - 5, by + 3, 2, 15),
+        )
+        # Skrå støtte-stenger
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARK,
+            (bx + bord_w // 2 - 1, by + 4, 2, 8),
+        )
+
+        # Presenning-tak over bordet (varierer i vinkel per bord for kaos)
+        canopy_h = 6
+        canopy_y = by - canopy_h - 2
+        # Skeivt presenning — varierer per i
+        lean = (-1) ** i * 2
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARK,
+            (bx - 2 + lean, canopy_y, bord_w + 4, canopy_h),
+        )
+        # Høylys-linje på toppen (WOOD_MID)
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_MID,
+            (bx - 2 + lean, canopy_y, bord_w + 4, 1),
+        )
+        # Presenning-kanter henger ned
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARKEST,
+            (bx - 2 + lean, canopy_y + canopy_h, 2, 3),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARKEST,
+            (bx + bord_w + lean, canopy_y + canopy_h, 2, 3),
+        )
+        # Stenger som holder presenning opp
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARKEST,
+            (bx, canopy_y + canopy_h, 1, by - (canopy_y + canopy_h)),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARKEST,
+            (bx + bord_w - 1, canopy_y + canopy_h, 1,
+             by - (canopy_y + canopy_h)),
+        )
+
+    # Sentral vekt-stokk på midterste bord (LANTERN — gylden bronse)
+    mid_bord_x = x + margin + int(1 * step)
+    by_mid = ground_top_y - 18
+    bal_x = mid_bord_x + bord_w // 2
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN,
+        (bal_x - 6, by_mid - 4, 12, 1),
+    )
+    # Vertikal henger
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN,
+        (bal_x, by_mid - 7, 1, 3),
+    )
+    # To skåler
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT,
+        (bal_x - 6, by_mid - 3, 3, 1),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT,
+        (bal_x + 4, by_mid - 3, 3, 1),
+    )
+    # "Vare" oppå et av bordene (venstre bord) — antyder kiste/pose
+    left_bord_x = x + margin
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARK,
+        (left_bord_x + 4, by_mid - 5, 8, 5),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN,
+        (left_bord_x + 7, by_mid - 3, 2, 1),
+    )
+    # "Vare" på høyre bord — antyder tobakkspakker
+    right_bord_x = x + margin + int(2 * step)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID,
+        (right_bord_x + 6, by_mid - 4, 10, 4),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (right_bord_x + 6, by_mid - 4, 10, 1),
+    )
+
+
+def _bake_teachs_house(
+    surface: pygame.Surface,
+    x: int, y: int, w: int, h: int,
+    ground_top_y: int,
+) -> None:
+    """Nassau: Teach's hus — romslig trehus, lappverk-arkitektur.
+
+    Per FASE_2_5.md §2.4: "IKKE monumentalt — pirat-demokrati,
+    ikke konge. Lappverk-arkitektur: rest-tre fra skipsvrak".
+
+    Designvalg:
+    - Forskjellige planke-bredder (antyder skipsvrak-rest)
+    - Skeive vinduer (ikke rettvinklet)
+    - Seil som tak-trekk (skip-rest)
+    - Ingen pediment/klassisk form
+    - Dør er bare en åpning, ingen formell portal
+    """
+    # Vegg — WOOD_MID base
+    pygame.draw.rect(surface, constants.COLOR_WOOD_MID, (x, y, w, h))
+    # Lappverk-planker: variable bredder
+    plank_widths = [8, 12, 6, 10, 9, 11, 7, 10, 8, 13, 5, 12]
+    plank_x = x
+    for pw in plank_widths:
+        if plank_x + pw > x + w:
+            pw = x + w - plank_x
+            if pw <= 0:
+                break
+        # Alternere litt mellom WOOD_DARK og WOOD_MID for variasjon
+        color = (constants.COLOR_WOOD_DARK if (plank_x // 7) % 2 == 0
+                 else constants.COLOR_WOOD_MID)
+        pygame.draw.rect(surface, color, (plank_x, y, pw, 1))
+        # Mellom-fuge
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARKEST,
+            (plank_x + pw - 1, y, 1, h),
+        )
+        plank_x += pw
+    # Horisontale planker (skipsrest-plattform) — WOOD_DARK med variasjoner
+    for dy in (14, 28, 42):
+        if dy >= h:
+            break
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARKEST, (x, y + dy, w, 1)
+        )
+
+    # Skeive vinduer — to stk, forskyvet i høyde
+    win_w, win_h = 16, 12
+    # Venstre vindu (litt høyere)
+    left_wx = x + 14
+    left_wy = y + 10
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (left_wx, left_wy, win_w, win_h),
+    )
+    # Inne: varmt lys
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN,
+        (left_wx + 1, left_wy + 1, win_w - 2, win_h - 2),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT,
+        (left_wx + 2, left_wy + 2, win_w - 4, 3),
+    )
+    # Trekant-ramme (skjevt)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (left_wx + win_w // 2 - 1, left_wy, 2, win_h),
+    )
+
+    # Høyre vindu (litt lavere, samme stil men skjev)
+    right_wx = x + w - 14 - win_w
+    right_wy = y + 14
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (right_wx, right_wy, win_w, win_h),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN,
+        (right_wx + 1, right_wy + 1, win_w - 2, win_h - 2),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT,
+        (right_wx + 2, right_wy + 2, win_w - 4, 3),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (right_wx + win_w // 2 - 1, right_wy, 2, win_h),
+    )
+
+    # Tak-trekk: seilstoff (SHIRT lys-farge — antyder skipsseil)
+    sail_y = y - 5
+    # Seilduk er skeiv — tre trekantete rektangler
+    pygame.draw.rect(
+        surface, constants.COLOR_SHIRT, (x - 4, sail_y, w + 8, 5)
+    )
+    # Seilets reer (mørk kant — STONE_DARK ligner tau)
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARK, (x - 4, sail_y, w + 8, 1)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARK, (x - 4, sail_y + 4, w + 8, 1)
+    )
+    # Seilbue antydet via 3 mørke prikker (hengepunkter)
+    for dx in (16, w // 2, w - 16):
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARK, (x + dx, sail_y + 1, 1, 3)
+        )
+    # Mast-stolpe midt på taket
+    mast_x = x + w // 2
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST, (mast_x - 1, sail_y - 10, 2, 10)
+    )
+    # Liten improvisert flagg på masten (EMBER — "piratleder her")
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER, (mast_x + 1, sail_y - 10, 5, 3)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST, (mast_x + 1, sail_y - 10, 5, 1)
+    )
+
+    # Dør (bare åpning, ingen portal-stil)
+    door_w, door_h = 18, 28
+    door_x = x + w // 2 - door_w // 2 - 6  # Litt off-center (pirat-demokrati)
+    door_y = ground_top_y - door_h
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST,
+        (door_x, door_y, door_w, door_h),
+    )
+    # Varm innvendig glød
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER,
+        (door_x + 2, door_y + 2, door_w - 4, door_h - 4),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN,
+        (door_x + 4, door_y + 4, door_w - 8, door_h - 8),
+    )
+
+
+def _bake_shipyard(
+    surface: pygame.Surface,
+    x: int, y: int, w: int, h: int,
+    ground_top_y: int,
+) -> None:
+    """Nassau: skipsverft i det fri.
+
+    Per FASE_2_5.md §2.4: "Halvferdige skipsskrog på stranden.
+    Stablede skipsplanker, rep-ruller. Dette er Nassaus
+    produksjons-lokalitet".
+
+    Ingen vegger — bare en åpen arbeidsplass med:
+    - 2 halvferdige skrog (forskjellig stadium)
+    - Stablede planker
+    - En kraftig mast-støtte (skrog-byggende rigg)
+    """
+    # Ingen vegger — verftet er åpent.
+    # Stor skrog-silhuett (WOOD_MID) — øvre halvdel er ferdig, nedre
+    # mangler bunn-planker (viser nedre stativ)
+    hull1_x = x
+    hull1_w = w * 2 // 3
+    hull1_base_y = ground_top_y - 4
+    # Skroget som en bøyd "kikkert"-form (bueformet over stativ)
+    # Øvre hvelv — WOOD_LIGHT (utsatt sol-del)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_LIGHT,
+        (hull1_x + 4, hull1_base_y - 18, hull1_w - 8, 12),
+    )
+    # Nedre (mangler — plankene går ikke helt sammen)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID,
+        (hull1_x + 2, hull1_base_y - 10, hull1_w - 4, 6),
+    )
+    # Skyggelinjer (planker)
+    for dy in (0, 4, 8):
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARKEST,
+            (hull1_x + 4, hull1_base_y - 18 + dy, hull1_w - 8, 1),
+        )
+    # Kjøl — spisst mot bak
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARK,
+        (hull1_x + hull1_w // 3, hull1_base_y - 4, hull1_w // 3, 2),
+    )
+    # Stativ (kryss-støtter)
+    for sx in (hull1_x + 6, hull1_x + hull1_w // 2, hull1_x + hull1_w - 6):
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARKEST,
+            (sx, hull1_base_y - 4, 2, 4),
+        )
+    # Mast-stilas (høyt kryss)
+    mast_x = hull1_x + hull1_w // 2
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (mast_x - 1, hull1_base_y - 42, 2, 28),
+    )
+    # Horisontalt stag
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (mast_x - 10, hull1_base_y - 30, 20, 1),
+    )
+    # Tau-ruller på stativet
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_LIGHT,
+        (mast_x - 8, hull1_base_y - 32, 3, 2),
+    )
+
+    # Stablede planker til høyre for skroget
+    plank_x = x + hull1_w + 8
+    plank_w = w - hull1_w - 12
+    plank_base_y = ground_top_y - 8
+    for i in range(4):
+        py = plank_base_y - i * 2
+        # Alternerende WOOD_MID / WOOD_DARK for plank-lag
+        color = (constants.COLOR_WOOD_LIGHT if i % 2 == 0
+                 else constants.COLOR_WOOD_MID)
+        pygame.draw.rect(
+            surface, color, (plank_x, py, plank_w, 2),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_DARKEST,
+            (plank_x, py, plank_w, 1),
+        )
+
+    # En liten rep-rulle på toppen
+    rope_x = plank_x + plank_w // 2
+    rope_y = plank_base_y - 10
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_LIGHT, (rope_x - 3, rope_y, 6, 4)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARK, (rope_x - 3, rope_y, 6, 1)
+    )
+    # Rull-sentrum
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST, (rope_x - 1, rope_y + 1, 2, 2)
+    )
+
+
 #: Dispatch-tabell: port_id → bake-funksjon for exchange-bbox.
 #: Tortuga bruker `_bake_exchange` (klassisk børshus).
 #: Port Royal (C2.5-2) bruker `_bake_customs_house`.
 #: Havana (C2.5-3) bruker `_bake_trade_house` (spansk arkade).
-#: Nassau (C2.5-4) får `_bake_open_market` senere.
+#: Nassau (C2.5-4) bruker `_bake_open_market` — INGEN bygning,
+#: bare rekvisita (tematisk: pirat-republikk har ingen institusjonell
+#: handel).
 #: Default (ikke-matchet id) faller tilbake til `_bake_exchange`.
 _EXCHANGE_BAKERS = {
     "tortuga": _bake_exchange,
     "port_royal": _bake_customs_house,
     "havana": _bake_trade_house,
+    "nassau": _bake_open_market,
 }
 
 #: Dispatch-tabell: signature_building.kind → bake-funksjon.
@@ -909,6 +1291,8 @@ _SIGNATURE_BUILDING_BAKERS = {
     "rum_warehouse": _bake_rum_warehouse,
     "cathedral": _bake_cathedral,
     "governor_palace": _bake_governor_palace,
+    "teachs_house": _bake_teachs_house,
+    "shipyard": _bake_shipyard,
 }
 
 

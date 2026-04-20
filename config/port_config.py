@@ -128,6 +128,32 @@ class Planter:
 
 
 @dataclass(frozen=True)
+class BambooLantern:
+    """Improvisert lanterne på bambus/skipsmast-rest (Nassau).
+    Forskjell fra LanternPost: skeiv, uten glød-halo, WOOD-familie
+    i stedet for STONE.
+    """
+    x: int
+
+
+@dataclass(frozen=True)
+class Campfire:
+    """Åpent bål på gaten (Nassau). Statisk i C2.5-4; palette-cycling
+    på flammepiksler kommer i C2.5-6.
+    """
+    x: int
+
+
+@dataclass(frozen=True)
+class ChestStack:
+    """Kaotisk stablede kister (Nassau — erstatter strukturerte tønner
+    i pirat-markedsplassen).
+    """
+    x: int
+    count: int
+
+
+@dataclass(frozen=True)
 class SignatureBuilding:
     """Havn-spesifikk signatur-bygning utover tavern + exchange.
 
@@ -160,6 +186,9 @@ class PortProps:
     iron_fences: tuple[IronFence, ...] = ()
     fountains: tuple[Fountain, ...] = ()
     planters: tuple[Planter, ...] = ()
+    bamboo_lanterns: tuple[BambooLantern, ...] = ()
+    campfires: tuple[Campfire, ...] = ()
+    chest_stacks: tuple[ChestStack, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -528,6 +557,85 @@ def _parse_planters(raw: Any, port_id: str) -> tuple[Planter, ...]:
     return tuple(result)
 
 
+def _parse_bamboo_lanterns(
+    raw: Any, port_id: str,
+) -> tuple[BambooLantern, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': props.bamboo_lanterns må være en liste"
+        )
+    result: list[BambooLantern] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': props.bamboo_lanterns[{i}] må være et objekt"
+            )
+        try:
+            result.append(BambooLantern(x=int(entry["x"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.bamboo_lanterns[{i}] ugyldig: {exc}"
+            ) from exc
+    return tuple(result)
+
+
+def _parse_campfires(raw: Any, port_id: str) -> tuple[Campfire, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': props.campfires må være en liste"
+        )
+    result: list[Campfire] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': props.campfires[{i}] må være et objekt"
+            )
+        try:
+            result.append(Campfire(x=int(entry["x"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.campfires[{i}] ugyldig: {exc}"
+            ) from exc
+    return tuple(result)
+
+
+def _parse_chest_stacks(raw: Any, port_id: str) -> tuple[ChestStack, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': props.chest_stacks må være en liste"
+        )
+    result: list[ChestStack] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': props.chest_stacks[{i}] må være et objekt"
+            )
+        try:
+            count = int(entry["count"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.chest_stacks[{i}] ugyldig: {exc}"
+            ) from exc
+        if count < 1 or count > 3:
+            raise ValueError(
+                f"port '{port_id}': props.chest_stacks[{i}].count må være 1-3, "
+                f"fikk {count}"
+            )
+        try:
+            result.append(ChestStack(x=int(entry["x"]), count=count))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.chest_stacks[{i}] ugyldig: {exc}"
+            ) from exc
+    return tuple(result)
+
+
 def _parse_props(raw: Any, port_id: str) -> PortProps | None:
     """Parse props-blokken. None hvis feltet mangler eller er null."""
     # Lazy import for å unngå top-level-avhengighet fra config/ til
@@ -560,6 +668,11 @@ def _parse_props(raw: Any, port_id: str) -> PortProps | None:
         iron_fences=_parse_iron_fences(raw.get("iron_fences"), port_id),
         fountains=_parse_fountains(raw.get("fountains"), port_id),
         planters=_parse_planters(raw.get("planters"), port_id),
+        bamboo_lanterns=_parse_bamboo_lanterns(
+            raw.get("bamboo_lanterns"), port_id,
+        ),
+        campfires=_parse_campfires(raw.get("campfires"), port_id),
+        chest_stacks=_parse_chest_stacks(raw.get("chest_stacks"), port_id),
     )
 
 
@@ -571,6 +684,7 @@ def _parse_props(raw: Any, port_id: str) -> PortProps | None:
 VALID_SIGNATURE_BUILDING_KINDS: frozenset[str] = frozenset({
     "church_tower", "rum_warehouse",
     "cathedral", "governor_palace",
+    "teachs_house", "shipyard",
 })
 
 

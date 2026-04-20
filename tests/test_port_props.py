@@ -74,13 +74,14 @@ class TestSilhouetteFactories:
     def test_valid_kinds_exported(self):
         from entities.npc_silhouette import VALID_KINDS
 
-        # C2.5-1 leverte 3 generiske typer; C2.5-2 la til 3 britiske;
-        # C2.5-3 legger til 4 spanske.
+        # C2.5-1: 3 generiske; C2.5-2: 3 britiske; C2.5-3: 4 spanske;
+        # C2.5-4: 2 pirat-typer.
         expected = {
-            "standing", "sitting", "group",      # C2.5-1
+            "standing", "sitting", "group",          # C2.5-1
             "officer", "merchant", "colonial_lady",  # C2.5-2
-            "priest", "spanish_officer",         # C2.5-3
-            "spanish_merchant", "mantilla_woman",  # C2.5-3
+            "priest", "spanish_officer",             # C2.5-3
+            "spanish_merchant", "mantilla_woman",    # C2.5-3
+            "barefoot_sailor", "woman_with_child",   # C2.5-4
         }
         assert VALID_KINDS == frozenset(expected)
 
@@ -231,12 +232,18 @@ class TestPortPropsParser:
         assert len(props.silhouettes) == 4  # Mest befolket
         assert len(props.fountains) == 1
 
-    def test_real_nassau_still_no_props(self):
-        """C2.5-4 har ikke landet ennå. Nassau skal fortsatt ha None."""
+    def test_real_nassau_has_props(self):
+        """C2.5-4: Nassau har sand + bål + bambus-lanterner."""
         pc.init(str(REAL_PORTS_PATH))
         nassau = pc.get("nassau")
         assert nassau.buildings is not None
-        assert nassau.buildings.props is None
+        assert nassau.buildings.props is not None
+        props = nassau.buildings.props
+        assert props.ground_texture == "sand"
+        assert len(props.silhouettes) == 2  # Minst befolket
+        assert len(props.campfires) >= 1
+        assert len(props.bamboo_lanterns) >= 1
+        assert len(props.chest_stacks) >= 1
 
     def test_real_port_royal_has_signature_buildings(self):
         """Port Royal har klokketårn + rum-magasin som signatur-bygninger."""

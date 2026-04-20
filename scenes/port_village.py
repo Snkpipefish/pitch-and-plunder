@@ -162,9 +162,24 @@ class PortVillageScene(BaseScene):
         # Tavern-dør-glød (midten av døråpningen)
         tavern_door_x = tavern.x + tavern.w / 2
         tavern_door_y = self._buildings.ground_top_y - 16
-        # Børshusets midtvindu
+        # Børshusets midtvindu (ev. åpen markedsplass for Nassau).
+        # Nassau har ingen børs-BYGNING — lyset må være varmt bål/
+        # lantern-glow som tematisk matcher markedsplassen, ikke
+        # kaldt vindu-lys som antyder stein-bygning. Per FASE_2_5.md
+        # §2.4: "Ingen kald institusjonell farge".
         exchange_window_x = exchange.x + exchange.w / 2
-        exchange_window_y = exchange.y + 42
+        if port.id == "nassau":
+            # Plassering over markedsplassens midterste bord (vekt-stokk
+            # og bål-stemning). Warm LANTERN-glow radius 55 (litt mindre
+            # enn børs-vindu fordi det er "lokal belysning", ikke et
+            # lite opplyst institusjonelt fasade).
+            exchange_window_y = self._buildings.ground_top_y - 14
+            exchange_window_color = constants.COLOR_LANTERN
+            exchange_window_radius = 55
+        else:
+            exchange_window_y = exchange.y + 42
+            exchange_window_color = constants.COLOR_STONE_LIT
+            exchange_window_radius = 60
         self._lights: list[Light] = [
             Light(
                 x=lantern_x,
@@ -183,8 +198,8 @@ class PortVillageScene(BaseScene):
             Light(
                 x=exchange_window_x,
                 y=exchange_window_y,
-                radius=60,
-                color=constants.COLOR_STONE_LIT,
+                radius=exchange_window_radius,
+                color=exchange_window_color,
             ),
         ]
         self._lighting.prewarm(

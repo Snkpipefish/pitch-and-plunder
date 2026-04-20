@@ -181,7 +181,39 @@
         "tavern":   {"x": 20,  "y": 258, "w": 200, "h": 82},
         "exchange": {"x": 980, "y": 248, "w": 200, "h": 92},
         "npcs": {"hawkins": 1070},
-        "dock_interaction_range": [8, 80]
+        "dock_interaction_range": [8, 80],
+        "signature_buildings": [
+          {"kind": "teachs_house", "x": 320, "y": 252, "w": 180, "h": 88},
+          {"kind": "shipyard",     "x": 560, "y": 282, "w": 320, "h": 58}
+        ],
+        "props": {
+          "ground_texture": "sand",
+          "lanterns": [],
+          "market_stalls": [],
+          "barrel_stacks": [
+            {"x": 260, "count": 2}
+          ],
+          "iron_fences": [],
+          "fountains": [],
+          "planters": [],
+          "bamboo_lanterns": [
+            {"x": 290},
+            {"x": 540},
+            {"x": 920}
+          ],
+          "campfires": [
+            {"x": 240},
+            {"x": 900}
+          ],
+          "chest_stacks": [
+            {"x": 510, "count": 3},
+            {"x": 940, "count": 2}
+          ],
+          "silhouettes": [
+            {"kind": "barefoot_sailor",  "x": 270},
+            {"kind": "woman_with_child", "x": 440}
+          ]
+        }
       }
     }
   }

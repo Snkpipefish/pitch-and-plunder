@@ -208,9 +208,7 @@ class TestHavanaRendering:
         assert havana.buildings.props.ground_texture == "stone_slab"
 
 
-class TestNassauBackwardCompat:
-    """Nassau har ennå ikke fått unik signatur (C2.5-4)."""
-
+class TestNassauRendering:
     def test_nassau_scene_loads(self):
         from scenes.port_village import PortVillageScene
 
@@ -218,9 +216,106 @@ class TestNassauBackwardCompat:
         scene = PortVillageScene(_font(), _state_for("nassau"), nassau)
         assert scene is not None
 
-    def test_nassau_has_no_signature_buildings_yet(self):
+    def test_nassau_uses_open_market_baker(self):
+        """Exchange-bbox bakes med _bake_open_market, ikke _bake_exchange.
+
+        Per spec: Nassau har ingen børs-BYGNING. Bbox inneholder bord-
+        silhuetter i stedet for vegger. Vi verifiserer ved å sjekke at
+        det IKKE er tegnet en stor kontinuerlig vegg.
+        """
+        from scenes.port_buildings import build_port_gameplay_layer
+
         nassau = pc.get("nassau")
-        assert nassau.buildings.signature_buildings == ()
+        surf = build_port_gameplay_layer(nassau)
+        ex = nassau.buildings.exchange
+        # Midt i der eksisterende _bake_exchange ville tegnet vegg
+        # (y + 20 er inni søyleradens topp) — skal være colorkey
+        # (transparent) i Nassau siden det ikke er bygning.
+        wall_check = surf.get_at((ex.x + ex.w // 2, ex.y + 20))
+        # Tillat enten colorkey eller et bord-silhuett-element —
+        # det viktige er at det IKKE er en solid stein-vegg
+        # (STONE_DARK = (31, 37, 56)).
+        assert wall_check[:3] != (31, 37, 56), (
+            "Exchange-bbox midten skal IKKE være stein-vegg i Nassau"
+        )
+
+    def test_nassau_has_teachs_house_and_shipyard(self):
+        nassau = pc.get("nassau")
+        kinds = [sb.kind for sb in nassau.buildings.signature_buildings]
+        assert "teachs_house" in kinds
+        assert "shipyard" in kinds
+
+    def test_nassau_is_least_populated(self):
+        """Per FASE_2_5.md §2.4: Nassau har 2 NPC-silhuetter (minst)."""
+        nassau = pc.get("nassau")
+        assert len(nassau.buildings.props.silhouettes) == 2
+
+    def test_nassau_silhouette_kinds(self):
+        from scenes.port_village import PortVillageScene
+
+        nassau = pc.get("nassau")
+        scene = PortVillageScene(_font(), _state_for("nassau"), nassau)
+        kinds = {s.kind for s in scene._silhouettes}
+        assert kinds == {"barefoot_sailor", "woman_with_child"}
+
+    def test_nassau_has_campfires(self):
+        """Bål på gaten er Nassau-signatur."""
+        nassau = pc.get("nassau")
+        assert len(nassau.buildings.props.campfires) >= 1
+
+    def test_nassau_has_bamboo_lanterns_not_iron(self):
+        """Nassau bruker improviserte bambus-lanterner, ikke
+        jern-stolper som Tortuga/Port Royal/Havana."""
+        nassau = pc.get("nassau")
+        assert len(nassau.buildings.props.bamboo_lanterns) > 0
+        assert len(nassau.buildings.props.lanterns) == 0
+
+    def test_nassau_has_chest_stacks(self):
+        """Kister i stedet for strukturerte markedsboder."""
+        nassau = pc.get("nassau")
+        assert len(nassau.buildings.props.chest_stacks) >= 1
+
+    def test_nassau_ground_is_sand(self):
+        nassau = pc.get("nassau")
+        assert nassau.buildings.props.ground_texture == "sand"
+
+    def test_nassau_no_cold_institutional_props(self):
+        """Nassau har ingen iron_fences (britisk), fountains (spansk),
+        eller planters (spansk). Bare egne signatur-typer."""
+        nassau = pc.get("nassau")
+        props = nassau.buildings.props
+        assert len(props.iron_fences) == 0
+        assert len(props.fountains) == 0
+        assert len(props.planters) == 0
+
+
+class TestAllFourPortsDistinct:
+    """Integration-test: alle 4 havner har nå unik visuell signatur."""
+
+    def test_each_port_has_unique_ground_texture(self):
+        textures = {
+            pc.get(pid).buildings.props.ground_texture
+            for pid in ("tortuga", "port_royal", "havana", "nassau")
+        }
+        assert textures == {
+            "cobblestone_wet", "cobblestone_dry", "stone_slab", "sand"
+        }
+
+    def test_each_port_has_unique_exchange_baker(self):
+        """Hver havn har egen exchange-baker i dispatch-tabellen."""
+        from scenes.port_buildings import _EXCHANGE_BAKERS
+        for pid in ("tortuga", "port_royal", "havana", "nassau"):
+            assert pid in _EXCHANGE_BAKERS
+
+    def test_populations_match_spec(self):
+        """Havana=4 (mest), Tortuga=Port_Royal=3, Nassau=2 (minst)."""
+        populations = {
+            pid: len(pc.get(pid).buildings.props.silhouettes)
+            for pid in ("tortuga", "port_royal", "havana", "nassau")
+        }
+        assert populations == {
+            "tortuga": 3, "port_royal": 3, "havana": 4, "nassau": 2,
+        }
 
 
 class TestSignatureBuildingValidation:
