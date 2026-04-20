@@ -272,19 +272,18 @@ class TestBalanceHotReload:
 
 
 class TestTavernDayDialog:
+    """Sanity-tester for instansiering. Detaljert meny/rom-kjøp-adferd
+    ligger i tests/test_tavern_dialog.py (C3-3)."""
+
     def test_instantiates(self, font, game_state):
         d = TavernDayDialog(font, game_state, port_id="tortuga")
         assert d is not None
         assert d.want_close is False
 
-    def test_build_entries_empty(self, font, game_state):
-        d = TavernDayDialog(font, game_state, port_id="tortuga")
-        assert d._build_entries() == []
-
     def test_draw_no_crash(self, font, game_state):
         d = TavernDayDialog(font, game_state, port_id="tortuga")
         surf = pygame.Surface((640, 360), pygame.SRCALPHA)
-        d.draw(surf)  # skal ikke crashe
+        d.draw(surf)
 
     def test_esc_sets_want_close(self, font, game_state):
         d = TavernDayDialog(font, game_state, port_id="tortuga")
@@ -293,13 +292,11 @@ class TestTavernDayDialog:
 
 
 class TestTavernNightDialog:
+    """Sanity-tester for instansiering. Detaljert adferd i test_tavern_dialog.py."""
+
     def test_instantiates(self, font, game_state):
         d = TavernNightDialog(font, game_state, port_id="tortuga")
         assert d is not None
-
-    def test_build_entries_empty(self, font, game_state):
-        d = TavernNightDialog(font, game_state, port_id="tortuga")
-        assert d._build_entries() == []
 
     def test_draw_no_crash(self, font, game_state):
         d = TavernNightDialog(font, game_state, port_id="tortuga")

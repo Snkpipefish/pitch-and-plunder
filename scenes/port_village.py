@@ -31,6 +31,7 @@ from entities.npc_silhouette import NPCSilhouette, build_silhouette
 from entities.player import Player
 from scenes.base_scene import BaseScene
 from scenes.exchange import ExchangeOverlay
+from ui.tavern_dialog import TavernDayDialog, TavernDialog, TavernNightDialog
 from scenes.parallax_backdrops import (
     build_backdrop_variants,
     build_empty_layer,
@@ -299,9 +300,14 @@ class PortVillageScene(BaseScene):
 
         # Overlay (børs) — None naar lukket
         self._overlay: ExchangeOverlay | None = None
+        # Tavern-dialog (C3-3) — None naar lukket. Mutually eksklusiv med
+        # børs-overlay (hver kommer fra forskjellig bbox-interact).
+        # Type er TavernDialog (base); instantieres som Day eller Night
+        # basert på night_factor ved åpning.
+        self._tavern_dialog: TavernDialog | None = None
 
         # Hint-indikator (multi-tilstand). "near" er børs-hint (2A-kompat);
-        # "near_dock" er kart-hint (C5).
+        # "near_dock" er kart-hint (C5); "near_tavern" er tavern-hint (C3-3).
         hint = HintIndicator(
             font=font,
             far_text="A/D gå   F11 fullskjerm   Esc avslutt",
@@ -313,6 +319,11 @@ class PortVillageScene(BaseScene):
         hint.add_state(
             "near_dock",
             "E åpne verdenskart   A/D gå   F11 fullskjerm   Esc avslutt",
+            constants.COLOR_LANTERN_BRIGHT,
+        )
+        hint.add_state(
+            "near_tavern",
+            "E åpne tavern   A/D gå   F11 fullskjerm   Esc avslutt",
             constants.COLOR_LANTERN_BRIGHT,
         )
 
@@ -348,12 +359,21 @@ class PortVillageScene(BaseScene):
         if self._overlay is not None:
             self._overlay.handle_event(event, self._current_market_state())
             return
+        # Tavern-dialog konsumerer også all input når åpen.
+        if self._tavern_dialog is not None:
+            self._tavern_dialog.handle_event(event)
+            return
         if event.type == pygame.KEYDOWN:
             if event.key in constants.KEY_MENU:
                 self.want_quit = True
             elif event.key in constants.KEY_INTERACT:
+                # Prioritet: exchange > tavern > dock. Bygningene står
+                # på distinkte x-regioner slik at normalt kun én
+                # interaksjon er tilgjengelig om gangen.
                 if self._player_can_interact_with_exchange():
                     self._open_exchange()
+                elif self._player_can_interact_with_tavern():
+                    self._open_tavern()
                 elif self._player_can_interact_with_dock():
                     self._open_world_map()
             elif event.key in constants.KEY_LEFT:
@@ -370,6 +390,20 @@ class PortVillageScene(BaseScene):
         player_center_x = self._player.x + self._player.width / 2
         return (
             abs(player_center_x - (self._buildings.exchange.x + self._buildings.exchange.w / 2))
+            < constants.INTERACTION_DISTANCE
+        )
+
+    def _player_can_interact_with_tavern(self) -> bool:
+        """True hvis spilleren står innen INTERACTION_DISTANCE av
+        tavern-senteret (Fase 3 C3-3).
+
+        Tavern-bbox kommer fra `port_config.buildings.tavern`. Samme
+        avstands-mål (INTERACTION_DISTANCE) som for exchange og dock.
+        """
+        player_center_x = self._player.x + self._player.width / 2
+        tavern = self._buildings.tavern
+        return (
+            abs(player_center_x - (tavern.x + tavern.w / 2))
             < constants.INTERACTION_DISTANCE
         )
 
@@ -393,13 +427,15 @@ class PortVillageScene(BaseScene):
     def _compute_hint_state(self) -> str:
         """Velg hint-tilstand basert på spiller-posisjon og overlay-state.
 
-        Prioritet: exchange > dock > far. Overlay åpent → far (ingen
-        hint mens spilleren handler).
+        Prioritet: exchange > tavern > dock > far. Åpen dialog/overlay
+        → far (ingen hint mens spilleren handler).
         """
-        if self._overlay is not None:
+        if self._overlay is not None or self._tavern_dialog is not None:
             return "far"
         if self._player_can_interact_with_exchange():
             return "near_exchange"
+        if self._player_can_interact_with_tavern():
+            return "near_tavern"
         if self._player_can_interact_with_dock():
             return "near_dock"
         return "far"
@@ -413,6 +449,40 @@ class PortVillageScene(BaseScene):
             toasts=self._toasts, port_name=self._port.name,
         )
         # Autosave ved åpning slik at overgang til børs alltid kan trygges
+        self.autosave()
+
+    def _open_tavern(self) -> None:
+        """Åpne tavern-dialog (dag eller natt basert på night_factor).
+
+        Threshold 0.5 matcher sprite-variant-snap — spilleren ser samme
+        visuell dag/natt-tilstand som menyen de får.
+
+        Dag-vs-natt-bytte: ved terskel-krysning UNDER åpen dialog byttes
+        ikke dialogen dynamisk. Spilleren må lukke og åpne på nytt.
+        Dette er konsistent med at menyen opplever dagens eller nattens
+        tavern-atmosfære — ikke en hybrid-tilstand midt i overgangen.
+
+        Fase 3 C3-3: dag/natt drives av GameClock/night_factor, IKKE
+        ActionBudget. ActionBudget-cutover kommer i senere commit
+        (C3-7/C3-8) når mistanke/rom-systemer wires til scene-tid.
+        """
+        self._player.press(0)
+        celestial_cfg = port_config.get(
+            self._state.world_state.current_port
+        ).celestial
+        snapshot = DayCycle.compute_snapshot(
+            self._state.world_state.clock, celestial_cfg
+        )
+        night_factor = compute_night_factor(snapshot.day_fraction)
+        dialog_cls = (
+            TavernNightDialog if night_factor >= 0.5 else TavernDayDialog
+        )
+        self._tavern_dialog = dialog_cls(
+            self._font,
+            self._state,
+            port_id=self._port.id,
+            toasts=self._toasts,
+        )
         self.autosave()
 
     def _current_market_state(self) -> MarketState:
@@ -470,6 +540,14 @@ class PortVillageScene(BaseScene):
                 self._overlay = None
                 # Autosave også ved lukking slik at brukeren kan quit-e
                 # umiddelbart etter handel uten risiko for tap.
+                self.autosave()
+            return
+        if self._tavern_dialog is not None:
+            # Tavern-dialog har ingen `update` (ingen tidsdrevet logikk
+            # internt — balance hot-reload sjekkes i draw via
+            # `_balance_changed`). Bare poll want_close og lukk.
+            if self._tavern_dialog.want_close:
+                self._tavern_dialog = None
                 self.autosave()
             return
         # Kun naar overlayet er lukket kan spilleren bevege seg.
@@ -566,6 +644,8 @@ class PortVillageScene(BaseScene):
         self._toasts.draw(surface)
         if self._overlay is not None:
             self._overlay.draw(surface, self._current_market_state())
+        elif self._tavern_dialog is not None:
+            self._tavern_dialog.draw(surface)
 
     # --- Lifecycle / save ---
 
