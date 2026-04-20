@@ -95,6 +95,20 @@
           {"kind": "frigate", "x": 310, "y": 238},
           {"kind": "frigate", "x": 510, "y": 238}
         ],
+        "fill_buildings": [
+          {"kind": "port_royal_soldier_barracks",   "x": 232, "w": 58, "h": 42},
+          {"kind": "port_royal_officers_residence", "x": 352, "w": 56, "h": 52},
+          {"kind": "port_royal_east_india_company", "x": 440, "w": 72, "h": 52},
+          {"kind": "port_royal_civil_warehouse",    "x": 770, "w": 48, "h": 42},
+          {"kind": "port_royal_merchants_house",    "x": 850, "w": 56, "h": 56},
+          {"kind": "port_royal_apothecary",         "x": 934, "w": 46, "h": 44}
+        ],
+        "alleys": [
+          {"x": 290, "w": 22},
+          {"x": 412, "w": 24},
+          {"x": 822, "w": 24},
+          {"x": 910, "w": 20}
+        ],
         "signature_buildings": [
           {"kind": "church_tower",  "x": 320, "y": 234, "w": 24, "h": 106},
           {"kind": "rum_warehouse", "x": 540, "y": 284, "w": 220, "h": 56}
@@ -151,6 +165,21 @@
           {"kind": "galleon", "x": 110, "y": 244},
           {"kind": "galleon", "x": 380, "y": 248, "flipped": true},
           {"kind": "small",   "x": 600, "y": 232}
+        ],
+        "fill_buildings": [
+          {"kind": "havana_borger_house",       "x": 232, "w": 54, "h": 58},
+          {"kind": "havana_cloister_annex",     "x": 528, "w": 48, "h": 52},
+          {"kind": "havana_merchants_house",    "x": 880, "w": 48, "h": 56},
+          {"kind": "havana_artisans_workshop",  "x": 968, "w": 44, "h": 46},
+          {"kind": "havana_guard_house",        "x": 1016, "w": 42, "h": 44},
+          {"kind": "havana_tobacco_warehouse",  "x": 1062, "w": 40, "h": 42},
+          {"kind": "havana_chapel_small",       "x": 1134, "w": 38, "h": 52}
+        ],
+        "alleys": [
+          {"x": 290, "w": 22},
+          {"x": 848, "w": 28},
+          {"x": 930, "w": 34},
+          {"x": 1104, "w": 28}
         ],
         "signature_buildings": [
           {"kind": "cathedral",        "x": 320, "y": 232, "w": 200, "h": 108},

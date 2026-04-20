@@ -131,12 +131,40 @@ class TestFillBuildingParser:
         nassau = pc.get("nassau")
         assert len(nassau.buildings.fill_buildings) == 5
 
-    def test_port_royal_havana_still_empty_fill_buildings(self):
-        """C2.5-6b kommer; disse havnene skal ha tom fill_buildings."""
+    def test_port_royal_has_6_fill_buildings(self):
+        """C2.5-6b: Port Royal får 6 fyll-bygninger."""
         pc.init(str(REAL_PORTS_PATH))
-        for pid in ("port_royal", "havana"):
-            port = pc.get(pid)
-            assert len(port.buildings.fill_buildings) == 0
+        port_royal = pc.get("port_royal")
+        assert len(port_royal.buildings.fill_buildings) == 6
+
+    def test_havana_has_7_fill_buildings(self):
+        """C2.5-6b: Havana får 7 fyll-bygninger."""
+        pc.init(str(REAL_PORTS_PATH))
+        havana = pc.get("havana")
+        assert len(havana.buildings.fill_buildings) == 7
+
+    def test_port_royal_fill_kinds_all_port_royal(self):
+        pc.init(str(REAL_PORTS_PATH))
+        for fb in pc.get("port_royal").buildings.fill_buildings:
+            assert fb.kind.startswith("port_royal_"), (
+                f"Port Royal har ikke-port_royal fill_building: {fb.kind}"
+            )
+
+    def test_havana_fill_kinds_all_havana(self):
+        pc.init(str(REAL_PORTS_PATH))
+        for fb in pc.get("havana").buildings.fill_buildings:
+            assert fb.kind.startswith("havana_"), (
+                f"Havana har ikke-havana fill_building: {fb.kind}"
+            )
+
+    def test_all_4_ports_enforce_silhouette_hierarchy(self):
+        """Utvidet fra 6a — nå alle 4 havner."""
+        pc.init(str(REAL_PORTS_PATH))
+        for pid in ("tortuga", "port_royal", "havana", "nassau"):
+            for fb in pc.get(pid).buildings.fill_buildings:
+                assert fb.h <= 60, (
+                    f"{pid}/{fb.kind}: h={fb.h} > 60 (silhuett-brudd)"
+                )
 
     def test_tortuga_fill_building_kinds_all_tortuga(self):
         """Havn-spesifikk stil: Tortuga bruker bare tortuga_-kinds."""
@@ -283,15 +311,31 @@ class TestGameplayLayerWithFillBuildings:
                     f"forventet colorkey {COLORKEY}, fant {px[:3]}"
                 )
 
-    def test_port_royal_havana_still_bake_without_fill_buildings(self):
-        """Backward-compat: havner uten fill_buildings skal fortsatt
-        bake uten feil (C2.5-6b er ikke landet)."""
+    def test_all_4_ports_bake_with_fill_buildings(self):
+        """C2.5-6b: nå skal alle 4 havner bake med fyll-bygninger."""
         from scenes.port_buildings import build_port_gameplay_layer
 
         pc.init(str(REAL_PORTS_PATH))
-        for pid in ("port_royal", "havana"):
+        for pid in ("tortuga", "port_royal", "havana", "nassau"):
             surf = build_port_gameplay_layer(pc.get(pid))
             assert surf is not None
+
+    def test_alleys_transparent_in_all_4_ports(self):
+        """Utvidet smug-test for alle 4 havner."""
+        from scenes.port_buildings import build_port_gameplay_layer, COLORKEY
+
+        pc.init(str(REAL_PORTS_PATH))
+        for pid in ("tortuga", "port_royal", "havana", "nassau"):
+            port = pc.get(pid)
+            surf = build_port_gameplay_layer(port)
+            for i, a in enumerate(port.buildings.alleys):
+                check_x = a.x + a.w // 2
+                check_y = 260
+                px = surf.get_at((check_x, check_y))
+                assert px[:3] == COLORKEY, (
+                    f"{pid}/alley[{i}] at ({check_x}, {check_y}) "
+                    f"forventet colorkey {COLORKEY}, fant {px[:3]}"
+                )
 
 
 class TestScenesLoadWithFillBuildings:
