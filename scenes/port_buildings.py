@@ -81,6 +81,14 @@ def _bake_props(
         props_module.bake_iron_fence(
             surface, fence.x, ground_top_y, fence.length,
         )
+    # Fontener (Havana) — statiske i C2.5-3; C2.5-6 legger til
+    # palette-cycling på vann-piksler.
+    for fountain in props.fountains:
+        props_module.bake_fountain(surface, fountain.x, ground_top_y)
+    # Plantere/busker (Havana) — tegnes etter fontenene slik at
+    # nærme busker kan skjære over basseng-skygger.
+    for planter in props.planters:
+        props_module.bake_planter(surface, planter.x, ground_top_y)
     for lantern in props.lanterns:
         props_module.bake_lantern_post(surface, lantern.x, ground_top_y)
 
@@ -524,21 +532,383 @@ def _bake_rum_warehouse(
         )
 
 
+def _bake_trade_house(
+    surface: pygame.Surface,
+    x: int, y: int, w: int, h: int,
+    ground_top_y: int,
+) -> None:
+    """Havana: Handelshus — erstatter Tortuga-børshus-spriten (C2.5-3).
+
+    Arkade-fasade (gjenspeiler guvernørpalasset), åpen side mot
+    havnen. Tunge vekter symbolsk synlige ved porten. Tematisk
+    knytting til tobakk-bias (0.75).
+
+    Palett: WOOD-familien dominerer (oker/varm) — spanske
+    handelsbygg var tradisjonelt hvitkalket over tre/murstein, men
+    for Havana-palettet vektes dette mot LANTERN/WOOD over STONE.
+    """
+    # Hovedfasade — WOOD_LIGHT (sol-belyst spansk stukk)
+    pygame.draw.rect(surface, constants.COLOR_WOOD_LIGHT, (x, y + 10, w, h - 10))
+    # Skygge-base (under arkaden, mørkere)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID,
+        (x, y + h - 24, w, 16),
+    )
+    # Topp-kant (tak)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST, (x - 4, y + 6, w + 8, 4)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER, (x - 4, y + 6, w + 8, 1)
+    )
+    # Tak-topprand (dyp oker som glede overgang mot himmel)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARK, (x - 2, y + 4, w + 4, 2)
+    )
+
+    # 5 arkade-buer (åpen arkade — buene er vei-inn til handelshuset)
+    arch_count = 5
+    arch_w = 16
+    # Jevnt fordelt med marg
+    margin = 12
+    span = w - 2 * margin
+    step = (span - arch_w) / (arch_count - 1)
+    arch_xs = [x + margin + int(i * step) for i in range(arch_count)]
+    for ax in arch_xs:
+        arch_y = y + h - 30
+        # Åpning (mørk)
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST, (ax, arch_y, arch_w, 18)
+        )
+        # Buet topp (enkel halvsirkel-antydning via 3 steg)
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST, (ax + 1, arch_y - 2, arch_w - 2, 2)
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST, (ax + 3, arch_y - 4, arch_w - 6, 2)
+        )
+        # Arkade-ramme (WOOD_MID)
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_MID, (ax - 1, arch_y + 18, arch_w + 2, 1)
+        )
+        # Varm glimt inne i buen (LANTERN — antyder lantern-lys inne)
+        pygame.draw.rect(
+            surface, constants.COLOR_EMBER, (ax + 2, arch_y + 14, arch_w - 4, 1)
+        )
+
+    # Vekter-signatur (symbolsk vekt-symbol på sentralt felt) —
+    # LANTERN (gyllen bronsevekt)
+    balance_x = x + w // 2
+    balance_y = y + 16
+    # Vekt-stokk
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN, (balance_x - 5, balance_y, 10, 1)
+    )
+    # Vekt-skåler (to prikker)
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT, (balance_x - 5, balance_y + 1, 3, 1)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT, (balance_x + 3, balance_y + 1, 3, 1)
+    )
+    # Vekt-henging (vertikal stokk)
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN, (balance_x, balance_y - 3, 1, 3)
+    )
+
+
+def _bake_cathedral(
+    surface: pygame.Surface,
+    x: int, y: int, w: int, h: int,
+    ground_top_y: int,
+) -> None:
+    """Havana: Katedral med to klokketårn — dominerende silhuett.
+
+    Per FASE_2_5.md §2.3: "Mest imponerende bygning av alle 4 havner".
+    Barokk fasade antydet ved kurvede taklinjer og sentral rose-
+    åpning. To klokketårn i hver ende (bredere enn Port Royals
+    enslige klokketårn — adresserer tetthets-observasjonen).
+
+    Palett: WOOD_LIGHT-fasade (hvitkalket, sol-farget) med
+    STONE_DARKEST-aksenter og LANTERN-glimt fra kirkevinduer.
+    """
+    # Hoveddel — bred, WOOD_LIGHT hvitkalket
+    pygame.draw.rect(surface, constants.COLOR_WOOD_LIGHT, (x, y + 20, w, h - 20))
+    # Skygge-aksent på høyre side (dybde-signal)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID, (x + w - 2, y + 20, 2, h - 20)
+    )
+
+    # To klokketårn — bredere enn Port Royal (30 px hver) for
+    # proporsjonal balanse mot katedralens bredde
+    tower_w = 30
+    tower_h = h + 20
+    left_tower_x = x
+    right_tower_x = x + w - tower_w
+    for tx in (left_tower_x, right_tower_x):
+        top_y = y - 20
+        # Tårn-kropp
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_LIGHT,
+            (tx, top_y, tower_w, tower_h),
+        )
+        # Skygge-kant høyre (dybde)
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_MID,
+            (tx + tower_w - 2, top_y, 2, tower_h),
+        )
+        # Horisontal etasje-skille
+        for dy in (16, 36, 56):
+            if dy < tower_h:
+                pygame.draw.rect(
+                    surface, constants.COLOR_WOOD_DARK,
+                    (tx, top_y + dy, tower_w, 1),
+                )
+        # Klokke-åpning (øvre del)
+        bell_x = tx + 6
+        bell_y = top_y + 6
+        bell_w, bell_h = tower_w - 12, 14
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST,
+            (bell_x, bell_y, bell_w, bell_h),
+        )
+        # Buet toppen av klokkeåpning (barokk)
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST,
+            (bell_x + 2, bell_y - 2, bell_w - 4, 2),
+        )
+        # Klokke (LANTERN — gyllen bronse)
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN,
+            (bell_x + 3, bell_y + 2, bell_w - 6, bell_h - 6),
+        )
+        # Klokke-høylys
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN_BRIGHT,
+            (bell_x + 4, bell_y + 3, bell_w - 8, 2),
+        )
+        # Barokk kuppel på toppen — trekant-antydning + kors
+        dome_pts = [
+            (tx - 1, top_y),
+            (tx + tower_w + 1, top_y),
+            (tx + tower_w // 2, top_y - 10),
+        ]
+        pygame.draw.polygon(surface, constants.COLOR_WOOD_DARKEST, dome_pts)
+        # Kors
+        cross_x = tx + tower_w // 2
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN_BRIGHT,
+            (cross_x - 1, top_y - 14, 2, 5),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN_BRIGHT,
+            (cross_x - 2, top_y - 12, 4, 1),
+        )
+
+    # Senteret (mellom tårnene): barokk taklinje
+    center_x = x + tower_w
+    center_w = w - 2 * tower_w
+    # Buet takfront (2 buer på taktopp — barokk signatur)
+    roof_y = y + 8
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (center_x, roof_y, center_w, 12),
+    )
+    # Midt-kule/topp (barokk ornament)
+    cx = center_x + center_w // 2
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (cx - 6, roof_y - 6, 12, 6),
+    )
+    # Mini-kors på midten
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT,
+        (cx - 1, roof_y - 12, 2, 6),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT,
+        (cx - 2, roof_y - 10, 4, 1),
+    )
+
+    # Rose-vindu sentralt (sirkulær åpning)
+    rose_y = y + 26
+    rose_r = 8
+    # Rammen
+    pygame.draw.circle(
+        surface, constants.COLOR_STONE_DARKEST, (cx, rose_y + rose_r), rose_r + 1
+    )
+    pygame.draw.circle(
+        surface, constants.COLOR_LANTERN, (cx, rose_y + rose_r), rose_r - 1
+    )
+    # Sentrum-glimt
+    pygame.draw.circle(
+        surface, constants.COLOR_LANTERN_BRIGHT, (cx, rose_y + rose_r), 2
+    )
+    # Kors-ribber inne i rosen (4 linjer)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARK,
+        (cx - rose_r + 1, rose_y + rose_r, rose_r * 2 - 2, 1),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARK,
+        (cx, rose_y + 1, 1, rose_r * 2 - 2),
+    )
+
+    # Hovedportal midt i senteret — stor bue
+    portal_w, portal_h = 28, 44
+    portal_x = cx - portal_w // 2
+    portal_y = ground_top_y - portal_h
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST,
+        (portal_x, portal_y, portal_w, portal_h),
+    )
+    # Buet topp
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST,
+        (portal_x + 2, portal_y - 2, portal_w - 4, 2),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST,
+        (portal_x + 4, portal_y - 4, portal_w - 8, 2),
+    )
+    # Dør (åpen — varm glød fra inne)
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER,
+        (portal_x + 3, portal_y + 3, portal_w - 6, portal_h - 6),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_FLAME,
+        (portal_x + 6, portal_y + 8, portal_w - 12, portal_h - 14),
+    )
+    # Trapp
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID,
+        (portal_x - 6, ground_top_y, portal_w + 12, 3),
+    )
+
+
+def _bake_governor_palace(
+    surface: pygame.Surface,
+    x: int, y: int, w: int, h: int,
+    ground_top_y: int,
+) -> None:
+    """Havana: Guvernørpalass — bredt med arkade langs fronten.
+
+    Spansk kolonial-arkitektur. Arkade signal er sentralt (buene
+    gjentas i handelshuset for visuell enhet). Palass er bredere
+    enn handelshuset og har dekor-balkong midt på andre etasje.
+    """
+    # Hovedvegg — WOOD_LIGHT
+    pygame.draw.rect(surface, constants.COLOR_WOOD_LIGHT, (x, y, w, h))
+    # Skygge-base (nedre del)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID,
+        (x, y + h - 10, w, 10),
+    )
+    # Tak-overheng (bred)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (x - 5, y - 4, w + 10, 4),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER, (x - 5, y - 4, w + 10, 1)
+    )
+
+    # Arkade på gatenivå (4 buer)
+    arch_count = 4
+    arch_w = 18
+    margin = 10
+    span = w - 2 * margin
+    step = (span - arch_w) / (arch_count - 1)
+    for i in range(arch_count):
+        ax = x + margin + int(i * step)
+        arch_y = y + h - 28
+        # Åpning (mørk)
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST,
+            (ax, arch_y, arch_w, 22),
+        )
+        # Buet topp
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST,
+            (ax + 1, arch_y - 2, arch_w - 2, 2),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST,
+            (ax + 3, arch_y - 4, arch_w - 6, 2),
+        )
+        # Ramme (søyle skygge-skille)
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_MID,
+            (ax - 1, arch_y, 1, 22),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_WOOD_MID,
+            (ax + arch_w, arch_y, 1, 22),
+        )
+        # Varm glimt inne (lantern-lys)
+        pygame.draw.rect(
+            surface, constants.COLOR_EMBER,
+            (ax + 2, arch_y + 18, arch_w - 4, 1),
+        )
+
+    # Andre etasje-vinduer (4 — over arkadene)
+    for i in range(arch_count):
+        ax = x + margin + int(i * step)
+        win_y = y + 8
+        win_w, win_h = arch_w - 4, 10
+        wx0 = ax + 2
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST,
+            (wx0, win_y, win_w, win_h),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN,
+            (wx0 + 1, win_y + 1, win_w - 2, win_h - 2),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN_BRIGHT,
+            (wx0 + 2, win_y + 2, win_w - 4, win_h - 6),
+        )
+
+    # Sentral balkong (mellom midt-vinduene)
+    balcony_x = x + w // 2 - 14
+    balcony_y = y + 20
+    # Rekkverk
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST,
+        (balcony_x, balcony_y, 28, 1),
+    )
+    # Balkong-plate
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARK,
+        (balcony_x - 2, balcony_y + 1, 32, 2),
+    )
+    # Balusterstenger
+    for bx in range(balcony_x + 2, balcony_x + 28, 4):
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_DARKEST, (bx, balcony_y, 1, 2)
+        )
+
+
 #: Dispatch-tabell: port_id → bake-funksjon for exchange-bbox.
 #: Tortuga bruker `_bake_exchange` (klassisk børshus).
 #: Port Royal (C2.5-2) bruker `_bake_customs_house`.
-#: Havana (C2.5-3) får `_bake_trade_house` senere.
+#: Havana (C2.5-3) bruker `_bake_trade_house` (spansk arkade).
 #: Nassau (C2.5-4) får `_bake_open_market` senere.
 #: Default (ikke-matchet id) faller tilbake til `_bake_exchange`.
 _EXCHANGE_BAKERS = {
     "tortuga": _bake_exchange,
     "port_royal": _bake_customs_house,
+    "havana": _bake_trade_house,
 }
 
 #: Dispatch-tabell: signature_building.kind → bake-funksjon.
 _SIGNATURE_BUILDING_BAKERS = {
     "church_tower": _bake_church_tower,
     "rum_warehouse": _bake_rum_warehouse,
+    "cathedral": _bake_cathedral,
+    "governor_palace": _bake_governor_palace,
 }
 
 

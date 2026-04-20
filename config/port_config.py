@@ -114,6 +114,20 @@ class IronFence:
 
 
 @dataclass(frozen=True)
+class Fountain:
+    """Torgfontene-plassering (Havana). Statisk i C2.5-3; palette-
+    cycling legges til i C2.5-6 animasjonspasset.
+    """
+    x: int
+
+
+@dataclass(frozen=True)
+class Planter:
+    """Lav busk/plante-plassering (Havana — ved palasset)."""
+    x: int
+
+
+@dataclass(frozen=True)
 class SignatureBuilding:
     """Havn-spesifikk signatur-bygning utover tavern + exchange.
 
@@ -144,6 +158,8 @@ class PortProps:
     barrel_stacks: tuple[BarrelStack, ...] = ()
     silhouettes: tuple[SilhouettePlacement, ...] = ()
     iron_fences: tuple[IronFence, ...] = ()
+    fountains: tuple[Fountain, ...] = ()
+    planters: tuple[Planter, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -468,6 +484,50 @@ def _parse_iron_fences(
     return tuple(result)
 
 
+def _parse_fountains(raw: Any, port_id: str) -> tuple[Fountain, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': props.fountains må være en liste"
+        )
+    result: list[Fountain] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': props.fountains[{i}] må være et objekt"
+            )
+        try:
+            result.append(Fountain(x=int(entry["x"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.fountains[{i}] ugyldig: {exc}"
+            ) from exc
+    return tuple(result)
+
+
+def _parse_planters(raw: Any, port_id: str) -> tuple[Planter, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"port '{port_id}': props.planters må være en liste"
+        )
+    result: list[Planter] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"port '{port_id}': props.planters[{i}] må være et objekt"
+            )
+        try:
+            result.append(Planter(x=int(entry["x"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"port '{port_id}': props.planters[{i}] ugyldig: {exc}"
+            ) from exc
+    return tuple(result)
+
+
 def _parse_props(raw: Any, port_id: str) -> PortProps | None:
     """Parse props-blokken. None hvis feltet mangler eller er null."""
     # Lazy import for å unngå top-level-avhengighet fra config/ til
@@ -498,6 +558,8 @@ def _parse_props(raw: Any, port_id: str) -> PortProps | None:
         barrel_stacks=_parse_barrel_stacks(raw.get("barrel_stacks"), port_id),
         silhouettes=_parse_silhouettes(raw.get("silhouettes"), port_id),
         iron_fences=_parse_iron_fences(raw.get("iron_fences"), port_id),
+        fountains=_parse_fountains(raw.get("fountains"), port_id),
+        planters=_parse_planters(raw.get("planters"), port_id),
     )
 
 
@@ -508,6 +570,7 @@ def _parse_props(raw: Any, port_id: str) -> PortProps | None:
 #: - C2.5-4: teachs_house, shipyard (Nassau)
 VALID_SIGNATURE_BUILDING_KINDS: frozenset[str] = frozenset({
     "church_tower", "rum_warehouse",
+    "cathedral", "governor_palace",
 })
 
 

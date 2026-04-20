@@ -134,10 +134,7 @@ class TestPortRoyalExchangeInteractionUnchanged:
         assert scene._player_can_interact_with_exchange()
 
 
-class TestStubPortsBackwardCompat:
-    """Havana og Nassau har ennå ikke fått unik signatur. De skal
-    fortsatt bygge uten feil (stub-havn-atferd fra 2B)."""
-
+class TestHavanaRendering:
     def test_havana_scene_loads(self):
         from scenes.port_village import PortVillageScene
 
@@ -145,16 +142,81 @@ class TestStubPortsBackwardCompat:
         scene = PortVillageScene(_font(), _state_for("havana"), havana)
         assert scene is not None
 
+    def test_havana_gameplay_layer_bakes(self):
+        from scenes.port_buildings import build_port_gameplay_layer
+
+        havana = pc.get("havana")
+        surf = build_port_gameplay_layer(havana)
+        assert surf.get_width() == havana.world_width
+
+    def test_havana_uses_trade_house_baker(self):
+        """Exchange-bbox bakes med _bake_trade_house, ikke _bake_exchange."""
+        from scenes.port_buildings import build_port_gameplay_layer
+
+        havana = pc.get("havana")
+        surf = build_port_gameplay_layer(havana)
+        # Arkade-buene går ned fra y + h - 30 (i _bake_trade_house).
+        # For Havana er exchange y=248, h=92 — så arkaden er ved y=310.
+        # Sjekk at noe er tegnet der (IKKE colorkey).
+        ex = havana.buildings.exchange
+        arch_y = ex.y + ex.h - 20  # Inne i arkade-åpningen
+        arch_center = (ex.x + ex.w // 2, arch_y)
+        color = surf.get_at(arch_center)
+        assert color[:3] != (255, 0, 255)
+
+    def test_havana_has_cathedral_and_palace(self):
+        havana = pc.get("havana")
+        kinds = [sb.kind for sb in havana.buildings.signature_buildings]
+        assert "cathedral" in kinds
+        assert "governor_palace" in kinds
+
+    def test_havana_is_most_populated(self):
+        """Per FASE_2_5.md §2.3: Havana har 4 NPC-silhuetter (mest)."""
+        havana = pc.get("havana")
+        assert len(havana.buildings.props.silhouettes) == 4
+
+    def test_havana_silhouette_kinds(self):
+        """4 distinkte spanske typer."""
+        from scenes.port_village import PortVillageScene
+
+        havana = pc.get("havana")
+        scene = PortVillageScene(_font(), _state_for("havana"), havana)
+        kinds = {s.kind for s in scene._silhouettes}
+        assert kinds == {
+            "priest", "spanish_officer", "spanish_merchant",
+            "mantilla_woman",
+        }
+
+    def test_havana_has_fountain(self):
+        """Fontene er Havana-signatur (palette-cycling kommer i C2.5-6)."""
+        havana = pc.get("havana")
+        assert len(havana.buildings.props.fountains) == 1
+
+    def test_havana_has_planters(self):
+        """Plantere ved palasset."""
+        havana = pc.get("havana")
+        assert len(havana.buildings.props.planters) >= 1
+
+    def test_havana_warmest_palette_no_iron_fences(self):
+        """Havana har ingen iron_fences (de er britisk institusjonell
+        signatur, tematisk feil for spansk katolsk prakt)."""
+        havana = pc.get("havana")
+        assert len(havana.buildings.props.iron_fences) == 0
+
+    def test_havana_ground_texture_is_stone_slab(self):
+        havana = pc.get("havana")
+        assert havana.buildings.props.ground_texture == "stone_slab"
+
+
+class TestNassauBackwardCompat:
+    """Nassau har ennå ikke fått unik signatur (C2.5-4)."""
+
     def test_nassau_scene_loads(self):
         from scenes.port_village import PortVillageScene
 
         nassau = pc.get("nassau")
         scene = PortVillageScene(_font(), _state_for("nassau"), nassau)
         assert scene is not None
-
-    def test_havana_has_no_signature_buildings_yet(self):
-        havana = pc.get("havana")
-        assert havana.buildings.signature_buildings == ()
 
     def test_nassau_has_no_signature_buildings_yet(self):
         nassau = pc.get("nassau")
@@ -180,6 +242,8 @@ class TestSignatureBuildingValidation:
     def test_valid_signature_kinds_exported(self):
         from config.port_config import VALID_SIGNATURE_BUILDING_KINDS
 
-        # C2.5-2 leverer 2 kinds; senere commits utvider dette
-        assert "church_tower" in VALID_SIGNATURE_BUILDING_KINDS
-        assert "rum_warehouse" in VALID_SIGNATURE_BUILDING_KINDS
+        # C2.5-2: church_tower + rum_warehouse
+        # C2.5-3: cathedral + governor_palace
+        for kind in ("church_tower", "rum_warehouse",
+                     "cathedral", "governor_palace"):
+            assert kind in VALID_SIGNATURE_BUILDING_KINDS

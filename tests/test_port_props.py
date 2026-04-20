@@ -74,12 +74,35 @@ class TestSilhouetteFactories:
     def test_valid_kinds_exported(self):
         from entities.npc_silhouette import VALID_KINDS
 
-        # C2.5-1 leverte 3 generiske typer; C2.5-2 legger til 3 britiske.
+        # C2.5-1 leverte 3 generiske typer; C2.5-2 la til 3 britiske;
+        # C2.5-3 legger til 4 spanske.
         expected = {
             "standing", "sitting", "group",      # C2.5-1
             "officer", "merchant", "colonial_lady",  # C2.5-2
+            "priest", "spanish_officer",         # C2.5-3
+            "spanish_merchant", "mantilla_woman",  # C2.5-3
         }
         assert VALID_KINDS == frozenset(expected)
+
+    def test_havana_specific_sprites_exist(self):
+        """Prest, spansk offiser, handelsmann, kvinne med mantilla."""
+        from entities.npc_silhouette import build_silhouette
+
+        for kind in ("priest", "spanish_officer", "spanish_merchant",
+                     "mantilla_woman"):
+            sil = build_silhouette(kind, x=500, ground_top_y=340)
+            assert sil.sprite.get_width() > 0
+            assert sil.sprite.get_height() > 0
+
+    def test_priest_is_tallest_havana_sprite(self):
+        """Prest med hette skal rage høyere enn de andre Havana-typene."""
+        from entities.npc_silhouette import build_silhouette
+
+        priest = build_silhouette("priest", 0, 340)
+        officer = build_silhouette("spanish_officer", 0, 340)
+        merchant = build_silhouette("spanish_merchant", 0, 340)
+        assert priest.sprite.get_height() >= officer.sprite.get_height()
+        assert priest.sprite.get_height() >= merchant.sprite.get_height()
 
     def test_port_royal_specific_sprites_exist(self):
         """Offiser, handelsmann, kolonial dame må kunne bygges."""
@@ -197,16 +220,23 @@ class TestPortPropsParser:
         # Jerngjerder er Port Royal-signatur
         assert len(props.iron_fences) > 0
 
-    def test_real_havana_nassau_still_no_props(self):
-        """C2.5-3/4 har ikke landet ennå. Havana og Nassau skal
-        fortsatt ha None."""
+    def test_real_havana_has_props(self):
+        """C2.5-3: Havana har stone_slab + katedral + fontene + 4 silhuetter."""
         pc.init(str(REAL_PORTS_PATH))
-        for pid in ("havana", "nassau"):
-            port = pc.get(pid)
-            assert port.buildings is not None
-            assert port.buildings.props is None, (
-                f"{pid} skal ikke ha props før C2.5-3/4"
-            )
+        havana = pc.get("havana")
+        assert havana.buildings is not None
+        assert havana.buildings.props is not None
+        props = havana.buildings.props
+        assert props.ground_texture == "stone_slab"
+        assert len(props.silhouettes) == 4  # Mest befolket
+        assert len(props.fountains) == 1
+
+    def test_real_nassau_still_no_props(self):
+        """C2.5-4 har ikke landet ennå. Nassau skal fortsatt ha None."""
+        pc.init(str(REAL_PORTS_PATH))
+        nassau = pc.get("nassau")
+        assert nassau.buildings is not None
+        assert nassau.buildings.props is None
 
     def test_real_port_royal_has_signature_buildings(self):
         """Port Royal har klokketårn + rum-magasin som signatur-bygninger."""

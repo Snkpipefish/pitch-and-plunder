@@ -18,11 +18,12 @@ import constants
 
 
 #: Gyldige gategulv-teksturer. Utvides per-havn i senere commits:
-#: "stone_slab" (Havana), "sand" (Nassau).
+#: "sand" (Nassau).
 VALID_GROUND_TEXTURES: frozenset[str] = frozenset({
     "wood_dark",          # Eksisterende — beholdes som default for ikke-Tortuga
     "cobblestone_wet",    # Tortuga — våte flekker, smugler-atmosfære
     "cobblestone_dry",    # Port Royal — tørr ordnet brostein, kolonial orden
+    "stone_slab",         # Havana — lyse varme heller, solvarme lagret i steinen
 })
 
 
@@ -149,6 +150,59 @@ def bake_cobblestone_dry_ground(
                 )
 
 
+def bake_stone_slab_ground(
+    surface: pygame.Surface, ground_top_y: int,
+) -> None:
+    """Havana: lyse varme steinheller.
+
+    Varmeste gategulv av alle 4 havner. WOOD_LIGHT-base antyder
+    solvarme lagret i stein; STONE_LIGHT-fuger mellom hellene.
+    Ingen våte flekker (spansk tropisk klima — bakken tørker raskt).
+
+    Signaliserer "spansk kolonial prakt" — store ordnede heller,
+    ikke små brostein som Port Royal.
+    """
+    width = surface.get_width()
+    ground_bottom_y = constants.RENDER_HEIGHT
+    # 1) Hovedbase — WOOD_LIGHT (varm okerkebeige-brun for sol-heller)
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_WOOD_LIGHT,
+        (0, ground_top_y, width, ground_bottom_y - ground_top_y),
+    )
+    # 2) Øvre fuge (1 px WOOD_DARKEST for skille mot bygninger)
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_WOOD_DARKEST,
+        (0, ground_top_y, width, 1),
+    )
+    # 3) Heller: store 20x6 blokker med STONE_LIGHT-fuger — ordnet,
+    #    annerledes enn Port Royals tettpakkede brostein
+    slab_w = 20
+    slab_gap = 2
+    # Rad 1 — forskjøvet 0
+    y = ground_top_y + 2
+    for x in range(2, width - slab_w, slab_w + slab_gap):
+        # Hellene — STONE_LIGHT høylys på venstre kant (sol-slør)
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_LIGHT, (x, y, 1, 5),
+        )
+        # Høylys-striper på toppen av noen heller
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN, (x + 1, y, slab_w - 2, 1),
+        )
+    # Rad 2 — forskjøvet med halve bredden (ekte helle-legging)
+    y = ground_top_y + 9
+    x_start = 2 + (slab_w + slab_gap) // 2
+    for x in range(x_start, width - slab_w, slab_w + slab_gap):
+        pygame.draw.rect(
+            surface, constants.COLOR_STONE_LIGHT, (x, y, 1, 5),
+        )
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN, (x + 1, y, slab_w - 2, 1),
+        )
+
+
 def bake_ground(
     surface: pygame.Surface,
     ground_top_y: int,
@@ -164,6 +218,8 @@ def bake_ground(
         bake_cobblestone_wet_ground(surface, ground_top_y)
     elif texture == "cobblestone_dry":
         bake_cobblestone_dry_ground(surface, ground_top_y)
+    elif texture == "stone_slab":
+        bake_stone_slab_ground(surface, ground_top_y)
     else:
         raise ValueError(
             f"Ukjent ground_texture: {texture!r} "
@@ -375,6 +431,124 @@ def bake_iron_fence(
             surface, constants.COLOR_STONE_DARKEST,
             (sx, top_y, 1, height),
         )
+
+
+def bake_fountain(
+    surface: pygame.Surface,
+    x: int,
+    ground_top_y: int,
+    *,
+    width: int = 32,
+    height: int = 20,
+) -> None:
+    """Torgfontene (Havana) — sirkulær basseng-silhuett med vann.
+
+    C2.5-3: statisk vann-surface (STONE_LIT-kjerne med LANTERN-
+    sol-glimt). C2.5-6 vil legge til palette-cycling på vann-
+    pikslene slik at den får Monkey Island-refleksjons-effekten.
+
+    Plassering: `x` er venstre kant, fontenen står på bakken (top
+    av bassenget er ved ground_top_y - height).
+    """
+    top_y = ground_top_y - height
+    # Bassenget (ytre ring)
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_LIGHT, (x, top_y + height - 8, width, 2)
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST,
+        (x, top_y + height - 8, width, 1),
+    )
+    # Bassenget (nedre del — høyere rand)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID,
+        (x, top_y + height - 6, width, 5),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (x, top_y + height - 1, width, 1),
+    )
+    # Vann-overflate — sentrert i bassenget (STONE_LIT mørk-blå)
+    water_x = x + 4
+    water_y = top_y + height - 7
+    water_w = width - 8
+    water_h = 3
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_LIT, (water_x, water_y, water_w, water_h)
+    )
+    # Sol-glimt på vannet (statisk i C2.5-3; palette-cycling i C2.5-6)
+    glimt_y = water_y + 1
+    for gx in range(water_x + 2, water_x + water_w - 2, 4):
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN_BRIGHT, (gx, glimt_y, 1, 1)
+        )
+
+    # Sentral søyle/tut (spansk barokk — vertikal stein-pilar)
+    pillar_w = 4
+    pillar_h = height - 8
+    pillar_x = x + width // 2 - pillar_w // 2
+    pillar_y = top_y
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_LIGHT,
+        (pillar_x, pillar_y, pillar_w, pillar_h),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARK,
+        (pillar_x + pillar_w - 1, pillar_y, 1, pillar_h),
+    )
+    # Topp-kappe (ornament)
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_LIGHT,
+        (pillar_x - 1, pillar_y, pillar_w + 2, 2),
+    )
+    # Vann som renner ut (små dråper — LANTERN for "sunlit vann")
+    for i in range(2):
+        pygame.draw.rect(
+            surface, constants.COLOR_LANTERN,
+            (pillar_x - 1 + i * (pillar_w + 1), pillar_y + 3, 1, 2),
+        )
+
+
+def bake_planter(
+    surface: pygame.Surface,
+    x: int,
+    ground_top_y: int,
+    *,
+    width: int = 10,
+    height: int = 14,
+) -> None:
+    """Lav busk/plante i potte (Havana — ved palasset).
+
+    Mørk silhuett mot lyse heller. Busken er WOOD_DARKEST med
+    WOOD_DARK-høylys; potten er STONE_DARK.
+    """
+    # Potten
+    pot_h = 4
+    pot_y = ground_top_y - pot_h
+    pygame.draw.rect(surface, constants.COLOR_STONE_DARK, (x, pot_y, width, pot_h))
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST, (x, pot_y, width, 1)
+    )
+    # Busk — organisk klump (WOOD_DARKEST mot natt-himmel)
+    bush_y = pot_y - (height - pot_h)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (x + 1, bush_y + 2, width - 2, height - pot_h - 2),
+    )
+    # Toppen (smalere)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (x + 2, bush_y, width - 4, 2),
+    )
+    # Subtile høylys (WOOD_DARK — antyder blad-struktur)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARK,
+        (x + 2, bush_y + 1, 1, 3),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARK,
+        (x + width - 3, bush_y + 2, 1, 3),
+    )
 
 
 def _draw_barrel(

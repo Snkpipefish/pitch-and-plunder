@@ -215,6 +215,140 @@ def _make_colonial_lady_sprite() -> pygame.Surface:
     return surf
 
 
+def _make_priest_sprite() -> pygame.Surface:
+    """Katolsk prest — 8×20. Lang mørk kappe med hette.
+
+    Brukes i Havana. Silhuetten er bevisst uten ansiktsdetaljer
+    (hetten skygger for øynene) — antyder "religiøs autoritet" via
+    den enkle omrisset. Palett: STONE_DARK-kappe med STONE_DARKEST-
+    skygger. Ingen varme farger for å unngå konkurranse med
+    Havanas LANTERN-baserte varme palett — presten er et stille
+    mørk-element.
+    """
+    w, h = 8, 20
+    surf = pygame.Surface((w, h)).convert()
+    surf.fill(_CK)
+    # Hette (topp rund, spisser seg)
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARKEST, (2, 0, 4, 1))
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARKEST, (1, 1, 6, 3))
+    # Ansikt (små glimt av hud under hetten)
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (3, 4, 2, 2))
+    # Lang kappe — bred på skuldrene, litt inn på livet, så bred ned
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARK, (0, 6, w, 2))
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARK, (1, 8, w - 2, 8))
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARK, (0, 16, w, 4))
+    # Kappens skygge (vertikal linje på høyre side)
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARKEST, (w - 1, 6, 1, 14))
+    # Kors på brystet — LANTERN for gylden metallglimt
+    pygame.draw.rect(surf, constants.COLOR_LANTERN, (3, 10, 2, 1))
+    pygame.draw.rect(surf, constants.COLOR_LANTERN, (4, 9, 1, 3))
+    surf.set_colorkey(_CK)
+    return surf
+
+
+def _make_spanish_officer_sprite() -> pygame.Surface:
+    """Spansk offiser med morion-hjelm — 9×19.
+
+    Morionen er distinkt sprite-signatur: buet topp med fremoverkant
+    (andre hjelmformer er sjeldne i spillet). LANTERN-aksent på
+    hjelm-kanten antyder metall-refleksjon fra festlys.
+    """
+    w, h = 9, 19
+    surf = pygame.Surface((w, h)).convert()
+    surf.fill(_CK)
+    # Morion-hjelm: buet topp (3 rader) + fremoverkant
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARKEST, (3, 0, 3, 1))
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARKEST, (2, 1, 5, 1))
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARKEST, (1, 2, 7, 2))
+    # Kam-detalj på toppen (høy rygg)
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARKEST, (4, 0, 1, 3))
+    # Metallrefleksjon-høylys
+    pygame.draw.rect(surf, constants.COLOR_LANTERN, (2, 2, 1, 1))
+    # Ansikt
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (3, 4, w - 6, 3))
+    # Krage
+    pygame.draw.rect(surf, constants.COLOR_SHIRT, (2, 7, w - 4, 1))
+    # Drakt — oker/LANTERN (spansk rik varm)
+    pygame.draw.rect(surf, constants.COLOR_LANTERN, (1, 8, w - 2, 6))
+    # Rustnings-skyggelinje
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (1, 9, w - 2, 1))
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (1, 12, w - 2, 1))
+    # Belte
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARKEST, (1, 13, w - 2, 1))
+    # Ben
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (3, 14, 2, 5))
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (5, 14, 2, 5))
+    surf.set_colorkey(_CK)
+    return surf
+
+
+def _make_spanish_merchant_sprite() -> pygame.Surface:
+    """Spansk handelsmann — 9×19. Bred-bremshatt + rik WOOD-drakt.
+
+    Bred hatt skiller seg fra britiske handelsmannens sylinderhatt.
+    Rik WOOD_MID-drakt med EMBER-skjerf-aksent signaliserer
+    "velhavende spansk handelsmann" uten å konkurrere med prestens
+    mørke autoritet eller offiserens metall.
+    """
+    w, h = 9, 19
+    surf = pygame.Surface((w, h)).convert()
+    surf.fill(_CK)
+    # Bred hatt (7 px — bredere enn ansiktet)
+    pygame.draw.rect(surf, constants.COLOR_HAT, (1, 2, w - 2, 1))
+    # Hatt-krone
+    pygame.draw.rect(surf, constants.COLOR_HAT, (2, 0, 5, 2))
+    # Hatt-bånd (EMBER-aksent)
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (2, 1, 5, 1))
+    # Ansikt
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (3, 3, w - 6, 3))
+    # Skjerf (EMBER — rødt over krage)
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (2, 6, w - 4, 1))
+    # Drakt (WOOD_MID — rik brun)
+    pygame.draw.rect(surf, constants.COLOR_WOOD_MID, (1, 7, w - 2, 7))
+    # Frakk-kant
+    pygame.draw.rect(surf, constants.COLOR_WOOD_LIGHT, (1, 7, 1, 7))
+    # Knappe-rekke (LANTERN_BRIGHT)
+    pygame.draw.rect(surf, constants.COLOR_LANTERN_BRIGHT, (4, 9, 1, 1))
+    pygame.draw.rect(surf, constants.COLOR_LANTERN_BRIGHT, (4, 11, 1, 1))
+    # Ben
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (3, 14, 2, 5))
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (5, 14, 2, 5))
+    surf.set_colorkey(_CK)
+    return surf
+
+
+def _make_mantilla_woman_sprite() -> pygame.Surface:
+    """Kvinne med mantilla — 8×20. Sjal over hodet som henger ned
+    over skuldrene.
+
+    Mantilla-silhuetten er distinkt fra kolonial-damens parasoll
+    (som er rund over hodet). Mantillaen er bred på skuldrene og
+    smaler inn mot midjen. Palett: LANTERN-toner (varm kvinnelig
+    figur — kontrast mot prestens mørke).
+    """
+    w, h = 8, 20
+    surf = pygame.Surface((w, h)).convert()
+    surf.fill(_CK)
+    # Mantilla-topp (ovalt over hodet) — EMBER (rik rød-oker)
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (2, 0, 4, 1))
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (1, 1, 6, 2))
+    # Ansikt
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (2, 3, 4, 3))
+    # Mantilla faller ned over skuldrene (bred)
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (0, 6, w, 3))
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (1, 9, w - 2, 2))
+    # Kjole (LANTERN — varm oker)
+    pygame.draw.rect(surf, constants.COLOR_LANTERN, (1, 11, w - 2, 4))
+    pygame.draw.rect(surf, constants.COLOR_LANTERN, (0, 15, w, 5))
+    # Kjole-skygge
+    pygame.draw.rect(surf, constants.COLOR_EMBER, (0, 15, 1, 5))
+    # Sko kikker ut
+    pygame.draw.rect(surf, constants.COLOR_HAT, (2, 19, 2, 1))
+    pygame.draw.rect(surf, constants.COLOR_HAT, (4, 19, 2, 1))
+    surf.set_colorkey(_CK)
+    return surf
+
+
 _SPRITE_FACTORIES = {
     "standing": _make_standing_sprite,
     "sitting": _make_sitting_sprite,
@@ -222,6 +356,10 @@ _SPRITE_FACTORIES = {
     "officer": _make_officer_sprite,
     "merchant": _make_merchant_sprite,
     "colonial_lady": _make_colonial_lady_sprite,
+    "priest": _make_priest_sprite,
+    "spanish_officer": _make_spanish_officer_sprite,
+    "spanish_merchant": _make_spanish_merchant_sprite,
+    "mantilla_woman": _make_mantilla_woman_sprite,
 }
 
 #: Gyldige silhuett-typer. Brukes av port_config.py for validering.

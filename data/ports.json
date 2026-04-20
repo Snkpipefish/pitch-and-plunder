@@ -124,7 +124,38 @@
         "tavern":   {"x": 20,   "y": 258, "w": 200, "h": 82},
         "exchange": {"x": 1180, "y": 248, "w": 200, "h": 92},
         "npcs": {"hawkins": 1270},
-        "dock_interaction_range": [8, 80]
+        "dock_interaction_range": [8, 80],
+        "signature_buildings": [
+          {"kind": "cathedral",        "x": 320, "y": 232, "w": 200, "h": 108},
+          {"kind": "governor_palace",  "x": 580, "y": 256, "w": 260, "h": 84}
+        ],
+        "props": {
+          "ground_texture": "stone_slab",
+          "lanterns": [
+            {"x": 280},
+            {"x": 560},
+            {"x": 880},
+            {"x": 1080}
+          ],
+          "market_stalls": [],
+          "barrel_stacks": [
+            {"x": 930, "count": 2}
+          ],
+          "iron_fences": [],
+          "fountains": [
+            {"x": 910}
+          ],
+          "planters": [
+            {"x": 860},
+            {"x": 970}
+          ],
+          "silhouettes": [
+            {"kind": "priest",           "x": 430},
+            {"kind": "spanish_officer",  "x": 600},
+            {"kind": "spanish_merchant", "x": 790},
+            {"kind": "mantilla_woman",   "x": 1020}
+          ]
+        }
       }
     },
     "nassau": {
