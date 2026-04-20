@@ -48,7 +48,7 @@ from systems import rest as _rest
 from systems import rumors as _rumors
 from systems import suspicion as _suspicion
 from ui.dialog_overlay import DEFAULT_PANEL_H, DEFAULT_PANEL_W, DialogOverlay
-from ui.toast import Toast, ToastQueue
+from ui.toast import ToastQueue
 
 
 #: Norske vare-navn for toast-meldinger.
@@ -128,10 +128,14 @@ class TavernDialog(DialogOverlay):
         port_id: str,
         toasts: ToastQueue | None = None,
     ) -> None:
-        super().__init__(font, panel_w=DEFAULT_PANEL_W, panel_h=DEFAULT_PANEL_H)
+        # C3-10.5: toasts + state passes til base for å aktivere
+        # felles _push_toast + _try_deduct_gold.
+        super().__init__(
+            font, panel_w=DEFAULT_PANEL_W, panel_h=DEFAULT_PANEL_H,
+            toasts=toasts,
+        )
         self._state = game_state
         self._port_id = port_id
-        self._toasts = toasts
         # Cache: fylles på første draw. Invalidation via
         # `_balance_changed()` (hot-reload av rest.room_cost_gold mm)
         # og via gold-value-endring.
@@ -278,18 +282,13 @@ class TavernDialog(DialogOverlay):
         Rom-kjøp setter rest=1.0 direkte via `rest.restore()` (ikke
         decay-basert). Rommet gir full restitusjon uavhengig av pre-
         rest-nivå.
+
+        C3-10.5: gold-guard via base-helper `_try_deduct_gold`.
         """
         cost_gold = _balance.get().rest.room_cost_gold
-        if self._state.player_state.gold < cost_gold:
-            self._push_toast(
-                f"For lite gull (trenger {cost_gold} d.)",
-                constants.COLOR_EMBER,
-            )
+        if not self._try_deduct_gold(cost_gold):
             return
-        self._state.player_state.gold -= cost_gold
         _rest.restore(self._state)
-        # Gold-surface er cachet per gold-value i _ensure_gold; vil re-
-        # rendere neste draw automatisk.
         self._push_toast(
             "Rommet er leid (hvile: full)",
             constants.COLOR_LANTERN_BRIGHT,
@@ -315,15 +314,9 @@ class TavernDialog(DialogOverlay):
         """
         bal = _balance.get()
         cost_gold = bal.pitch_lake.purchase_cost_gold
-        player = self._state.player_state
-        if player.gold < cost_gold:
-            self._push_toast(
-                f"For lite gull (trenger {cost_gold} d.)",
-                constants.COLOR_EMBER,
-            )
+        if not self._try_deduct_gold(cost_gold):
             return
-        # Commit kjøp
-        player.gold -= cost_gold
+        # Commit kjøp (gull allerede trukket av helperen)
         pls = self._state.pitch_lake_state
         pls.purchased = True
         pls.production_per_day = bal.pitch_lake.production_per_day
@@ -351,17 +344,12 @@ class TavernDialog(DialogOverlay):
 
         Sampler tilfeldig annen havn + vare. Trekker gull, konsumerer
         rest, legger til rykte i active_rumors.
+
+        C3-10.5: gold-guard via base-helper.
         """
         bal = _balance.get()
-        cost_gold = bal.rumors.cost_gold
-        player = self._state.player_state
-        if player.gold < cost_gold:
-            self._push_toast(
-                f"For lite gull (trenger {cost_gold} d.)",
-                constants.COLOR_EMBER,
-            )
+        if not self._try_deduct_gold(bal.rumors.cost_gold):
             return
-        player.gold -= cost_gold
         _rumors.buy_regime_preview(self._state)
         _rest.consume_for_action(self._state, bal.rumors.cost_hours)
         self._push_toast(
@@ -376,22 +364,18 @@ class TavernDialog(DialogOverlay):
         gis gull-refund og toast "Du hører ingen ferske rykter".
         `systems.rumors.buy_price_spike_warning` returnerer None ved
         dette tilfellet.
+
+        C3-10.5: gold-guard trekker først, refund håndteres manuelt
+        ved kandidat-mangel (sti-spesifikt).
         """
         bal = _balance.get()
         cost_gold = bal.rumors.cost_gold
-        player = self._state.player_state
-        if player.gold < cost_gold:
-            self._push_toast(
-                f"For lite gull (trenger {cost_gold} d.)",
-                constants.COLOR_EMBER,
-            )
+        if not self._try_deduct_gold(cost_gold):
             return
-        # Trekk først, refund hvis ingen kandidater
-        player.gold -= cost_gold
         rumor = _rumors.buy_price_spike_warning(self._state)
         if rumor is None:
             # Refund — gi gullet tilbake, toast-feedback
-            player.gold += cost_gold
+            self._state.player_state.gold += cost_gold
             self._push_toast(
                 "Du hører ingen ferske rykter",
                 constants.COLOR_FOG,
@@ -417,26 +401,22 @@ class TavernDialog(DialogOverlay):
         """
         bal = _balance.get()
         cost_gold = bal.sabotage.base_cost_gold
-        player = self._state.player_state
-        if player.gold < cost_gold:
-            self._push_toast(
-                f"For lite gull (trenger {cost_gold} d.)",
-                constants.COLOR_EMBER,
-            )
+        if not self._try_deduct_gold(cost_gold):
             return
         target = _market_effects.sample_target(
             self._state, exclude_port=self._port_id
         )
         if target is None:
-            # Defensivt — aldri i prod, men beskytter mot edge-case
+            # Defensivt — aldri i prod, men beskytter mot edge-case.
+            # Refund siden gullet allerede er trukket av helperen.
+            self._state.player_state.gold += cost_gold
             self._push_toast(
                 "Ingen kjøpmenn å sabotere",
                 constants.COLOR_EMBER,
             )
             return
         port_id, commodity_id = target
-        # Commit
-        player.gold -= cost_gold
+        # Commit (gull allerede trukket)
         _market_effects.register_market_effect(
             self._state,
             port_id=port_id,
@@ -471,24 +451,20 @@ class TavernDialog(DialogOverlay):
         """
         bal = _balance.get()
         cost_gold = bal.sabotage.false_rumor_base_cost_gold
-        player = self._state.player_state
-        if player.gold < cost_gold:
-            self._push_toast(
-                f"For lite gull (trenger {cost_gold} d.)",
-                constants.COLOR_EMBER,
-            )
+        if not self._try_deduct_gold(cost_gold):
             return
         target = _market_effects.sample_target(
             self._state, exclude_port=self._port_id
         )
         if target is None:
+            # Refund ved ingen target (defensivt)
+            self._state.player_state.gold += cost_gold
             self._push_toast(
                 "Ingen kjøpmenn å lure",
                 constants.COLOR_EMBER,
             )
             return
         port_id, commodity_id = target
-        player.gold -= cost_gold
         _market_effects.register_market_effect(
             self._state,
             port_id=port_id,
@@ -513,12 +489,7 @@ class TavernDialog(DialogOverlay):
             constants.COLOR_LANTERN_BRIGHT,
         )
 
-    def _push_toast(self, text: str, color) -> None:
-        if self._toasts is None:
-            return
-        self._toasts.push(
-            Toast(font=self._font, text=text, color=color, duration=2.0)
-        )
+    # _push_toast arves fra DialogOverlay (C3-10.5)
 
     # --- Rendering ---
 

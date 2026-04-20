@@ -267,6 +267,115 @@ class TestBalanceHotReload:
 
 
 # -----------------------------------------------------------------------------
+# C3-10.5 harmoniserte helpers: _push_toast + _try_deduct_gold
+# -----------------------------------------------------------------------------
+
+
+class TestPushToastBase:
+    """_push_toast flyttet til DialogOverlay-base fra duplikerte lokale
+    helpere i Tavern/Harbormaster/Cache."""
+
+    def test_none_toasts_is_noop(self, font):
+        """DialogOverlay uten toasts-parameter skal ikke crashe."""
+        d = DialogOverlay(font)
+        # Skulle ikke crashe; ingen observerbar effekt
+        d._push_toast("hei", constants.COLOR_LANTERN)
+        assert d._toasts is None
+
+    def test_toasts_configured_via_init(self, font):
+        from ui.toast import ToastQueue
+        toasts = ToastQueue(baseline_y=340, center_x=320)
+        d = DialogOverlay(font, toasts=toasts)
+        assert d._toasts is toasts
+
+    def test_push_with_toasts_appends(self, font):
+        from ui.toast import ToastQueue
+        toasts = ToastQueue(baseline_y=340, center_x=320)
+        d = DialogOverlay(font, toasts=toasts)
+        assert toasts.count == 0
+        d._push_toast("test", constants.COLOR_LANTERN)
+        assert toasts.count == 1
+
+    def test_push_default_duration(self, font):
+        """Default duration = 2.0 (matcher tidligere eksplisitte
+        kall fra subklassene)."""
+        from ui.toast import ToastQueue
+        toasts = ToastQueue(baseline_y=340, center_x=320)
+        d = DialogOverlay(font, toasts=toasts)
+        d._push_toast("test", constants.COLOR_LANTERN)
+        # Hent siste toast — ToastQueue har ikke pek-API, men
+        # duration-persistence sikres via duration-parameter.
+        # Her verifiserer vi kun at kallet ikke krasjer med default.
+
+    def test_push_custom_duration(self, font):
+        from ui.toast import ToastQueue
+        toasts = ToastQueue(baseline_y=340, center_x=320)
+        d = DialogOverlay(font, toasts=toasts)
+        d._push_toast("test", constants.COLOR_LANTERN, duration=5.0)
+        assert toasts.count == 1
+
+
+class TestTryDeductGoldBase:
+    """_try_deduct_gold konsoliderer gold-guard-mønsteret fra 6
+    tavern-handlere. Semantikk: True + trekk ved suksess, False +
+    feilhint-toast ved insufficient."""
+
+    def _dialog_with_state(self, font, gold: int = 100):
+        """Helper: bygg DialogOverlay med state og toasts."""
+        from ui.toast import ToastQueue
+        toasts = ToastQueue(baseline_y=340, center_x=320)
+        d = DialogOverlay(font, toasts=toasts)
+        d._state = GameState()
+        d._state.player_state.gold = gold
+        return d, toasts
+
+    def test_returns_true_when_gold_sufficient(self, font):
+        d, _ = self._dialog_with_state(font, gold=100)
+        result = d._try_deduct_gold(50)
+        assert result is True
+
+    def test_deducts_gold_on_success(self, font):
+        d, _ = self._dialog_with_state(font, gold=100)
+        d._try_deduct_gold(30)
+        assert d._state.player_state.gold == 70
+
+    def test_returns_false_when_insufficient(self, font):
+        d, _ = self._dialog_with_state(font, gold=10)
+        result = d._try_deduct_gold(50)
+        assert result is False
+
+    def test_no_deduction_on_failure(self, font):
+        d, _ = self._dialog_with_state(font, gold=10)
+        d._try_deduct_gold(50)
+        assert d._state.player_state.gold == 10
+
+    def test_pushes_error_toast_on_failure(self, font):
+        d, toasts = self._dialog_with_state(font, gold=10)
+        assert toasts.count == 0
+        d._try_deduct_gold(50)
+        assert toasts.count == 1
+
+    def test_exact_amount_succeeds(self, font):
+        """Grense-tilfelle: gull == cost skal trekke til 0."""
+        d, _ = self._dialog_with_state(font, gold=50)
+        assert d._try_deduct_gold(50) is True
+        assert d._state.player_state.gold == 0
+
+    def test_no_state_returns_false_defensive(self, font):
+        """DialogOverlay uten _state satt (feilbruk) skal returnere
+        False uten å crashe."""
+        d = DialogOverlay(font)
+        assert d._state is None
+        assert d._try_deduct_gold(50) is False
+
+    def test_zero_cost_always_succeeds(self, font):
+        """Kost = 0 → alltid OK (trekker 0)."""
+        d, _ = self._dialog_with_state(font, gold=0)
+        assert d._try_deduct_gold(0) is True
+        assert d._state.player_state.gold == 0
+
+
+# -----------------------------------------------------------------------------
 # Stub dialog-klasser
 # -----------------------------------------------------------------------------
 

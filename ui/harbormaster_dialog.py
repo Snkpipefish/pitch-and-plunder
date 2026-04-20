@@ -49,7 +49,7 @@ from systems import balance as _balance
 from systems import rest as _rest
 from systems import voyage as _voyage
 from ui.dialog_overlay import DEFAULT_PANEL_H, DEFAULT_PANEL_W, DialogOverlay
-from ui.toast import Toast, ToastQueue
+from ui.toast import ToastQueue
 
 
 #: Action-id-prefiks for reise-oppføringer (destinasjons-id appenderes).
@@ -106,10 +106,13 @@ class HarbormasterDialog(DialogOverlay):
         port_id: str,
         toasts: ToastQueue | None = None,
     ) -> None:
-        super().__init__(font, panel_w=DEFAULT_PANEL_W, panel_h=DEFAULT_PANEL_H)
+        # C3-10.5: toasts via base — felles _push_toast-helper.
+        super().__init__(
+            font, panel_w=DEFAULT_PANEL_W, panel_h=DEFAULT_PANEL_H,
+            toasts=toasts,
+        )
         self._state = game_state
         self._port_id = port_id
-        self._toasts = toasts
         #: Scene-owner leser denne når `want_close` settes. None = lukk
         #: uten transisjon (ESC).
         self.requested_next_scene: str | None = None
@@ -338,12 +341,7 @@ class HarbormasterDialog(DialogOverlay):
         self._want_close = True
         self.open_cache = True
 
-    def _push_toast(self, text: str, color) -> None:
-        if self._toasts is None:
-            return
-        self._toasts.push(
-            Toast(font=self._font, text=text, color=color, duration=2.0)
-        )
+    # _push_toast arves fra DialogOverlay (C3-10.5)
 
     # --- Rendering ---
 

@@ -260,11 +260,23 @@ class TestOnDawn:
 class TestDawnPipelineIntegration:
     def test_effects_applied_via_tick_all_ports_dawn(self, state):
         """Full dawn-pipeline kjører market_effects.on_dawn etter
-        rumors og suspicion."""
+        rumors og suspicion.
+
+        C3-10.5 test-hardening: tvinger regime til `stable` (0% drift)
+        for alle havner slik at price-endringen er deterministisk
+        basert kun på pending-effect + noise (±1%). Tidligere var
+        testen flaky pga random regime-drift i `new_game_state`.
+        """
         state.world_state.clock.day = 3
         state.economy_state.markets["havana"].commodities["rum"] = (
             CommodityMarket(current_price=100.0, price_history=[])
         )
+        # Tving alle regimer stable for deterministisk test
+        for port_id, regime_dict in state.economy_state.regimes.items():
+            for cid in regime_dict:
+                regime_dict[cid] = RegimeState(
+                    current="stable", days_remaining=5,
+                )
         market_effects.register_market_effect(
             state, port_id="havana", commodity_id="rum",
             direction="up", magnitude_pct=10.0,
@@ -273,10 +285,11 @@ class TestDawnPipelineIntegration:
         m = Market.from_json("data/commodities.json")
         rm = RegimeManager()
         tick_all_ports_dawn(state, m, rm)
-        # Effekten anvendt. current_price påvirkes først av regime-drift
-        # (stable = 0) og så av market_effects (+10%). Kan være ±1% noise.
+        # Stable regime = 0% drift, pluss ±1% noise fra market.on_dawn,
+        # deretter +10% fra market_effects. Forventet range:
+        # 100 × [0.99, 1.01] × 1.10 = [108.9, 111.1].
         new_price = state.economy_state.markets["havana"].commodities["rum"].current_price
-        assert new_price >= 109.0  # ~110 minus liten noise
+        assert 108.5 <= new_price <= 111.5
         assert state.economy_state.pending_market_effects == []
 
     def test_multi_day_voyage_effect_triggers_on_correct_day(self, state):

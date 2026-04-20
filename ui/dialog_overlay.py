@@ -63,10 +63,16 @@ med kolonne-layout og A/D-kjøp/salg-logikk.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pygame
 
 import constants
 from systems import balance as _balance
+from ui.toast import Toast, ToastQueue
+
+if TYPE_CHECKING:
+    from state.game_state import GameState
 
 
 #: Standard panel-dimensjoner fra Exchange (Fase 1). Subklasser kan
@@ -87,6 +93,7 @@ class DialogOverlay:
         font: pygame.font.Font,
         panel_w: int = DEFAULT_PANEL_W,
         panel_h: int = DEFAULT_PANEL_H,
+        toasts: ToastQueue | None = None,
     ) -> None:
         self._font = font
         self._panel_w = panel_w
@@ -97,6 +104,14 @@ class DialogOverlay:
         self._want_close = False
         self._selected = 0
         self._balance_tick_id_seen = _balance.tick_id()
+        # Fase 3 C3-10.5: felles toast-kø. Subklasser kan overskrive
+        # `self._toasts` etter super() hvis de har annen lifecycle.
+        self._toasts = toasts
+        # Subklasser setter `_state` eksplisitt etter super().__init__
+        # for å aktivere `_try_deduct_gold`-helperen. None-default gjør
+        # at test-instansiering uten state ikke crasher basis-
+        # oppførselen (panel, ESC, cursor fungerer).
+        self._state: "GameState | None" = None
 
     # --- Lifecycle ---
 
@@ -189,6 +204,64 @@ class DialogOverlay:
             self._balance_tick_id_seen = current
             return True
         return False
+
+    # --- Felles handler-helpers (C3-10.5 konsolidering) ---
+
+    def _push_toast(
+        self,
+        text: str,
+        color: tuple[int, int, int],
+        duration: float = 2.0,
+    ) -> None:
+        """Push en toast til dialogens toasts-kø. No-op hvis ingen kø
+        er konfigurert (test-modus eller ScoreOverlay/RumorsDialog).
+
+        Fase 3 C3-10.5: konsolidert fra duplikert logikk i Tavern-,
+        Harbormaster- og Cache-dialogene. Eksisterende semantikk
+        bevart bit-for-bit.
+        """
+        if self._toasts is None:
+            return
+        self._toasts.push(
+            Toast(
+                font=self._font, text=text, color=color, duration=duration,
+            )
+        )
+
+    def _try_deduct_gold(self, cost_gold: int) -> bool:
+        """Trekk `cost_gold` fra spillerens gull hvis råd.
+
+        Returnerer True ved suksess (gull trukket). Returnerer False
+        og pusher feilhint-toast ved insufficient gold eller manglende
+        `_state`. Caller gjør vanligvis `if not self._try_deduct_gold(...)
+        : return` for early-exit.
+
+        Fase 3 C3-10.5: konsolidert gold-guard-mønster fra 6 tavern-
+        handlere (buy_room, purchase_pitch_lake, buy_rumor_regime/spike,
+        order_sabotage, spread_false_rumor). Semantikken matcher
+        eksisterende handlere 1:1: samme feilhint-tekst ("For lite
+        gull (trenger N d.)"), samme farge (EMBER), samme deduct-
+        ved-suksess.
+
+        Bruker `self._state` som subklasser må sette etter
+        `super().__init__`. Hvis ikke satt (feilbruk), returnerer
+        False uten mutasjon — defensiv mot programmer-feil.
+
+        Handlere med refund-behov (f.eks. buy_rumor_spike ved ingen
+        kandidater, order_sabotage ved ingen target) må manuelt
+        refundere ved å øke `self._state.player_state.gold` etter
+        feilet validering.
+        """
+        if self._state is None:
+            return False
+        if self._state.player_state.gold < cost_gold:
+            self._push_toast(
+                f"For lite gull (trenger {cost_gold} d.)",
+                constants.COLOR_EMBER,
+            )
+            return False
+        self._state.player_state.gold -= cost_gold
+        return True
 
     # --- Subklasse-hook ---
 

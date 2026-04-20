@@ -50,7 +50,7 @@ from state import GameState
 from systems import balance as _balance
 from systems import rest as _rest
 from ui.dialog_overlay import DEFAULT_PANEL_H, DEFAULT_PANEL_W, DialogOverlay
-from ui.toast import Toast, ToastQueue
+from ui.toast import ToastQueue
 
 
 #: Modus-konstanter
@@ -95,10 +95,13 @@ class CacheSubDialog(DialogOverlay):
         port_id: str,
         toasts: ToastQueue | None = None,
     ) -> None:
-        super().__init__(font, panel_w=DEFAULT_PANEL_W, panel_h=DEFAULT_PANEL_H)
+        # C3-10.5: toasts via base — felles _push_toast.
+        super().__init__(
+            font, panel_w=DEFAULT_PANEL_W, panel_h=DEFAULT_PANEL_H,
+            toasts=toasts,
+        )
         self._state = game_state
         self._port_id = port_id
-        self._toasts = toasts
         # Modus-state: "deposit" (legg inn) eller "withdraw" (ta ut).
         self._mode: str = MODE_DEPOSIT
         # Gjeldende beløp som ventes på commit. 0 = no-op ved Enter.
@@ -267,12 +270,7 @@ class CacheSubDialog(DialogOverlay):
         # Nullstill beløp etter commit
         self._amount = 0
 
-    def _push_toast(self, text: str, color) -> None:
-        if self._toasts is None:
-            return
-        self._toasts.push(
-            Toast(font=self._font, text=text, color=color, duration=2.0)
-        )
+    # _push_toast arves fra DialogOverlay (C3-10.5)
 
     # --- Rendering ---
 

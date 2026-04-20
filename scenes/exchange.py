@@ -91,7 +91,10 @@ class ExchangeOverlay(DialogOverlay):
     ) -> None:
         # Base gir self._font, self._panel_surface, self._want_close,
         # self._selected, self._balance_tick_id_seen + navigation/panel.
-        super().__init__(font, panel_w=PANEL_W, panel_h=PANEL_H)
+        # C3-10.5: toasts via base slik at `_push_toast`-helper er
+        # tilgjengelig. Exchange beholder sin egen `_push_toast_once`
+        # for dedup-semantikk (ulik base-kontrakten).
+        super().__init__(font, panel_w=PANEL_W, panel_h=PANEL_H, toasts=toasts)
         self._market = market
         self._state = state
         self._port_name = port_name
@@ -99,9 +102,6 @@ class ExchangeOverlay(DialogOverlay):
         # leses fra market_state per call.
         self._commodities = market.commodities
         self._n = len(self._commodities)
-        # ToastQueue delt med VillageScene – brukes for feilhint
-        # (gullmangel) ved mislykket kjøp. None = ingen toasts (testmodus).
-        self._toasts = toasts
 
         # Statisk pre-rendret
         self._name_surfs = {
