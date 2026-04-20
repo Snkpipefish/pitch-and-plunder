@@ -280,17 +280,20 @@ def test_7_roundtrip_on_disk(
 # -----------------------------------------------------------------------------
 
 
-def test_new_game_state_has_pitch_lake_defaults_from_balance() -> None:
-    """save.new_game_state() skal lese pitch-lake-defaults fra balance
-    singleton (ikke hardkodede tall). Gjenoppretter dekning fra tidligere
-    `test_fresh_state_save_has_pitch_lake_with_upkeep`.
+def test_new_game_state_fresh_pitch_lake_has_not_purchased() -> None:
+    """Fase 3 C3-6: fresh v6-save har purchased=False og
+    production_per_day=0/upkeep_per_day=0. Produksjon starter først når
+    spilleren kjøper anlegget i tavern-dag-meny i Tortuga.
+
+    Erstatter tidligere test som antok at v5-defaults (2/8) gjaldt ved
+    fresh save — nå er dette gated bak `purchased=True`.
     """
-    from systems import balance, save
+    from systems import save
 
     gs = save.new_game_state()
-    bal = balance.get()
-    assert gs.pitch_lake_state.production_per_day == bal.pitch_lake.production_per_day
-    assert gs.pitch_lake_state.upkeep_per_day == bal.pitch_lake.upkeep_per_day
+    assert gs.pitch_lake_state.purchased is False
+    assert gs.pitch_lake_state.production_per_day == 0
+    assert gs.pitch_lake_state.upkeep_per_day == 0
     assert gs.pitch_lake_state.total_produced == 0
     assert gs.pitch_lake_state.last_production_day == 0
     assert gs.pitch_lake_state.pending_units == 0

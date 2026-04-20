@@ -1,4 +1,11 @@
-"""Tester for `systems.pitch_lake` med nested GameState v5 (Fase 2B C1b)."""
+"""Tester for `systems.pitch_lake` med nested GameState (Fase 2B C1b + Fase 3 C3-6).
+
+C3-6-tilpasning: Alle eksisterende tester konstruerer et PitchLakeState
+via `_pl()`-helperen som setter `purchased=True`. Gaten i
+`PitchLake.on_new_day` krever purchased for å produsere, og Fase 2B-
+adferden testes nå under aksjonen "etter kjøp". Tester for purchased=
+False-gate finnes i egne klasser (TestPurchasedGate / TestMigrationFlow).
+"""
 
 from __future__ import annotations
 
@@ -7,6 +14,16 @@ from state import GameState, PitchLakeState
 from state.ship_state import ShipState
 from systems.game_clock import GameClock
 from systems.pitch_lake import PITCH_ID, PitchLake
+
+
+def _pl(**kwargs) -> PitchLakeState:
+    """Helper: PitchLakeState med `purchased=True` default (Fase 3 C3-6).
+
+    Tester som utrykkelig vil teste purchased=False-gaten setter det
+    selv (se TestPurchasedGate).
+    """
+    kwargs.setdefault("purchased", True)
+    return PitchLakeState(**kwargs)
 
 
 def _fresh_state(
@@ -28,7 +45,7 @@ def _fresh_state(
 class TestNormalProduction:
     def test_empty_inventory_produces_full_amount(self):
         state = _fresh_state(gold=300)
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         produced, paid = PitchLake.on_new_day(pl, state)
         assert produced == 2
         assert paid == 8
@@ -38,7 +55,7 @@ class TestNormalProduction:
 
     def test_total_produced_accumulates(self):
         state = _fresh_state(gold=1000)
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         PitchLake.on_new_day(pl, state)
         state.world_state.clock.day = 2
         PitchLake.on_new_day(pl, state)
@@ -48,13 +65,13 @@ class TestNormalProduction:
 
     def test_last_production_day_set_when_produced(self):
         state = _fresh_state(clock_day=7, gold=300)
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         PitchLake.on_new_day(pl, state)
         assert pl.last_production_day == 7
 
     def test_gold_decrements_each_day(self):
         state = _fresh_state(gold=100)
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         for _ in range(5):
             PitchLake.on_new_day(pl, state)
         assert state.player_state.gold == 100 - 40
@@ -67,7 +84,7 @@ class TestNormalProduction:
 class TestUpkeepPayment:
     def test_exact_gold_for_upkeep_produces_normally(self):
         state = _fresh_state(gold=8)
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         produced, paid = PitchLake.on_new_day(pl, state)
         assert produced == 2
         assert paid == 8
@@ -75,7 +92,7 @@ class TestUpkeepPayment:
 
     def test_insufficient_gold_drains_and_produces_zero(self):
         state = _fresh_state(gold=5)
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         produced, paid = PitchLake.on_new_day(pl, state)
         assert produced == 0
         assert paid == 5
@@ -83,7 +100,7 @@ class TestUpkeepPayment:
 
     def test_zero_gold_no_production_no_payment(self):
         state = _fresh_state(gold=0)
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         produced, paid = PitchLake.on_new_day(pl, state)
         assert produced == 0
         assert paid == 0
@@ -91,14 +108,14 @@ class TestUpkeepPayment:
 
     def test_no_production_does_not_update_last_production_day(self):
         state = _fresh_state(clock_day=7, gold=0)
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         pl.last_production_day = 3
         PitchLake.on_new_day(pl, state)
         assert pl.last_production_day == 3
 
     def test_failed_production_does_not_increment_total_produced(self):
         state = _fresh_state(gold=5)
-        pl = PitchLakeState(
+        pl = _pl(
             production_per_day=2, upkeep_per_day=8, total_produced=10
         )
         PitchLake.on_new_day(pl, state)
@@ -106,7 +123,7 @@ class TestUpkeepPayment:
 
     def test_custom_upkeep_cost(self):
         state = _fresh_state(gold=100)
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=20)
+        pl = _pl(production_per_day=2, upkeep_per_day=20)
         produced, paid = PitchLake.on_new_day(pl, state)
         assert paid == 20
         assert state.player_state.gold == 80
@@ -125,7 +142,7 @@ class TestWeightedAverage:
         state.player_state.inventory[PITCH_ID] = InventoryItem(
             quantity=5, avg_cost=40.0
         )
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         PitchLake.on_new_day(pl, state)
         pitch = state.player_state.inventory[PITCH_ID]
         assert pitch.quantity == 7
@@ -133,7 +150,7 @@ class TestWeightedAverage:
 
     def test_zero_existing_inventory_avg_stays_zero(self):
         state = _fresh_state(gold=300)
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         PitchLake.on_new_day(pl, state)
         assert state.player_state.inventory[PITCH_ID].avg_cost == 0.0
 
@@ -148,7 +165,7 @@ class TestCargoLimit:
         state.player_state.inventory["sugar"] = InventoryItem(
             quantity=40, avg_cost=50.0
         )
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         produced, paid = PitchLake.on_new_day(pl, state)
         assert produced == 0
         assert paid == 8
@@ -158,7 +175,7 @@ class TestCargoLimit:
     def test_partial_space_produces_partial(self):
         state = _fresh_state(cargo_cap=40, gold=300)
         state.player_state.inventory["sugar"] = InventoryItem(quantity=39)
-        pl = PitchLakeState(production_per_day=2, upkeep_per_day=8)
+        pl = _pl(production_per_day=2, upkeep_per_day=8)
         produced, _ = PitchLake.on_new_day(pl, state)
         assert produced == 1
         assert state.player_state.inventory[PITCH_ID].quantity == 1
@@ -171,7 +188,7 @@ class TestCargoLimit:
 class TestCustomProduction:
     def test_zero_production_per_day(self):
         state = _fresh_state(gold=300)
-        pl = PitchLakeState(production_per_day=0, upkeep_per_day=8)
+        pl = _pl(production_per_day=0, upkeep_per_day=8)
         produced, paid = PitchLake.on_new_day(pl, state)
         assert produced == 0
         assert paid == 8
@@ -179,7 +196,7 @@ class TestCustomProduction:
 
     def test_higher_production_per_day(self):
         state = _fresh_state(gold=300)
-        pl = PitchLakeState(production_per_day=5, upkeep_per_day=8)
+        pl = _pl(production_per_day=5, upkeep_per_day=8)
         produced, _ = PitchLake.on_new_day(pl, state)
         assert produced == 5
 
@@ -201,7 +218,7 @@ class TestPendingUnitsAway:
             from_port="tortuga", to_port="havana",
             depart_day=1, arrival_day=4,
         )
-        pl = PitchLakeState(
+        pl = _pl(
             home_port="tortuga", production_per_day=2, upkeep_per_day=8,
         )
         produced, paid = PitchLake.on_new_day(pl, state)
@@ -215,7 +232,7 @@ class TestPendingUnitsAway:
         state = _fresh_state(gold=300)
         # Ingen voyage, men current_port != home_port
         state.world_state.current_port = "port_royal"
-        pl = PitchLakeState(
+        pl = _pl(
             home_port="tortuga", production_per_day=2, upkeep_per_day=8,
         )
         produced, _ = PitchLake.on_new_day(pl, state)
@@ -230,7 +247,7 @@ class TestPendingUnitsAway:
             from_port="tortuga", to_port="nassau",
             depart_day=1, arrival_day=5,
         )
-        pl = PitchLakeState(
+        pl = _pl(
             home_port="tortuga", production_per_day=2, upkeep_per_day=8,
         )
         for day in range(1, 5):
@@ -251,7 +268,7 @@ class TestPendingUnitsAway:
             from_port="tortuga", to_port="havana",
             depart_day=1, arrival_day=4,
         )
-        pl = PitchLakeState(
+        pl = _pl(
             home_port="tortuga", production_per_day=2, upkeep_per_day=8,
         )
         produced, _ = PitchLake.on_new_day(pl, state)
@@ -269,7 +286,7 @@ class TestPendingUnitsAway:
             from_port="tortuga", to_port="havana",
             depart_day=10, arrival_day=13,
         )
-        pl = PitchLakeState(
+        pl = _pl(
             home_port="tortuga", production_per_day=2, upkeep_per_day=8,
             last_production_day=0,
         )
@@ -284,7 +301,7 @@ class TestPendingUnitsAway:
 class TestRealizePendingUnits:
     def test_moves_pending_to_inventory_up_to_capacity(self):
         state = _fresh_state(cargo_cap=10, gold=100)
-        pl = PitchLakeState(
+        pl = _pl(
             home_port="tortuga", production_per_day=2, upkeep_per_day=8,
             pending_units=5,
         )
@@ -297,7 +314,7 @@ class TestRealizePendingUnits:
         state = _fresh_state(cargo_cap=10, gold=100)
         # 7 enheter allerede i lasterom — kun 3 plasser ledig
         state.player_state.inventory["sugar"] = InventoryItem(quantity=7, avg_cost=40.0)
-        pl = PitchLakeState(
+        pl = _pl(
             home_port="tortuga", production_per_day=2, upkeep_per_day=8,
             pending_units=8,
         )
@@ -309,7 +326,7 @@ class TestRealizePendingUnits:
 
     def test_noop_when_pending_zero(self):
         state = _fresh_state(cargo_cap=10, gold=100)
-        pl = PitchLakeState(
+        pl = _pl(
             home_port="tortuga", production_per_day=2, upkeep_per_day=8,
             pending_units=0,
         )
@@ -320,7 +337,7 @@ class TestRealizePendingUnits:
     def test_noop_when_cargo_full(self):
         state = _fresh_state(cargo_cap=5, gold=100)
         state.player_state.inventory["sugar"] = InventoryItem(quantity=5, avg_cost=40.0)
-        pl = PitchLakeState(
+        pl = _pl(
             home_port="tortuga", production_per_day=2, upkeep_per_day=8,
             pending_units=10,
         )

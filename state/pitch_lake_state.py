@@ -18,16 +18,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from systems import balance as _balance
-
-
-def _default_production_per_day() -> int:
-    return _balance.get().pitch_lake.production_per_day
-
-
-def _default_upkeep_per_day() -> int:
-    return _balance.get().pitch_lake.upkeep_per_day
-
 
 @dataclass
 class PitchLakeState:
@@ -45,20 +35,28 @@ class PitchLakeState:
 
     @classmethod
     def new_default(cls) -> "PitchLakeState":
-        """Bygger en PitchLakeState med defaults fra balance.
+        """Bygger en PitchLakeState for fresh save (Fase 3 C3-6).
 
-        Egen klassemetode i stedet for `field(default_factory=...)` fordi
-        asdict/dict-unpacking skal gi forutsigbare verdier i load() —
-        defaults brukes KUN ved ny save (ikke ved migrering), og da går
-        det via denne funksjonen eksplisitt.
+        Fresh v6-save: `purchased=False` og `production_per_day=0`/
+        `upkeep_per_day=0`. Spillet kjører uten bek-produksjon før
+        spilleren kjøper anlegget via tavern-dag-meny i Tortuga, som
+        setter `purchased=True` og fyller produksjons-verdier fra
+        `balance.pitch_lake`.
 
-        `purchased=False` på fresh save (C3-0 stub-semantikk — ikke
-        koblet). C3-6 gate-logikk bruker dette.
+        Migrerte v5-saves går IKKE gjennom denne funksjonen — de
+        beholder sine v5-produksjons-verdier (typisk 2/8) og får
+        `purchased=True` satt av migrate_v5_to_v6. Dette sikrer at
+        eksisterende dev-saves fortsetter å produsere uavbrutt.
+
+        Egen klassemetode i stedet for `field(default_factory=...)`
+        fordi asdict/dict-unpacking skal gi forutsigbare verdier i
+        load() — defaults brukes KUN ved ny save (ikke ved migrering),
+        og da går det via denne funksjonen eksplisitt.
         """
         return cls(
             home_port="tortuga",
-            production_per_day=_default_production_per_day(),
-            upkeep_per_day=_default_upkeep_per_day(),
+            production_per_day=0,
+            upkeep_per_day=0,
             pending_units=0,
             total_produced=0,
             last_production_day=0,

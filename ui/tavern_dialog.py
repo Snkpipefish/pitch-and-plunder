@@ -237,6 +237,8 @@ class TavernDialog(DialogOverlay):
             return
         if entry.action_id == ACTION_BUY_ROOM:
             self._do_buy_room()
+        elif entry.action_id == ACTION_PITCH_LAKE_PURCHASE:
+            self._do_purchase_pitch_lake()
 
     # --- Aktive handlinger ---
 
@@ -260,6 +262,51 @@ class TavernDialog(DialogOverlay):
         # rendere neste draw automatisk.
         self._push_toast(
             "Rommet er leid (hvile: full)",
+            constants.COLOR_LANTERN_BRIGHT,
+        )
+
+    def _do_purchase_pitch_lake(self) -> None:
+        """Kjøp bek-anlegget (Fase 3 C3-6). Kun i Tortuga, kun før kjøp.
+
+        Flyt:
+        1. Sjekk at spilleren har råd (gold >= purchase_cost_gold).
+           Insufficient → EMBER feilhint-toast, ingen mutasjon.
+        2. Commit: trekk gull, sett `purchased=True`, sett
+           `production_per_day` og `upkeep_per_day` fra balance.
+        3. Invalidér entry-cache → oppføringen forsvinner fra neste
+           draw (siden `_build_entries()` skjuler den når purchased).
+        4. LANTERN_BRIGHT suksess-toast (samme som rom-kjøp).
+
+        INGEN handlings-tid-konsum i C3-6 (samme som rom-kjøp) —
+        ActionBudget-wiring venter.
+
+        Produksjon starter FRA NESTE dawn-tick: `PitchLake.on_new_day`
+        leser purchased-flagget og produksjons-verdier umiddelbart.
+        """
+        bal = _balance.get()
+        cost_gold = bal.pitch_lake.purchase_cost_gold
+        player = self._state.player_state
+        if player.gold < cost_gold:
+            self._push_toast(
+                f"For lite gull (trenger {cost_gold} d.)",
+                constants.COLOR_EMBER,
+            )
+            return
+        # Commit kjøp
+        player.gold -= cost_gold
+        pls = self._state.pitch_lake_state
+        pls.purchased = True
+        pls.production_per_day = bal.pitch_lake.production_per_day
+        pls.upkeep_per_day = bal.pitch_lake.upkeep_per_day
+        # Invalidér entry-cache slik at "Invester ..."-oppføringen
+        # forsvinner fra menyen neste draw-kall (siden
+        # `_build_entries()` skjuler den når purchased=True).
+        self._entries_cached = None
+        # Seleksjon kan nå peke på en entry som ikke lenger finnes.
+        # Re-snap til første aktive.
+        self._selected = 0
+        self._push_toast(
+            "Bek-anlegget er ditt!",
             constants.COLOR_LANTERN_BRIGHT,
         )
 
@@ -343,19 +390,26 @@ class TavernDayDialog(TavernDialog):
                 active=False,
             ),
         ]
-        # Bek-anlegg-kjøp: kun i Tortuga, kun før kjøp. Stubbed i C3-3
-        # per presisering — gating-logikk landes sammen med purchase-
-        # aktivering i C3-6 for å unngå "knapp som ikke gjør noe".
+        # Bek-anlegg-kjøp (Fase 3 C3-6): kun i Tortuga, kun før kjøp.
+        # Aktiv ved insufficient gold (guard ved aktivering, som rom-kjøp)
+        # slik at spilleren ser prisen eksplisitt. Etter purchased=True
+        # skjules oppføringen (ikke inaktiv, helt fjernet).
         if (
             self._port_id == "tortuga"
             and not self._state.pitch_lake_state.purchased
         ):
+            purchase_hours = bal.actions.cost_hours_per_action.get(
+                "pitch_lake_purchase", 0.0
+            )
             entries.append(
                 TavernEntry(
                     action_id=ACTION_PITCH_LAKE_PURCHASE,
                     label="Invester i bek-produksjon",
-                    cost_label="(kommer i C3-6)",
-                    active=False,
+                    cost_label=(
+                        f"{bal.pitch_lake.purchase_cost_gold} gull, "
+                        f"{purchase_hours:.1f} h"
+                    ),
+                    active=True,
                 )
             )
         return entries

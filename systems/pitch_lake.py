@@ -62,7 +62,13 @@ class PitchLake:
         state.pitch_lake_state med balance etter vellykket reload —
         live-applicable per spec §4.4.
 
-        Flyt:
+        **Fase 3 C3-6 gate**: Hvis `state.purchased` er False er anlegget
+        ikke kjøpt — returnér (0, 0) umiddelbart uten upkeep-trekk eller
+        produksjon. Spilleren må kjøpe anlegget via tavern-dag-meny i
+        Tortuga (koster `balance.pitch_lake.purchase_cost_gold`) før
+        produksjonen starter fra neste dawn.
+
+        Flyt (ved purchased=True):
         1. Trekk upkeep fra gull. `paid_upkeep = min(upkeep, gold)`.
            gold settes til `gold - paid_upkeep` (kan bli 0 men ikke negativ).
         2. Hvis `paid_upkeep < upkeep` (ikke råd til full lønn) → produced=0.
@@ -77,6 +83,13 @@ class PitchLake:
            uavhengig av om bek havner i inventar eller pending — produksjonen
            HAR skjedd.
         """
+        # Fase 3 C3-6: hard gate på purchased-flagget. Ingen upkeep, ingen
+        # produksjon før spilleren har kjøpt anlegget. Migrerte v5-saves
+        # (v5→v6) har purchased=True satt ved load, så eksisterende bek-
+        # produksjon fortsetter uendret.
+        if not state.purchased:
+            return 0, 0
+
         player = game_state.player_state
         world = game_state.world_state
         ship = world.ship

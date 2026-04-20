@@ -71,7 +71,11 @@ def _keydown(key: int) -> pygame.event.Event:
 
 class TestDayEntries:
     def test_tortuga_fresh_save_has_three_entries(self, font, state):
-        """Tortuga før bek-anlegg-kjøp: rom + rykter-stub + bek-stub."""
+        """Tortuga før bek-anlegg-kjøp: rom + rykter-stub + bek-kjøp.
+
+        C3-3: bek-entry var stubbed (active=False).
+        C3-6: bek-entry er aktiv med pris-label.
+        """
         assert state.pitch_lake_state.purchased is False
         d = TavernDayDialog(font, state, port_id="tortuga")
         entries = d._build_entries()
@@ -79,9 +83,9 @@ class TestDayEntries:
         assert entries[0].action_id == ACTION_BUY_ROOM
         assert entries[0].active is True
         assert entries[1].action_id == ACTION_RUMOR_LISTEN_FREE
-        assert entries[1].active is False
+        assert entries[1].active is False  # rykter fortsatt stubbet (C3-9)
         assert entries[2].action_id == ACTION_PITCH_LAKE_PURCHASE
-        assert entries[2].active is False
+        assert entries[2].active is True  # C3-6: aktivert
 
     def test_tortuga_after_purchase_hides_pitch_entry(self, font, state):
         """Etter purchased=True skjules bek-anlegg-entry."""
@@ -100,11 +104,18 @@ class TestDayEntries:
         assert ACTION_PITCH_LAKE_PURCHASE not in action_ids
         assert len(entries) == 2
 
-    def test_only_rom_is_active(self, font, state):
-        """C3-3: rom-kjøp er eneste aktive handling i dag-menyen."""
+    def test_tortuga_active_entries_include_rom_and_bek(self, font, state):
+        """C3-6: Tortuga har to aktive entries før bek-kjøp (rom + bek).
+        Etter kjøp: kun rom aktiv.
+        """
         d = TavernDayDialog(font, state, port_id="tortuga")
-        entries = d._build_entries()
-        active_ids = [e.action_id for e in entries if e.active]
+        active_ids = [e.action_id for e in d._build_entries() if e.active]
+        assert set(active_ids) == {ACTION_BUY_ROOM, ACTION_PITCH_LAKE_PURCHASE}
+
+    def test_non_tortuga_only_rom_is_active(self, font, state):
+        """Andre havner har ikke bek-entry; kun rom er aktiv."""
+        d = TavernDayDialog(font, state, port_id="havana")
+        active_ids = [e.action_id for e in d._build_entries() if e.active]
         assert active_ids == [ACTION_BUY_ROOM]
 
 
@@ -154,17 +165,42 @@ class TestNavigationSkipsInactive:
         # rom-entry på index 0, som er aktiv
         assert d.selected == 0
 
-    def test_down_skips_inactive_to_next_active(self, font, state):
-        """I TavernDayDialog er bare rom (index 0) aktiv. Down skal wrap
-        tilbake til rom."""
+    def test_down_skips_rumor_stub_to_bek(self, font, state):
+        """C3-6: Tortuga har rom (0) + rykter-stub (1, inaktiv) + bek-
+        kjøp (2, aktiv). Down fra rom skipper rykter og lander på bek."""
         d = TavernDayDialog(font, state, port_id="tortuga")
+        assert d.selected == 0  # rom
         d.handle_event(_keydown(pygame.K_DOWN))
-        assert d.selected == 0  # wrap-around siden ingen andre er aktive
+        assert d.selected == 2  # hopper over inaktiv rykter-stub
 
-    def test_up_skips_inactive_to_prev_active(self, font, state):
+    def test_up_wraps_around_through_active_only(self, font, state):
+        """Up fra rom (0) wrap til bek-kjøp (2) siden rykter (1) er stubbet."""
         d = TavernDayDialog(font, state, port_id="tortuga")
         d.handle_event(_keydown(pygame.K_UP))
-        assert d.selected == 0  # samme, wrap
+        assert d.selected == 2
+
+    def test_down_from_bek_wraps_to_rom(self, font, state):
+        d = TavernDayDialog(font, state, port_id="tortuga")
+        d._selected = 2  # bek
+        d.handle_event(_keydown(pygame.K_DOWN))
+        assert d.selected == 0  # wrap til rom (hopper over rykter-stub)
+
+    def test_after_purchase_only_rom_active_tortuga(self, font, state):
+        """Etter bek-kjøp har Tortuga kun rom som aktiv (rykter fortsatt
+        stubbet). Down/up wrapper til rom."""
+        state.pitch_lake_state.purchased = True
+        d = TavernDayDialog(font, state, port_id="tortuga")
+        assert d.selected == 0
+        d.handle_event(_keydown(pygame.K_DOWN))
+        assert d.selected == 0  # eneste aktive
+        d.handle_event(_keydown(pygame.K_UP))
+        assert d.selected == 0
+
+    def test_non_tortuga_only_rom_active_wraps(self, font, state):
+        """Port Royal har kun rom aktivt (ingen bek-entry)."""
+        d = TavernDayDialog(font, state, port_id="port_royal")
+        d.handle_event(_keydown(pygame.K_DOWN))
+        assert d.selected == 0
 
     def test_night_navigation_only_rom(self, font, state):
         d = TavernNightDialog(font, state, port_id="tortuga")
