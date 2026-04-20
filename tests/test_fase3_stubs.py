@@ -165,9 +165,11 @@ def test_roundtrip_preserves_stub_values(tmp_path: Path) -> None:
 def test_load_v5_save_without_stubs_uses_defaults(tmp_path: Path) -> None:
     """En v5-save som mangler Fase 3-stubs skal laste uten feil.
 
-    Dette er hovedkompatibilitets-garantien: C3-0 bumper IKKE
-    save-version, så eksisterende v5-saves må fortsette å virke.
-    Nye felt faller tilbake til defaults.
+    C3-1 introduserte v5→v6-migreringen — v5-saves ender nå som v6
+    etter load. Hovedkompatibilitets-garantien er at eksisterende
+    dev-saves fortsetter å virke, med migreringen som fyller inn
+    stubs fra balance-defaults pluss `purchased=True` (for å bevare
+    aktiv bek-produksjon).
     """
     # Bygg en minimal v5-save som mangler alle Fase 3-stub-felt
     minimal_v5 = {
@@ -211,6 +213,8 @@ def test_load_v5_save_without_stubs_uses_defaults(tmp_path: Path) -> None:
 
     loaded = save_module.load(str(path))
     assert loaded is not None
+    # C3-1: v5 save migreres til v6 ved load
+    assert loaded.version == 6
     # Defaults har slått inn for manglende felt
     assert loaded.player_state.suspicion == 0.0
     assert loaded.player_state.rest == 1.0  # fra balance.rest.default_start
@@ -218,7 +222,11 @@ def test_load_v5_save_without_stubs_uses_defaults(tmp_path: Path) -> None:
     assert loaded.player_state.active_rumors == []
     assert loaded.economy_state.pending_sabotages == []
     assert loaded.economy_state.pending_rumor_impacts == []
-    assert loaded.pitch_lake_state.purchased is False
+    # C3-1 v5→v6-migrering setter purchased=True for eksisterende dev-saves
+    # (bakoverkompatibilitet — beholder aktiv bek-produksjon).
+    # Fresh v6-saves fra new_game_state starter med False; se
+    # test_save_v6_migration::test_new_game_state_has_purchased_false.
+    assert loaded.pitch_lake_state.purchased is True
     assert loaded.world_state.action_budget.day_budget_hours == 12.0
     assert loaded.world_state.action_budget.hours_used_today == 0.0
 

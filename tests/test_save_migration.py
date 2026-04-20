@@ -21,8 +21,9 @@ def _write_json(path: Path, data: dict) -> None:
 
 
 class TestVersionConstants:
-    def test_current_version_is_5(self):
-        assert CURRENT_SAVE_VERSION == 5
+    def test_current_version_is_6(self):
+        # Bumpet fra 5 til 6 i Fase 3 C3-1. Se systems/save.py migrate_v5_to_v6.
+        assert CURRENT_SAVE_VERSION == 6
 
     def test_default_state_has_current_version(self):
         assert GameState().version == CURRENT_SAVE_VERSION

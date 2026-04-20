@@ -50,7 +50,8 @@ def v4_fixture_path(tmp_path: Path) -> Path:
 def test_1_v4_loads_without_error(v4_fixture_path: Path) -> None:
     loaded = load(str(v4_fixture_path))
     assert loaded is not None
-    assert loaded.version == CURRENT_SAVE_VERSION == 5
+    # Endret fra == 5 i C3-1: v4 migreres nå videre gjennom v5 → v6.
+    assert loaded.version == CURRENT_SAVE_VERSION == 6
 
 
 # -----------------------------------------------------------------------------
@@ -210,8 +211,8 @@ def test_6_v3_migrates_through_chain_to_v5(tmp_path: Path) -> None:
 
     loaded = load(str(path))
     assert loaded is not None
-    # Endte på v5 — ikke direkte parsing fra v3.
-    assert loaded.version == CURRENT_SAVE_VERSION == 5
+    # Endret fra == 5 i C3-1: kjeden går nå v3 → v4 → v5 → v6.
+    assert loaded.version == CURRENT_SAVE_VERSION == 6
     # Klokke og spiller-felter bevart gjennom kjeden
     assert loaded.world_state.clock.day == 5
     assert loaded.world_state.clock.seconds_into_day == 12.5

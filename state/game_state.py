@@ -1,14 +1,22 @@
-"""GameState v5 — nested orkestrator.
+"""GameState v6 — nested orkestrator.
 
-Versjons-bump fra v4 per FASE_2B.md §2. Migreringskode i
-`systems/save.py` konverterer v1..v4 via chained
-`migrate_vN_to_vN+1`-funksjoner.
+v5 (Fase 2B C1b): nested felter per system. v6 (Fase 3 C3-1): Fase 3
+stub-felt ble innført i C3-0 uten versjon-bump; C3-1 bumper til v6
+for å markere at `PitchLakeState.purchased`, `WorldState.action_budget`,
+og `PlayerState`/`EconomyState`-stubs nå er en del av det offisielle
+skjemaet. v5→v6-migrering i `systems/save.py` setter `purchased=True`
+for eksisterende dev-saves (bakoverkompatibilitet for aktive bek-
+produksjoner) og initialiserer ActionBudget fra balance.
 
 Hvert system eier ett felt (spec §2.2):
-- PlayerState: endres av inventar-kjøp, bevegelse, gull-transaksjoner
-- WorldState: endres av scene-bytter, seiling, klokke
-- EconomyState: endres av RegimeManager, Market, observasjonslogikk
-- PitchLakeState: endres av PitchLake on_new_day
+- PlayerState: endres av inventar-kjøp, bevegelse, gull-transaksjoner,
+  mistanke/rom/caches/rumor_listen (Fase 3)
+- WorldState: endres av scene-bytter, seiling, klokke, handlings-tid
+  (Fase 3)
+- EconomyState: endres av RegimeManager, Market, observasjonslogikk,
+  sabotasje/rumor_spread-impacts (Fase 3)
+- PitchLakeState: endres av PitchLake on_new_day; `purchased`-flagg
+  gates produksjon (Fase 3 C3-6)
 """
 
 from __future__ import annotations
@@ -21,7 +29,7 @@ from state.player_state import PlayerState
 from state.world_state import WorldState
 
 
-CURRENT_SAVE_VERSION = 5
+CURRENT_SAVE_VERSION = 6
 
 
 @dataclass

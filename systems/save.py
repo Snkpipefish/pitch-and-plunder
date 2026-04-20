@@ -1,8 +1,9 @@
-"""Lagring og lasting av spilltilstand (v5-formatet — Fase 2B Commit C1b).
+"""Lagring og lasting av spilltilstand (v6-formatet — Fase 3 Commit C3-1).
 
-Struktur v5 er nested (se `state/game_state.py`). Eldre saves migreres
+Struktur er nested (se `state/game_state.py`). Eldre saves migreres
 via chained `migrate_vN_to_vN+1`-funksjoner som transformerer rå dicts
-sekvensielt frem til v5, før én parse-funksjon bygger GameState-treet.
+sekvensielt frem til nåværende versjon, før én parse-funksjon bygger
+GameState-treet.
 
 Autosave-triggere (kalles fra VillageScene / main):
 - `pygame.QUIT`
@@ -21,6 +22,11 @@ Migreringskjede:
   pitch_lake_state; initialiser Tortuga-markedet fra v4 commodities_state,
   fyll de tre andre havnene med tomme MarketState; bygg observed kun for
   Tortuga
+- v5 → v6 (Fase 3 C3-1): legg til Fase 3-stub-felt som ble innført i
+  C3-0 uten versjon-bump. Eksisterende dev-saves får
+  `pitch_lake_state.purchased=True` (bakoverkompatibilitet — beholder
+  aktiv bek-produksjon). `world_state.action_budget` settes fra balance-
+  defaults. player/economy-stubs initialiseres til tomme/null-verdier.
 """
 
 from __future__ import annotations
@@ -67,7 +73,7 @@ log = logging.getLogger(__name__)
 
 
 #: Versjoner som load() aksepterer (med migrering for ikke-current).
-ACCEPTED_VERSIONS = frozenset({1, 2, 3, 4, 5})
+ACCEPTED_VERSIONS = frozenset({1, 2, 3, 4, 5, 6})
 
 
 def _default_inventory_dict() -> dict[str, dict]:
@@ -274,12 +280,87 @@ def migrate_v4_to_v5(d: dict) -> dict:
     }
 
 
+def migrate_v5_to_v6(d: dict) -> dict:
+    """v6 (Fase 3 C3-1) formaliserer Fase 3-stub-feltene fra C3-0.
+
+    Fase 3-stubs ble innført i C3-0 uten versjons-bump; v5 → v6 markerer
+    offisielt at disse nå er en del av skjemaet. Migreringen skiller
+    mellom "eksisterende v5-save" og "ny v6-save" ved å gi eksisterende
+    dev-saves `pitch_lake_state.purchased=True` (bevarer aktiv bek-
+    produksjon) mens fresh saves starter `purchased=False` (spilleren
+    må kjøpe anlegget i tavern-dag-meny i Tortuga — C3-6 gate-logikk).
+
+    Alle andre Fase 3-stub-felt får nøytrale init-verdier:
+    - `player_state.suspicion = 0.0`
+    - `player_state.rest = balance.rest.default_start`
+    - `player_state.port_caches = {}`
+    - `player_state.active_rumors = []`
+    - `world_state.action_budget = {balance.actions-defaults, day-phase}`
+    - `economy_state.pending_sabotages = []`
+    - `economy_state.pending_rumor_impacts = []`
+
+    Bruker `setdefault` for felt som kanskje allerede er skrevet av
+    C3-0-save som ble lagret før versjons-bumpen. Det eneste feltet som
+    aktivt OVERSKRIVES er `pitch_lake_state.purchased` (migreringens
+    hovedformål).
+    """
+    log.info("Migrating save v%d → v%d", 5, 6)
+    out = dict(d)
+    bal = _balance.get()
+
+    # player_state stubs — setdefault slik at C3-0-era saves med eksplisitte
+    # verdier bevares
+    ps = out.get("player_state")
+    if not isinstance(ps, dict):
+        ps = {}
+    ps.setdefault("suspicion", 0.0)
+    ps.setdefault("rest", bal.rest.default_start)
+    ps.setdefault("port_caches", {})
+    ps.setdefault("active_rumors", [])
+    out["player_state"] = ps
+
+    # world_state.action_budget — initialiseres fra balance-defaults
+    ws = out.get("world_state")
+    if not isinstance(ws, dict):
+        ws = {}
+    ws.setdefault("action_budget", {
+        "day_budget_hours": bal.actions.day_budget_hours,
+        "night_budget_hours": bal.actions.night_budget_hours,
+        "hours_used_today": 0.0,
+        "hours_used_tonight": 0.0,
+        "phase": "day",
+    })
+    out["world_state"] = ws
+
+    # economy_state stubs
+    es = out.get("economy_state")
+    if not isinstance(es, dict):
+        es = {}
+    es.setdefault("pending_sabotages", [])
+    es.setdefault("pending_rumor_impacts", [])
+    out["economy_state"] = es
+
+    # pitch_lake_state.purchased — ALLTID True for v5→v6-migrering
+    # (bakoverkompatibilitet for eksisterende dev-saves som hadde aktiv
+    # produksjon). Ikke setdefault — vi vil overskrive en ev. False-
+    # verdi som kan ha blitt lagret av en C3-0-era save-write.
+    pls = out.get("pitch_lake_state")
+    if not isinstance(pls, dict):
+        pls = {}
+    pls["purchased"] = True
+    out["pitch_lake_state"] = pls
+
+    out["version"] = 6
+    return out
+
+
 #: Migreringskjede — indeks = fra-versjon.
 _MIGRATIONS: dict[int, Any] = {
     1: migrate_v1_to_v2,
     2: migrate_v2_to_v3,
     3: migrate_v3_to_v4,
     4: migrate_v4_to_v5,
+    5: migrate_v5_to_v6,
 }
 
 
