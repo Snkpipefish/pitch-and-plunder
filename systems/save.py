@@ -46,7 +46,7 @@ from entities.commodity import InventoryItem
 from state.action_budget import ActionBudget
 from state.economy_state import EconomyState
 from state.game_state import CURRENT_SAVE_VERSION, GameState
-from state.market_effects import PendingRumorImpact, PendingSabotage
+from state.market_effects import PendingMarketEffect
 from state.market_state import CommodityMarket, MarketState
 from state.observed_price import ObservedPrice
 from state.pitch_lake_state import PitchLakeState
@@ -296,8 +296,8 @@ def migrate_v5_to_v6(d: dict) -> dict:
     - `player_state.port_caches = {}`
     - `player_state.active_rumors = []`
     - `world_state.action_budget = {balance.actions-defaults, day-phase}`
-    - `economy_state.pending_sabotages = []`
-    - `economy_state.pending_rumor_impacts = []`
+    - `economy_state.pending_market_effects = []` (C3-10 erstatter
+      C3-0-stubene pending_sabotages + pending_rumor_impacts)
 
     Bruker `setdefault` for felt som kanskje allerede er skrevet av
     C3-0-save som ble lagret før versjons-bumpen. Det eneste feltet som
@@ -336,8 +336,8 @@ def migrate_v5_to_v6(d: dict) -> dict:
     es = out.get("economy_state")
     if not isinstance(es, dict):
         es = {}
-    es.setdefault("pending_sabotages", [])
-    es.setdefault("pending_rumor_impacts", [])
+    # C3-10: erstattet C3-0-stubene pending_sabotages + pending_rumor_impacts
+    es.setdefault("pending_market_effects", [])
     out["economy_state"] = es
 
     # pitch_lake_state.purchased — ALLTID True for v5→v6-migrering
@@ -705,31 +705,18 @@ def _parse_world_state(raw: Any) -> WorldState:
     )
 
 
-def _parse_pending_sabotage(raw: Any) -> PendingSabotage | None:
+def _parse_pending_market_effect(raw: Any) -> PendingMarketEffect | None:
+    """Fase 3 C3-10 parse. Returnerer None ved ugyldig entry."""
     if not isinstance(raw, dict):
         return None
     try:
-        return PendingSabotage(
-            target_port=str(raw.get("target_port", "port_royal")),
+        return PendingMarketEffect(
+            port_id=str(raw.get("port_id", "port_royal")),
             commodity_id=str(raw.get("commodity_id", "sugar")),
+            direction=str(raw.get("direction", "up")),
             magnitude_pct=float(raw.get("magnitude_pct", 10.0)),
-            ordered_on_day=int(raw.get("ordered_on_day", 0)),
             impact_day=int(raw.get("impact_day", 0)),
-        )
-    except (TypeError, ValueError):
-        return None
-
-
-def _parse_pending_rumor_impact(raw: Any) -> PendingRumorImpact | None:
-    if not isinstance(raw, dict):
-        return None
-    try:
-        return PendingRumorImpact(
-            target_port=str(raw.get("target_port", "port_royal")),
-            commodity_id=str(raw.get("commodity_id", "sugar")),
-            magnitude_pct=float(raw.get("magnitude_pct", 10.0)),
-            ordered_on_day=int(raw.get("ordered_on_day", 0)),
-            impact_day=int(raw.get("impact_day", 0)),
+            source_type=str(raw.get("source_type", "sabotage")),
         )
     except (TypeError, ValueError):
         return None
@@ -749,27 +736,21 @@ def _parse_economy_state(raw: Any) -> EconomyState:
         for pid, rdata in raw_regimes.items():
             regimes[pid] = _parse_regimes(rdata)
     observed = _parse_observed(raw.get("observed", {}))
-    # Fase 3 (v2) stub-felt — tom liste ved mangel
-    pending_sabotages: list[PendingSabotage] = []
-    raw_ps = raw.get("pending_sabotages", [])
-    if isinstance(raw_ps, list):
-        for entry in raw_ps:
-            parsed = _parse_pending_sabotage(entry)
+    # Fase 3 C3-10: pending_market_effects (erstatter C3-0 stub-felt
+    # pending_sabotages + pending_rumor_impacts). Legacy-felt i save
+    # ignoreres — de var aldri populert.
+    pending_market_effects: list[PendingMarketEffect] = []
+    raw_pme = raw.get("pending_market_effects", [])
+    if isinstance(raw_pme, list):
+        for entry in raw_pme:
+            parsed = _parse_pending_market_effect(entry)
             if parsed is not None:
-                pending_sabotages.append(parsed)
-    pending_rumor_impacts: list[PendingRumorImpact] = []
-    raw_pri = raw.get("pending_rumor_impacts", [])
-    if isinstance(raw_pri, list):
-        for entry in raw_pri:
-            parsed = _parse_pending_rumor_impact(entry)
-            if parsed is not None:
-                pending_rumor_impacts.append(parsed)
+                pending_market_effects.append(parsed)
     return EconomyState(
         markets=markets,
         regimes=regimes,
         observed=observed,
-        pending_sabotages=pending_sabotages,
-        pending_rumor_impacts=pending_rumor_impacts,
+        pending_market_effects=pending_market_effects,
     )
 
 

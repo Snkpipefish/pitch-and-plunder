@@ -138,9 +138,9 @@ class TestNightEntries:
             "smuggler_contact",
         ]
 
-    def test_rom_and_rumor_entries_active(self, font, state):
-        """C3-9: rom + begge rykte-entries er aktive. Sabotasje,
-        falskt-rykte og smugler er fortsatt stubbed."""
+    def test_five_entries_active_c3_10(self, font, state):
+        """C3-10: 5 aktive entries (rom + 2 rykter + sabotasje + falsk
+        rykte). Kun smuggler_contact er fortsatt stubbed."""
         from ui.tavern_dialog import (
             ACTION_BUY_RUMOR_REGIME, ACTION_BUY_RUMOR_SPIKE,
         )
@@ -151,7 +151,12 @@ class TestNightEntries:
             ACTION_BUY_ROOM,
             ACTION_BUY_RUMOR_REGIME,
             ACTION_BUY_RUMOR_SPIKE,
+            ACTION_ORDER_SABOTAGE,
+            ACTION_SPREAD_FALSE_RUMOR,
         }
+        # Kun smuggler_contact er inaktiv
+        inactive_ids = {e.action_id for e in entries if not e.active}
+        assert inactive_ids == {"smuggler_contact"}
 
     def test_cost_label_includes_stub_tag(self, font, state):
         d = TavernNightDialog(font, state, port_id="tortuga")
@@ -212,9 +217,10 @@ class TestNavigationSkipsInactive:
         d.handle_event(_keydown(pygame.K_DOWN))
         assert d.selected == 0
 
-    def test_night_navigation_cycles_three_active(self, font, state):
-        """C3-9: natt-meny har 3 aktive entries (rom, regime, spike).
-        Down cycler gjennom disse, hopper over stubbed entries."""
+    def test_night_navigation_cycles_five_active_c3_10(self, font, state):
+        """C3-10: natt-meny har 5 aktive entries (rom, regime-rykte,
+        spike-rykte, sabotasje, falsk-rykte). Down cycler gjennom alle
+        5, hopper over smuggler_contact (stubbed)."""
         d = TavernNightDialog(font, state, port_id="tortuga")
         assert d.selected == 0  # rom
         d.handle_event(_keydown(pygame.K_DOWN))
@@ -222,7 +228,11 @@ class TestNavigationSkipsInactive:
         d.handle_event(_keydown(pygame.K_DOWN))
         assert d.selected == 2  # spike-rykte
         d.handle_event(_keydown(pygame.K_DOWN))
-        assert d.selected == 0  # wrap til rom
+        assert d.selected == 3  # sabotasje
+        d.handle_event(_keydown(pygame.K_DOWN))
+        assert d.selected == 4  # spre falskt rykte
+        d.handle_event(_keydown(pygame.K_DOWN))
+        assert d.selected == 0  # wrap til rom (skip smuggler_contact)
 
 
 # -----------------------------------------------------------------------------

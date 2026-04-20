@@ -8,7 +8,8 @@ versjon-bump. Hovedsak:
   via tavern-dag-meny i Tortuga i C3-6)
 - `world_state.action_budget` initialiseres fra balance-defaults
 - Øvrige stubs (suspicion, rest, port_caches, active_rumors,
-  pending_sabotages, pending_rumor_impacts) får nøytrale init-verdier
+  pending_market_effects (C3-10 erstatter C3-0-stub)) får nøytrale
+  init-verdier
 """
 
 from __future__ import annotations
@@ -156,8 +157,7 @@ def test_migrate_sets_economy_stubs() -> None:
     v5 = _minimal_v5_payload()
     v6 = migrate_v5_to_v6(v5)
     es = v6["economy_state"]
-    assert es["pending_sabotages"] == []
-    assert es["pending_rumor_impacts"] == []
+    assert es["pending_market_effects"] == []
 
 
 def test_migrate_preserves_core_v5_data() -> None:
@@ -185,7 +185,7 @@ def test_migrate_handles_missing_substructures() -> None:
     v6 = migrate_v5_to_v6(v5)
     assert v6["version"] == 6
     assert v6["world_state"]["action_budget"]["phase"] == "day"
-    assert v6["economy_state"]["pending_sabotages"] == []
+    assert v6["economy_state"]["pending_market_effects"] == []
     assert v6["pitch_lake_state"]["purchased"] is True
 
 
@@ -252,8 +252,7 @@ def test_load_v5_save_ends_at_v6_with_purchased(tmp_path: Path) -> None:
     assert loaded.player_state.rest == 1.0
     assert loaded.player_state.port_caches == {}
     assert loaded.player_state.active_rumors == []
-    assert loaded.economy_state.pending_sabotages == []
-    assert loaded.economy_state.pending_rumor_impacts == []
+    assert loaded.economy_state.pending_market_effects == []
     # Kjerne-data bevart
     assert loaded.player_state.gold == 250
     assert loaded.world_state.clock.day == 12

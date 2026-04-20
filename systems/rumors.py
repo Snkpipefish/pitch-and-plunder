@@ -31,6 +31,7 @@ spike) legges også til i C3-10. C3-9 har KUN TTL-basert utløp.
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 from config import port_config
@@ -46,6 +47,16 @@ _COMMODITIES: tuple[str, ...] = ("sugar", "rum", "tobacco", "pitch")
 
 #: Regimer som kvalifiserer som "spike-kandidat" (volatile).
 _VOLATILE_REGIMES: frozenset[str] = frozenset({"rising", "falling"})
+
+
+@dataclass(frozen=True)
+class _SpikeCandidate:
+    """Intern kandidat for price_spike_warning-sampling."""
+    port_id: str
+    commodity_id: str
+    direction: str  # "up" | "down"
+    days_until_tick: int
+    source: str    # "effect" (pending market effect) | "regime"
 
 
 def _sample_regime_preview_target(
@@ -67,22 +78,56 @@ def _sample_regime_preview_target(
     return port, commodity
 
 
-def _find_spike_candidates(state: "GameState") -> list[tuple[str, str]]:
-    """Returnér alle (port, commodity)-par med volatilt regime.
+def _find_spike_candidates(state: "GameState") -> list[_SpikeCandidate]:
+    """Returnér alle spike-kandidater — pending market-effects OG
+    volatile regimer.
 
-    Volatilt = `rising` eller `falling` (`_VOLATILE_REGIMES`). Stabile
-    regimer filtreres bort — ingen spike å varsle om.
+    Fase 3 C3-10 (presisering #2): utvider C3-9-samplingen fra regime-
+    only til å inkludere pending sabotasje/falsk-rykte-effekter.
+    Pending effects har forrang — hvis samme (port, commodity) har
+    både en pending effect OG et volatilt regime, prefereres effect-
+    varselet (nyere info, mer presis timing).
 
-    Inkluderer current_port-kandidater også — presisering sier IKKE at
-    price_spike_warning skal ekskludere current-havn. Spilleren kan
-    uansett bruke varselet for timing-beslutninger (hvis de ikke har
-    sett børsen nylig).
+    Inkluderer current_port-kandidater også — spike-varsel kan være
+    nyttig uansett hvilken havn spilleren står i (timing-beslutninger).
     """
-    candidates: list[tuple[str, str]] = []
+    candidates: list[_SpikeCandidate] = []
+    clock_day = state.world_state.clock.day
+
+    # 1. Pending market-effects (prioritert kilde)
+    effect_targets: set[tuple[str, str]] = set()
+    for effect in state.economy_state.pending_market_effects:
+        days_until = effect.impact_day - clock_day
+        if days_until < 0:
+            # Utdatert — skulle vært fjernet av market_effects.on_dawn.
+            # Defensivt: skip.
+            continue
+        candidates.append(_SpikeCandidate(
+            port_id=effect.port_id,
+            commodity_id=effect.commodity_id,
+            direction=effect.direction,
+            days_until_tick=days_until,
+            source="effect",
+        ))
+        effect_targets.add((effect.port_id, effect.commodity_id))
+
+    # 2. Volatile regimer (fallback — skip hvis samme target allerede
+    # dekket av pending effect).
     for port_id, regimes in state.economy_state.regimes.items():
         for cid, regime_state in regimes.items():
+            if (port_id, cid) in effect_targets:
+                continue
             if regime_state.current in _VOLATILE_REGIMES:
-                candidates.append((port_id, cid))
+                direction = (
+                    "up" if regime_state.current == "rising" else "down"
+                )
+                candidates.append(_SpikeCandidate(
+                    port_id=port_id,
+                    commodity_id=cid,
+                    direction=direction,
+                    days_until_tick=max(0, regime_state.days_remaining),
+                    source="regime",
+                ))
     return candidates
 
 
@@ -130,27 +175,24 @@ def buy_price_spike_warning(
     """Kjøp price_spike_warning-rykte. Returnerer None hvis ingen
     spike-kandidater finnes (caller skal da gi gull-refund + toast).
 
-    Sampler blant aktive volatile regimer. C3-10 utvider kandidat-
-    listen med pending sabotage/false_rumor-effekter — ikke forberedt
-    nå.
+    Fase 3 C3-10 (presisering #2): sampler blant BÅDE pending market-
+    effects OG volatile regimer. Pending effects har forrang ved samme
+    (port, commodity). Se `_find_spike_candidates`.
     """
     rng = rng or random.Random()
     candidates = _find_spike_candidates(state)
     if not candidates:
         return None
-    port_id, commodity_id = rng.choice(candidates)
-    regime_state = state.economy_state.regimes[port_id][commodity_id]
-    direction = "up" if regime_state.current == "rising" else "down"
-    days_until_tick = max(0, regime_state.days_remaining)
+    chosen = rng.choice(candidates)
     bal = _balance.get()
     rumor = ActiveRumor(
         rumor_type="price_spike_warning",
-        port_id=port_id,
-        commodity_id=commodity_id,
+        port_id=chosen.port_id,
+        commodity_id=chosen.commodity_id,
         days_remaining=bal.rumors.ttl_days,
         payload={
-            "direction": direction,
-            "days_until_tick": days_until_tick,
+            "direction": chosen.direction,
+            "days_until_tick": chosen.days_until_tick,
         },
     )
     state.player_state.active_rumors.append(rumor)

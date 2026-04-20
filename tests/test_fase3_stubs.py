@@ -21,7 +21,7 @@ import pytest
 from state.action_budget import ActionBudget
 from state.economy_state import EconomyState
 from state.game_state import GameState
-from state.market_effects import PendingRumorImpact, PendingSabotage
+from state.market_effects import PendingMarketEffect
 from state.pitch_lake_state import PitchLakeState
 from state.player_state import PlayerState
 from state.rumor_state import ActiveRumor
@@ -45,8 +45,7 @@ def test_player_state_stub_defaults() -> None:
 
 def test_economy_state_stub_defaults() -> None:
     es = EconomyState()
-    assert es.pending_sabotages == []
-    assert es.pending_rumor_impacts == []
+    assert es.pending_market_effects == []
 
 
 def test_pitch_lake_state_purchased_default_false() -> None:
@@ -89,8 +88,7 @@ def test_new_game_state_populates_stubs() -> None:
     assert state.player_state.rest == 1.0  # balance.rest.default_start
     assert state.player_state.port_caches == {}
     assert state.player_state.active_rumors == []
-    assert state.economy_state.pending_sabotages == []
-    assert state.economy_state.pending_rumor_impacts == []
+    assert state.economy_state.pending_market_effects == []
     assert state.pitch_lake_state.purchased is False
     assert state.world_state.action_budget.day_budget_hours == 12.0
     assert state.world_state.action_budget.night_budget_hours == 12.0
@@ -117,22 +115,24 @@ def test_roundtrip_preserves_stub_values(tmp_path: Path) -> None:
             payload={"regime": "rising"},
         ),
     ]
-    state.economy_state.pending_sabotages = [
-        PendingSabotage(
-            target_port="port_royal",
+    # C3-10: pending_market_effects erstatter pending_sabotages +
+    # pending_rumor_impacts (én felles liste med direction-felt)
+    state.economy_state.pending_market_effects = [
+        PendingMarketEffect(
+            port_id="port_royal",
             commodity_id="sugar",
+            direction="up",
             magnitude_pct=10.0,
-            ordered_on_day=3,
             impact_day=5,
+            source_type="sabotage",
         ),
-    ]
-    state.economy_state.pending_rumor_impacts = [
-        PendingRumorImpact(
-            target_port="havana",
+        PendingMarketEffect(
+            port_id="havana",
             commodity_id="tobacco",
+            direction="down",
             magnitude_pct=10.0,
-            ordered_on_day=4,
             impact_day=6,
+            source_type="false_rumor",
         ),
     ]
     state.pitch_lake_state.purchased = True
@@ -152,11 +152,16 @@ def test_roundtrip_preserves_stub_values(tmp_path: Path) -> None:
     assert loaded.player_state.active_rumors[0].commodity_id == "rum"
     assert loaded.player_state.active_rumors[0].days_remaining == 5
     assert loaded.player_state.active_rumors[0].payload == {"regime": "rising"}
-    assert len(loaded.economy_state.pending_sabotages) == 1
-    assert loaded.economy_state.pending_sabotages[0].target_port == "port_royal"
-    assert loaded.economy_state.pending_sabotages[0].impact_day == 5
-    assert len(loaded.economy_state.pending_rumor_impacts) == 1
-    assert loaded.economy_state.pending_rumor_impacts[0].target_port == "havana"
+    assert len(loaded.economy_state.pending_market_effects) == 2
+    sabotage_effect = loaded.economy_state.pending_market_effects[0]
+    assert sabotage_effect.port_id == "port_royal"
+    assert sabotage_effect.direction == "up"
+    assert sabotage_effect.source_type == "sabotage"
+    assert sabotage_effect.impact_day == 5
+    rumor_effect = loaded.economy_state.pending_market_effects[1]
+    assert rumor_effect.port_id == "havana"
+    assert rumor_effect.direction == "down"
+    assert rumor_effect.source_type == "false_rumor"
     assert loaded.pitch_lake_state.purchased is True
     assert loaded.world_state.action_budget.hours_used_today == 4.5
     assert loaded.world_state.action_budget.phase == "night"
@@ -196,7 +201,7 @@ def test_load_v5_save_without_stubs_uses_defaults(tmp_path: Path) -> None:
             "markets": {"tortuga": {"commodities": {}, "tick_id": 0}},
             "regimes": {},
             "observed": {},
-            # MANGLER: pending_sabotages, pending_rumor_impacts
+            # MANGLER: pending_market_effects (C3-10)
         },
         "pitch_lake_state": {
             "home_port": "tortuga",
@@ -220,8 +225,7 @@ def test_load_v5_save_without_stubs_uses_defaults(tmp_path: Path) -> None:
     assert loaded.player_state.rest == 1.0  # fra balance.rest.default_start
     assert loaded.player_state.port_caches == {}
     assert loaded.player_state.active_rumors == []
-    assert loaded.economy_state.pending_sabotages == []
-    assert loaded.economy_state.pending_rumor_impacts == []
+    assert loaded.economy_state.pending_market_effects == []
     # C3-1 v5→v6-migrering setter purchased=True for eksisterende dev-saves
     # (bakoverkompatibilitet — beholder aktiv bek-produksjon).
     # Fresh v6-saves fra new_game_state starter med False; se
@@ -257,9 +261,7 @@ def test_load_v5_save_with_malformed_stub_fields_uses_defaults(
             "markets": {"tortuga": {"commodities": {}, "tick_id": 0}},
             "regimes": {},
             "observed": {},
-            "pending_sabotages": "not_a_list",  # ugyldig → []
-            "pending_rumor_impacts": [{"bad": "entry"}, {"impact_day": "nope"}],
-            # ^ liste med dårlige entries → tom
+            "pending_market_effects": "not_a_list",  # ugyldig → []
         },
         "pitch_lake_state": {
             "home_port": "tortuga",
@@ -281,13 +283,7 @@ def test_load_v5_save_with_malformed_stub_fields_uses_defaults(
     assert loaded.player_state.port_caches == {}
     assert loaded.player_state.active_rumors == []
     assert loaded.world_state.action_budget.day_budget_hours == 12.0
-    assert loaded.economy_state.pending_sabotages == []
-    # pending_rumor_impacts: bad entries skippes, første mangler feltene
-    # (men defaults fylles inn), andre har ugyldig impact_day.
-    # _parse_pending_rumor_impact returnerer None på ValueError og
-    # None-entries ignoreres. Vi aksepterer tom liste ELLER én entry
-    # (fra defaults) — begge viser at parsing ikke crasher.
-    assert isinstance(loaded.economy_state.pending_rumor_impacts, list)
+    assert loaded.economy_state.pending_market_effects == []
 
 
 # -----------------------------------------------------------------------------
@@ -304,16 +300,13 @@ def test_active_rumor_defaults() -> None:
     assert r.payload == {}
 
 
-def test_pending_sabotage_defaults() -> None:
-    s = PendingSabotage()
-    assert s.target_port == "port_royal"
-    assert s.commodity_id == "sugar"
-    assert s.magnitude_pct == 10.0
-    assert s.impact_day == 0
-
-
-def test_pending_rumor_impact_defaults() -> None:
-    r = PendingRumorImpact()
-    assert r.target_port == "port_royal"
-    assert r.magnitude_pct == 10.0
-    assert r.impact_day == 0
+def test_pending_market_effect_defaults() -> None:
+    """C3-10: erstatter PendingSabotage + PendingRumorImpact med ett
+    felles dataclass med direction + source_type-felt."""
+    e = PendingMarketEffect()
+    assert e.port_id == "port_royal"
+    assert e.commodity_id == "sugar"
+    assert e.direction == "up"
+    assert e.magnitude_pct == 10.0
+    assert e.impact_day == 0
+    assert e.source_type == "sabotage"

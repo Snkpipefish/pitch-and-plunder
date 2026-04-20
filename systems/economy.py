@@ -399,6 +399,14 @@ def tick_all_ports_dawn(
     from systems.rumors import on_dawn as rumors_on_dawn
     rumors_on_dawn(state)
 
+    # Fase 3 C3-10: markeds-effekter (sabotasje + falske rykter).
+    # Anvender pending effekter med impact_day <= clock.day, muterer
+    # CommodityMarket.current_price og fjerner dem fra pending-listen.
+    # Kjøres ETTER rumors.on_dawn (TTL kan ha utløpt rykter som peker
+    # på effekter som landes nå).
+    from systems.market_effects import on_dawn as market_effects_on_dawn
+    market_effects_on_dawn(state)
+
     # C8: snapshot observed for current_port med dagens nye priser.
     # Bare når i havn — under reise har spilleren ikke direkte
     # marked-tilgang og from_port-snapshotet er fra avreise-tidspunktet.

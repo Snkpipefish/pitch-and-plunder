@@ -40,12 +40,24 @@ from dataclasses import dataclass
 import pygame
 
 import constants
+from config import port_config
 from state import GameState
 from systems import balance as _balance
+from systems import market_effects as _market_effects
 from systems import rest as _rest
 from systems import rumors as _rumors
+from systems import suspicion as _suspicion
 from ui.dialog_overlay import DEFAULT_PANEL_H, DEFAULT_PANEL_W, DialogOverlay
 from ui.toast import Toast, ToastQueue
+
+
+#: Norske vare-navn for toast-meldinger.
+_COMMODITY_NORWEGIAN: dict[str, str] = {
+    "sugar": "sukker",
+    "rum": "rom",
+    "tobacco": "tobakk",
+    "pitch": "bek",
+}
 
 
 #: Action-ID-er brukt i entry-aktivering. Ikke-aktive entries har sin id
@@ -250,6 +262,10 @@ class TavernDialog(DialogOverlay):
             self._do_buy_rumor_regime()
         elif entry.action_id == ACTION_BUY_RUMOR_SPIKE:
             self._do_buy_rumor_spike()
+        elif entry.action_id == ACTION_ORDER_SABOTAGE:
+            self._do_order_sabotage()
+        elif entry.action_id == ACTION_SPREAD_FALSE_RUMOR:
+            self._do_spread_false_rumor()
 
     # --- Aktive handlinger ---
 
@@ -385,6 +401,115 @@ class TavernDialog(DialogOverlay):
         _rest.consume_for_action(self._state, bal.rumors.cost_hours)
         self._push_toast(
             "Nytt rykte i lomma",
+            constants.COLOR_LANTERN_BRIGHT,
+        )
+
+    def _do_order_sabotage(self) -> None:
+        """Bestill sabotasje mot tilfeldig (port, vare). Fase 3 C3-10.
+
+        Random sampling av target (ikke current_port). Toast viser hva
+        som ble satt i gang — presisering #3 krever at spilleren vet
+        hva gullet ble brukt på siden det ikke er sub-dialog.
+
+        Atomisk commit: gull + market-effect + mistanke + rest. Hvis
+        target-sampling feiler (skjer ikke i prod — alltid 3 andre
+        havner), ingen mutasjon.
+        """
+        bal = _balance.get()
+        cost_gold = bal.sabotage.base_cost_gold
+        player = self._state.player_state
+        if player.gold < cost_gold:
+            self._push_toast(
+                f"For lite gull (trenger {cost_gold} d.)",
+                constants.COLOR_EMBER,
+            )
+            return
+        target = _market_effects.sample_target(
+            self._state, exclude_port=self._port_id
+        )
+        if target is None:
+            # Defensivt — aldri i prod, men beskytter mot edge-case
+            self._push_toast(
+                "Ingen kjøpmenn å sabotere",
+                constants.COLOR_EMBER,
+            )
+            return
+        port_id, commodity_id = target
+        # Commit
+        player.gold -= cost_gold
+        _market_effects.register_market_effect(
+            self._state,
+            port_id=port_id,
+            commodity_id=commodity_id,
+            direction="up",
+            magnitude_pct=bal.sabotage.magnitude_pct,
+            source_type="sabotage",
+            impact_delay_days=bal.sabotage.impact_delay_days,
+        )
+        _suspicion.increase(
+            self._state, bal.sabotage.suspicion_increase_sabotage
+        )
+        _rest.consume_for_action(
+            self._state,
+            bal.actions.cost_hours_per_action.get("order_sabotage", 2.0),
+        )
+        port_name = port_config.get(port_id).name
+        commodity_name = _COMMODITY_NORWEGIAN.get(commodity_id, commodity_id)
+        self._push_toast(
+            f"Sabotasje mot {port_name} {commodity_name} "
+            f"\u2014 impact om {bal.sabotage.impact_delay_days}d",
+            constants.COLOR_LANTERN_BRIGHT,
+        )
+
+    def _do_spread_false_rumor(self) -> None:
+        """Spre falskt rykte mot tilfeldig (port, vare). Fase 3 C3-10.
+
+        Samme infrastruktur som sabotasje men direction=down,
+        magnitude_pct=false_rumor_magnitude_pct (10%), lavere
+        mistanke-hit og lavere gull-kost. Source_type="false_rumor"
+        for spike-varsel-integrasjon.
+        """
+        bal = _balance.get()
+        cost_gold = bal.sabotage.false_rumor_base_cost_gold
+        player = self._state.player_state
+        if player.gold < cost_gold:
+            self._push_toast(
+                f"For lite gull (trenger {cost_gold} d.)",
+                constants.COLOR_EMBER,
+            )
+            return
+        target = _market_effects.sample_target(
+            self._state, exclude_port=self._port_id
+        )
+        if target is None:
+            self._push_toast(
+                "Ingen kjøpmenn å lure",
+                constants.COLOR_EMBER,
+            )
+            return
+        port_id, commodity_id = target
+        player.gold -= cost_gold
+        _market_effects.register_market_effect(
+            self._state,
+            port_id=port_id,
+            commodity_id=commodity_id,
+            direction="down",
+            magnitude_pct=bal.sabotage.false_rumor_magnitude_pct,
+            source_type="false_rumor",
+            impact_delay_days=bal.sabotage.impact_delay_days,
+        )
+        _suspicion.increase(
+            self._state, bal.sabotage.suspicion_increase_false_rumor
+        )
+        _rest.consume_for_action(
+            self._state,
+            bal.actions.cost_hours_per_action.get("spread_false_rumor", 2.0),
+        )
+        port_name = port_config.get(port_id).name
+        commodity_name = _COMMODITY_NORWEGIAN.get(commodity_id, commodity_id)
+        self._push_toast(
+            f"Falskt rykte om {port_name} {commodity_name} "
+            f"\u2014 impact om {bal.sabotage.impact_delay_days}d",
             constants.COLOR_LANTERN_BRIGHT,
         )
 
@@ -529,17 +654,25 @@ class TavernNightDialog(TavernDialog):
                 cost_label=rumor_cost_label,
                 active=True,
             ),
+            # C3-10: sabotasje (pris-hever i target-havn)
             TavernEntry(
                 action_id=ACTION_ORDER_SABOTAGE,
                 label="Bestille sabotasje",
-                cost_label="(kommer i C3-10)",
-                active=False,
+                cost_label=(
+                    f"{bal.sabotage.base_cost_gold} gull, "
+                    f"{bal.actions.cost_hours_per_action.get('order_sabotage', 2.0):.1f} h"
+                ),
+                active=True,
             ),
+            # C3-10: falskt rykte (pris-senker i target-havn)
             TavernEntry(
                 action_id=ACTION_SPREAD_FALSE_RUMOR,
                 label="Spre falskt rykte",
-                cost_label="(kommer i C3-10)",
-                active=False,
+                cost_label=(
+                    f"{bal.sabotage.false_rumor_base_cost_gold} gull, "
+                    f"{bal.actions.cost_hours_per_action.get('spread_false_rumor', 2.0):.1f} h"
+                ),
+                active=True,
             ),
             TavernEntry(
                 action_id=ACTION_SMUGGLER_CONTACT,

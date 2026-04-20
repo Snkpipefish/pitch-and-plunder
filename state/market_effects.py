@@ -1,22 +1,28 @@
-"""Offensiv markeds-manipulasjon: pending sabotasje + falske rykter (Fase 3 C3-0 stub).
+"""Pending markeds-effekter — Fase 3 C3-10.
 
-STUB i C3-0: dataklassene er definert, men ingen purchase-logikk eller
-impact-evaluering er koblet til. C3-10 implementerer begge felles.
+Én felles dataclass `PendingMarketEffect` representerer både sabotasje
+(direction="up") og falske rykter (direction="down"). Forskjellen er
+i HVORDAN effekten ble initiert (source_type) og i retningen på
+prisbevegelsen.
 
-Modell (FASE_3.md §1.8):
-- `PendingSabotage`: spilleren har bestilt fysisk sabotasje mot en vare
-  i en target-havn. Prisen HEVES ved impact_day (knapphet).
-- `PendingRumorImpact`: spilleren har betalt for å spre falsk rykte.
-  Prisen FALLER ved impact_day (kjøpmenn dumpet frykt-salg).
+Erstatter C3-0-stubene `PendingSabotage` og `PendingRumorImpact` som
+var duplisert infrastruktur. Save-migrering ikke nødvendig — stubene
+var aldri populert i lagrede saves.
 
-Begge konsumeres av `Market.on_dawn(day)` når `day == impact_day`.
-`EconomyState.pending_sabotages` og `EconomyState.pending_rumor_impacts`
-er to parallelle lister — samme lifecycle, forskjellig retning på
-magnitude.
-
-Placeholder-navn for Fase 3-referanse:
-- `rumor_spread` = offensiv falsk-rykte-spredning (denne filen)
-- `rumor_listen` = spillerens lytte-rykter (bor i state/rumor_state.py)
+**Felt:**
+- `port_id`, `commodity_id`: target-paret. Sampling-logikk bor i
+  `systems/market_effects.register_market_effect` eller tavern-
+  handlere.
+- `direction`: `"up"` (sabotasje — knapphet hever pris) eller `"down"`
+  (falsk rykte — frykt dumper pris).
+- `magnitude_pct`: absolutt prosent-verdi. Tegn håndteres via
+  `direction`-feltet.
+- `impact_day`: absolutt GameClock.day-verdi når effekten skal
+  anvendes. Systems-logikken i `market_effects.on_dawn` fjerner og
+  anvender effekter med `impact_day <= clock.day`.
+- `source_type`: `"sabotage"` eller `"false_rumor"`. Brukes av
+  rumor-systemet for å gi spike-varsler om pending effekter
+  (C3-10-presisering #2).
 """
 
 from __future__ import annotations
@@ -24,37 +30,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass
-class PendingSabotage:
-    """Bestilt sabotasje mot en vare i en target-havn.
+#: Gyldige direction-verdier.
+DIRECTIONS: frozenset[str] = frozenset({"up", "down"})
 
-    Magnitude er uttrykt som positiv prosent av base_price. Retning er
-    alltid OPP (knapphet hever pris). C3-10 kaller
-    `Market.on_dawn(day)` som konsumerer effekter med
-    `impact_day == day`.
-
-    `ordered_on_day` er bokføring for testing/UI ("bestilt dag N").
-    `target_port` + `commodity_id` identifiserer hvor effekten lander.
-    """
-
-    target_port: str = "port_royal"
-    commodity_id: str = "sugar"
-    magnitude_pct: float = 10.0
-    ordered_on_day: int = 0
-    impact_day: int = 0
+#: Gyldige source_type-verdier (utvides ev. i senere commits).
+SOURCE_TYPES: frozenset[str] = frozenset({"sabotage", "false_rumor"})
 
 
 @dataclass
-class PendingRumorImpact:
-    """Falskt rykte (rumor_spread) — motparten til PendingSabotage.
+class PendingMarketEffect:
+    """Én forestående prisbevegelse på en vare i en havn.
 
-    Magnitude er uttrykt som positiv prosent av base_price, men retning
-    er alltid NED (falske rykter får kjøpmenn til å dumpe priser).
-    C3-10 evaluerer tilsvarende som sabotasje men med motsatt fortegn.
+    Opprettes av `systems.market_effects.register_market_effect` når
+    spilleren bestiller sabotasje eller sprer falskt rykte. Anvendes
+    og fjernes av `systems.market_effects.on_dawn` på impact_day.
     """
 
-    target_port: str = "port_royal"
+    port_id: str = "port_royal"
     commodity_id: str = "sugar"
+    direction: str = "up"  # "up" | "down"
     magnitude_pct: float = 10.0
-    ordered_on_day: int = 0
     impact_day: int = 0
+    source_type: str = "sabotage"  # "sabotage" | "false_rumor"
