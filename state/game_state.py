@@ -39,6 +39,11 @@ class GameState:
     world_state: WorldState = field(default_factory=WorldState)
     economy_state: EconomyState = field(default_factory=EconomyState)
     pitch_lake_state: PitchLakeState = field(default_factory=PitchLakeState)
+    #: Fase 3 C3-7: Sett til True av `systems.suspicion.check_threshold`
+    #: når mistanke når `balance.suspicion.threshold`. Konsumeres av
+    #: C3-12 score-overlay som trigger "arrestert"-slutt. Idempotent:
+    #: en gang True, forblir True til game-over.
+    arrested: bool = False
 
     def get_score(self) -> int:
         """Returnér spillerens nåværende score (Fase 3 C3-5).

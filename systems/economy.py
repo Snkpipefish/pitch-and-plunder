@@ -386,6 +386,13 @@ def tick_all_ports_dawn(
         if dev:
             _log_port_regimes(port_id, port_regimes, day)
 
+    # Fase 3 C3-7: mistanke-decay i samme dawn-pipeline. Kalles én gang
+    # per dag uavhengig av om spilleren er i havn eller under reise —
+    # VoyageScene loop-er dawn-tikker N ganger for flerdagers-reise,
+    # så decay akkumuleres korrekt over reisen (presisering C3-7 #1).
+    from systems.suspicion import on_dawn as suspicion_on_dawn
+    suspicion_on_dawn(state)
+
     # C8: snapshot observed for current_port med dagens nye priser.
     # Bare når i havn — under reise har spilleren ikke direkte
     # marked-tilgang og from_port-snapshotet er fra avreise-tidspunktet.

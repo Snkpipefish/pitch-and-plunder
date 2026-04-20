@@ -806,14 +806,22 @@ def _parse_pitch_lake_state(raw: Any) -> PitchLakeState:
 
 
 def parse_v5(d: dict) -> GameState:
-    """Parse en rå v5-dict til GameState-treet."""
-    return GameState(
+    """Parse en rå v5-dict til GameState-treet.
+
+    Merk: funksjonsnavnet er beholdt fra v5 for bak-kompatibilitet,
+    men parser nåværende versjon (v6 etter C3-1). `arrested`-feltet
+    (Fase 3 C3-7) leses ved siden — default False for legacy saves
+    som mangler feltet.
+    """
+    gs = GameState(
         version=CURRENT_SAVE_VERSION,
         player_state=_parse_player_state(d.get("player_state")),
         world_state=_parse_world_state(d.get("world_state")),
         economy_state=_parse_economy_state(d.get("economy_state")),
         pitch_lake_state=_parse_pitch_lake_state(d.get("pitch_lake_state")),
     )
+    gs.arrested = bool(d.get("arrested", False))
+    return gs
 
 
 def new_game_state() -> GameState:

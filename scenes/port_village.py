@@ -614,6 +614,10 @@ class PortVillageScene(BaseScene):
             upkeep=self._state.pitch_lake_state.upkeep_per_day,
             halted=self._compute_pitch_halted(),
         )
+        # Fase 3 C3-7: mistanke-linje. Oppdateres per frame (no-op hvis
+        # int-value uendret). Verdien endres kun ved dawn-decay eller
+        # eksplisitt suspicion.increase-kall fra dialog-handlinger.
+        self._hud.set_suspicion(self._state.player_state.suspicion)
 
         if self._overlay is not None:
             self._overlay.update(dt, self._current_market_state())

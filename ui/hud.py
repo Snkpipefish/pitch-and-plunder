@@ -1,4 +1,5 @@
-"""HUD for village-scenen: Tortuga / gull / dag / bek-drift, øverst venstre.
+"""HUD for village-scenen: Tortuga / gull / dag / bek-drift / mistanke,
+øverst venstre.
 
 Fargekoding er bevisst:
 - Sted         (moon-halo ) : "dette er et sted"
@@ -6,6 +7,7 @@ Fargekoding er bevisst:
 - Dag          (stone-lit ) : kaldt, tied til institusjonell tid / Børshuset
 - Bek (drift)  (ember     ) : varm-rød, tied til Pitch Lake og råvare-strøm
 - Bek (stopp)  (fog       ) : nøytral dempet, signaliserer manglende drift
+- Mistanke     (bånd-farge) : STONE_BRIGHT<30, LANTERN<70, EMBER<90, FLAME≥90
 
 Tekst-surfaces caches og re-rendres bare når verdien endrer seg – settere
 er no-ops hvis input er likt forrige verdi.
@@ -41,11 +43,15 @@ class Hud:
         self._gold: int | None = None
         self._day: int | None = None
         self._pitch_key: tuple[int, int, bool] | None = None
+        self._suspicion_value: int | None = None
         self._place_surf: pygame.Surface | None = None
         self._gold_surf: pygame.Surface | None = None
         self._day_surf: pygame.Surface | None = None
         # pitch_surf er None når produksjon er 0 OG ikke halted (skjuler linja).
         self._pitch_surf: pygame.Surface | None = None
+        # Mistanke-linje (Fase 3 C3-7) — alltid synlig. Farge varierer
+        # per bånd (STONE_BRIGHT<30, LANTERN<70, EMBER<90, FLAME≥90).
+        self._suspicion_surf: pygame.Surface | None = None
         # DEV-markør nederst til høyre. Rendres ÉN gang i __init__ og
         # caches som attributt — font.render per frame er dyrt på T4200
         # (PROSJEKT.md §14 feilmodus).
@@ -58,6 +64,7 @@ class Hud:
         self.set_gold(gold)
         self.set_day(day)
         self.set_pitch_status(pitch_per_day, pitch_upkeep, pitch_halted)
+        self.set_suspicion(0.0)
 
     def set_place(self, place: str) -> None:
         if place == self._place:
@@ -112,17 +119,62 @@ class Hud:
         else:
             self._pitch_surf = None
 
+    @staticmethod
+    def _suspicion_color(value: int) -> tuple[int, int, int]:
+        """Farge-bånd per presisering C3-7 #3.
+
+        Absolutte terskel-verdier (ikke prosent av max), slik at tuning
+        av balance.suspicion.threshold ikke endrer fargeoverganger:
+
+        - < 30:  STONE_BRIGHT — rolig
+        - 30-69: LANTERN       — merkbar
+        - 70-89: EMBER         — høy
+        - ≥ 90:  FLAME         — kritisk (nærmer seg arrest ved default
+                                  threshold=100)
+        """
+        if value < 30:
+            return constants.COLOR_STONE_BRIGHT
+        if value < 70:
+            return constants.COLOR_LANTERN
+        if value < 90:
+            return constants.COLOR_EMBER
+        return constants.COLOR_FLAME
+
+    def set_suspicion(self, suspicion: float) -> None:
+        """Oppdater mistanke-linja. Farge per bånd. Fase 3 C3-7.
+
+        Verdi avrundes til int for visning (kontinuerlig decay gir
+        desimal-verdier). Cache-nøkkel er også int, slik at minor
+        flytpunkt-støy ikke trigger re-render.
+        """
+        value = int(suspicion)
+        if value == self._suspicion_value:
+            return
+        self._suspicion_value = value
+        color = self._suspicion_color(value)
+        self._suspicion_surf = self._font.render(
+            f"Mistanke: {value}", False, color,
+        ).convert_alpha()
+
     def draw(self, surface: pygame.Surface) -> None:
+        """Tegn HUD-linjene. Dynamisk y-beregning slik at mistanke-linja
+        posisjoneres riktig selv når bek-linja er skjult."""
         assert self._place_surf is not None
         assert self._gold_surf is not None
         assert self._day_surf is not None
-        surface.blit(self._place_surf, (PADDING, PADDING))
-        surface.blit(self._gold_surf, (PADDING, PADDING + LINE_HEIGHT))
-        surface.blit(self._day_surf, (PADDING, PADDING + 2 * LINE_HEIGHT))
+        y = PADDING
+        surface.blit(self._place_surf, (PADDING, y))
+        y += LINE_HEIGHT
+        surface.blit(self._gold_surf, (PADDING, y))
+        y += LINE_HEIGHT
+        surface.blit(self._day_surf, (PADDING, y))
+        y += LINE_HEIGHT
         if self._pitch_surf is not None:
-            surface.blit(
-                self._pitch_surf, (PADDING, PADDING + 3 * LINE_HEIGHT)
-            )
+            surface.blit(self._pitch_surf, (PADDING, y))
+            y += LINE_HEIGHT
+        if self._suspicion_surf is not None:
+            surface.blit(self._suspicion_surf, (PADDING, y))
+            y += LINE_HEIGHT
         if self._dev_surf is not None:
             dev_x = constants.RENDER_WIDTH - self._dev_surf.get_width() - PADDING
             dev_y = constants.RENDER_HEIGHT - self._dev_surf.get_height() - PADDING
