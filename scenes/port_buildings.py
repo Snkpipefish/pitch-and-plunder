@@ -29,7 +29,6 @@ from config.port_config import (
 from entities import fill_buildings as fill_buildings_module
 from entities import nature as nature_module
 from entities import port_props as props_module
-from entities import reflections as reflections_module
 
 
 #: Colorkey for transparente områder på gameplay-laget. Fortsatt i bruk
@@ -1539,13 +1538,6 @@ def build_port_gameplay_layer(port_config: PortConfig) -> pygame.Surface:
     # "wood_dark" (beholder backward-kompatibilitet for havner uten props).
     texture = b.props.ground_texture if b.props is not None else "wood_dark"
     _bake_ground(surf, b.ground_top_y, texture=texture)
-    # Vann-refleksjoner (C2.5-8) bakes FØR bygninger slik at bygninger
-    # dekker eventuelt overlapp. Refleksjoner ligger i vann-regionen
-    # (y=horizon..horizon+32) mellom bygningenes y-topper og havflaten
-    # — synlige kun der bygninger ikke står over. Samme parallax-
-    # hastighet som lyskildene (gameplay speed 1.0), så ingen drift
-    # mellom kilde og refleksjon ved kamera-bevegelse.
-    reflections_module.bake_all_reflections(surf, port_config)
     # Fyll-bygninger (C2.5-6a/6b) bakes FØR signatur-bygninger slik at
     # signatur dekker ved x-overlapp. Dette gir "bybakgrunn" → "viktige
     # bygninger" dybde-lesing. Smug (alleys) er naturlig fravær — ingen
