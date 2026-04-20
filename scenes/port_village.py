@@ -31,6 +31,7 @@ from entities.npc_silhouette import NPCSilhouette, build_silhouette
 from entities.player import Player
 from scenes.base_scene import BaseScene
 from scenes.exchange import ExchangeOverlay
+from ui.harbormaster_dialog import HarbormasterDialog
 from ui.tavern_dialog import TavernDayDialog, TavernDialog, TavernNightDialog
 from scenes.parallax_backdrops import (
     build_backdrop_variants,
@@ -305,6 +306,10 @@ class PortVillageScene(BaseScene):
         # Type er TavernDialog (base); instantieres som Day eller Night
         # basert på night_factor ved åpning.
         self._tavern_dialog: TavernDialog | None = None
+        # Havnekontor-dialog (C3-4) — None naar lukket. Mutually eksklusiv
+        # med exchange og tavern. Kan starte voyage eller transisjon til
+        # WorldMapScene via `requested_next_scene`.
+        self._harbormaster_dialog: HarbormasterDialog | None = None
 
         # Hint-indikator (multi-tilstand). "near" er børs-hint (2A-kompat);
         # "near_dock" er kart-hint (C5); "near_tavern" er tavern-hint (C3-3).
@@ -324,6 +329,11 @@ class PortVillageScene(BaseScene):
         hint.add_state(
             "near_tavern",
             "E åpne tavern   A/D gå   F11 fullskjerm   Esc avslutt",
+            constants.COLOR_LANTERN_BRIGHT,
+        )
+        hint.add_state(
+            "near_harbormaster",
+            "E åpne havnekontor   A/D gå   F11 fullskjerm   Esc avslutt",
             constants.COLOR_LANTERN_BRIGHT,
         )
 
@@ -363,17 +373,24 @@ class PortVillageScene(BaseScene):
         if self._tavern_dialog is not None:
             self._tavern_dialog.handle_event(event)
             return
+        # Havnekontor-dialog (C3-4) — samme input-konsumpsjon.
+        if self._harbormaster_dialog is not None:
+            self._harbormaster_dialog.handle_event(event)
+            return
         if event.type == pygame.KEYDOWN:
             if event.key in constants.KEY_MENU:
                 self.want_quit = True
             elif event.key in constants.KEY_INTERACT:
-                # Prioritet: exchange > tavern > dock. Bygningene står
-                # på distinkte x-regioner slik at normalt kun én
-                # interaksjon er tilgjengelig om gangen.
+                # Prioritet: exchange > tavern > harbormaster > dock.
+                # Bygningene står på distinkte x-regioner (verifisert
+                # ved ports.json-load via _validate_harbormaster_placement);
+                # normalt kun én interaksjon tilgjengelig om gangen.
                 if self._player_can_interact_with_exchange():
                     self._open_exchange()
                 elif self._player_can_interact_with_tavern():
                     self._open_tavern()
+                elif self._player_can_interact_with_harbormaster():
+                    self._open_harbormaster()
                 elif self._player_can_interact_with_dock():
                     self._open_world_map()
             elif event.key in constants.KEY_LEFT:
@@ -407,6 +424,22 @@ class PortVillageScene(BaseScene):
             < constants.INTERACTION_DISTANCE
         )
 
+    def _player_can_interact_with_harbormaster(self) -> bool:
+        """True hvis spilleren står innen INTERACTION_DISTANCE av
+        harbormaster-senteret (Fase 3 C3-4).
+
+        Havnekontor-bbox kommer fra `port_config.buildings.harbormaster`.
+        None-bbox (havn uten havnekontor) → alltid False.
+        """
+        if self._buildings.harbormaster is None:
+            return False
+        player_center_x = self._player.x + self._player.width / 2
+        hm = self._buildings.harbormaster
+        return (
+            abs(player_center_x - (hm.x + hm.w / 2))
+            < constants.INTERACTION_DISTANCE
+        )
+
     def _player_can_interact_with_dock(self) -> bool:
         """True hvis spiller er i dock-region (venstre verdens-kant).
 
@@ -427,15 +460,21 @@ class PortVillageScene(BaseScene):
     def _compute_hint_state(self) -> str:
         """Velg hint-tilstand basert på spiller-posisjon og overlay-state.
 
-        Prioritet: exchange > tavern > dock > far. Åpen dialog/overlay
-        → far (ingen hint mens spilleren handler).
+        Prioritet: exchange > tavern > harbormaster > dock > far. Åpen
+        dialog/overlay → far (ingen hint mens spilleren handler).
         """
-        if self._overlay is not None or self._tavern_dialog is not None:
+        if (
+            self._overlay is not None
+            or self._tavern_dialog is not None
+            or self._harbormaster_dialog is not None
+        ):
             return "far"
         if self._player_can_interact_with_exchange():
             return "near_exchange"
         if self._player_can_interact_with_tavern():
             return "near_tavern"
+        if self._player_can_interact_with_harbormaster():
+            return "near_harbormaster"
         if self._player_can_interact_with_dock():
             return "near_dock"
         return "far"
@@ -478,6 +517,23 @@ class PortVillageScene(BaseScene):
             TavernNightDialog if night_factor >= 0.5 else TavernDayDialog
         )
         self._tavern_dialog = dialog_cls(
+            self._font,
+            self._state,
+            port_id=self._port.id,
+            toasts=self._toasts,
+        )
+        self.autosave()
+
+    def _open_harbormaster(self) -> None:
+        """Åpne havnekontor-dialog (Fase 3 C3-4).
+
+        Dialogen eksponerer fast-travel-ruter + cache-stub (C3-5) +
+        "Vis kart"-snarvei. Aktivering av reise → dialog setter
+        `requested_next_scene="voyage"`; scene-owner leser dette ved
+        close og utfører transisjon.
+        """
+        self._player.press(0)
+        self._harbormaster_dialog = HarbormasterDialog(
             self._font,
             self._state,
             port_id=self._port.id,
@@ -549,6 +605,18 @@ class PortVillageScene(BaseScene):
             if self._tavern_dialog.want_close:
                 self._tavern_dialog = None
                 self.autosave()
+            return
+        if self._harbormaster_dialog is not None:
+            # Havnekontor-dialog — samme close-mønster, men kan signalere
+            # scene-transisjon via requested_next_scene (voyage eller
+            # world_map). Transisjonen skjer etter autosave slik at
+            # reise-state er persistert før VoyageScene instansieres.
+            if self._harbormaster_dialog.want_close:
+                requested = self._harbormaster_dialog.requested_next_scene
+                self._harbormaster_dialog = None
+                self.autosave()
+                if requested is not None:
+                    self.next_scene = requested
             return
         # Kun naar overlayet er lukket kan spilleren bevege seg.
         self._player.update(dt, self._player_min_x, self._player_max_x)
@@ -646,6 +714,8 @@ class PortVillageScene(BaseScene):
             self._overlay.draw(surface, self._current_market_state())
         elif self._tavern_dialog is not None:
             self._tavern_dialog.draw(surface)
+        elif self._harbormaster_dialog is not None:
+            self._harbormaster_dialog.draw(surface)
 
     # --- Lifecycle / save ---
 

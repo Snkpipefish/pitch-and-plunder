@@ -324,6 +324,13 @@ class PortBuildings:
     #: (8, 80) — dock-sprite flyttes til buildings i C7 sammen med
     #: voyage-arbeidet.
     dock_interaction_range: tuple[int, int]
+    #: Havnekontor-bbox for fast-travel-dialog (Fase 3 C3-4). `None` =
+    #: havn uten havnekontor-funksjon. Alle 4 havner i default-config har
+    #: havnekontor; feltet er optional med default None for å støtte
+    #: test-fixtures som konstruerer PortBuildings uten å fylle inn alle
+    #: Fase 3-felt. Overlap med tavern/exchange valideres ved load i
+    #: `_validate_harbormaster_placement`.
+    harbormaster: BuildingPlacement | None = None
     #: Rekvisita-lag (gategulv-tekstur, lanterner, boder, tønner, NPC-
     #: silhuetter). `None` = ingen rekvisita ennå.
     #: Tortuga: C2.5-1. Port Royal: C2.5-2. Havana: C2.5-3. Nassau: C2.5-4.
@@ -490,6 +497,44 @@ def _parse_building_placement(
         raise ValueError(
             f"port '{port_id}': buildings.{building_name} ugyldig: {exc}"
         ) from exc
+
+
+def _bboxes_overlap(a: BuildingPlacement, b: BuildingPlacement) -> bool:
+    """Returnér True hvis to rektangulære bbox-er overlapper (axis-aligned).
+
+    Brukes til å verifisere at havnekontor-bbox ikke krasjer med tavern
+    eller exchange (FASE_3.md C3-4 presisering #3).
+    """
+    return (
+        a.x < b.x + b.w
+        and a.x + a.w > b.x
+        and a.y < b.y + b.h
+        and a.y + a.h > b.y
+    )
+
+
+def _validate_harbormaster_placement(
+    hm: BuildingPlacement,
+    tavern: BuildingPlacement,
+    exchange: BuildingPlacement,
+    port_id: str,
+) -> None:
+    """Kast ValueError hvis havnekontor overlapper tavern eller exchange.
+
+    Fase 3 C3-4 presisering: bbox-overlapp skal eksplisitt sjekkes,
+    ikke antas at plassering er disjunkt. `fill_buildings` og
+    `signature_buildings` sjekkes IKKE her — havnekontor kan overlappe
+    eksisterende bygnings-silhuetter visuelt (bbox-en er logisk for
+    interaksjon, ikke rendering).
+    """
+    if _bboxes_overlap(hm, tavern):
+        raise ValueError(
+            f"port '{port_id}': harbormaster-bbox overlapper tavern-bbox"
+        )
+    if _bboxes_overlap(hm, exchange):
+        raise ValueError(
+            f"port '{port_id}': harbormaster-bbox overlapper exchange-bbox"
+        )
 
 
 def _parse_lantern_posts(
@@ -1137,6 +1182,17 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
     exchange = _parse_building_placement(
         raw.get("exchange"), port_id, "exchange"
     )
+    # Fase 3 C3-4: havnekontor er optional i skjemaet (for testfiksturer),
+    # men i default-config skal alle 4 havner ha det. Valider overlap mot
+    # tavern/exchange — presisering C3-4 #3.
+    harbormaster_raw = raw.get("harbormaster")
+    if harbormaster_raw is None:
+        harbormaster: BuildingPlacement | None = None
+    else:
+        harbormaster = _parse_building_placement(
+            harbormaster_raw, port_id, "harbormaster"
+        )
+        _validate_harbormaster_placement(harbormaster, tavern, exchange, port_id)
     npcs_raw = raw.get("npcs", {})
     if not isinstance(npcs_raw, dict):
         raise ValueError(
@@ -1193,6 +1249,7 @@ def _parse_buildings(raw: Any, port_id: str) -> PortBuildings | None:
         exchange=exchange,
         npcs=npcs,
         dock_interaction_range=dock_range,
+        harbormaster=harbormaster,
         props=props,
         signature_buildings=signature_buildings,
         anchored_ships=anchored_ships,

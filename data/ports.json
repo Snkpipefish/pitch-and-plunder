@@ -23,6 +23,7 @@
         "player_start_x": 1340,
         "tavern":   {"x": 20,   "y": 258, "w": 200, "h": 82},
         "exchange": {"x": 1380, "y": 248, "w": 200, "h": 92},
+        "harbormaster": {"x": 1240, "y": 268, "w": 60, "h": 72},
         "npcs": {"hawkins": 1470},
         "dock_interaction_range": [8, 80],
         "anchored_ships": [
@@ -105,6 +106,7 @@
         "player_start_x": 940,
         "tavern":   {"x": 20,  "y": 258, "w": 200, "h": 82},
         "exchange": {"x": 980, "y": 248, "w": 200, "h": 92},
+        "harbormaster": {"x": 640, "y": 268, "w": 80, "h": 72},
         "npcs": {"hawkins": 1070},
         "dock_interaction_range": [8, 80],
         "anchored_ships": [
@@ -190,6 +192,7 @@
         "player_start_x": 1140,
         "tavern":   {"x": 20,   "y": 258, "w": 200, "h": 82},
         "exchange": {"x": 1180, "y": 248, "w": 200, "h": 92},
+        "harbormaster": {"x": 680, "y": 268, "w": 80, "h": 72},
         "npcs": {"hawkins": 1270},
         "dock_interaction_range": [8, 80],
         "anchored_ships": [
@@ -289,6 +292,7 @@
         "player_start_x": 940,
         "tavern":   {"x": 20,  "y": 258, "w": 200, "h": 82},
         "exchange": {"x": 980, "y": 248, "w": 200, "h": 92},
+        "harbormaster": {"x": 720, "y": 268, "w": 80, "h": 72},
         "npcs": {"hawkins": 1070},
         "dock_interaction_range": [8, 80],
         "anchored_ships": [

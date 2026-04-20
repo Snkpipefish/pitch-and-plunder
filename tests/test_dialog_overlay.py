@@ -310,13 +310,12 @@ class TestTavernNightDialog:
 
 
 class TestHarbormasterDialog:
+    """Sanity-tester for instansiering. Detaljert fast-travel-adferd
+    ligger i tests/test_harbormaster_dialog.py (C3-4)."""
+
     def test_instantiates(self, font, game_state):
         d = HarbormasterDialog(font, game_state, port_id="tortuga")
         assert d is not None
-
-    def test_build_entries_empty(self, font, game_state):
-        d = HarbormasterDialog(font, game_state, port_id="tortuga")
-        assert d._build_entries() == []
 
     def test_draw_no_crash(self, font, game_state):
         d = HarbormasterDialog(font, game_state, port_id="tortuga")
