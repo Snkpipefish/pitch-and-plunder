@@ -29,6 +29,7 @@ from config.port_config import (
 from entities import fill_buildings as fill_buildings_module
 from entities import nature as nature_module
 from entities import port_props as props_module
+from entities import water_reflections as water_reflections_module
 
 
 #: Colorkey for transparente områder på gameplay-laget. Fortsatt i bruk
@@ -1608,6 +1609,19 @@ def _bake_single_gameplay_layer(
     surf.fill(COLORKEY)
     texture = b.props.ground_texture if b.props is not None else "wood_dark"
     _bake_ground(surf, b.ground_top_y, texture=texture)
+    # Vann-refleksjoner (C2.5-8c) bakes KUN i night-variant, FØR
+    # bygninger. Bygnings-piksler tegnes over og okkluderer automatisk
+    # der de overlapper. Day-variant får ingen refleksjoner — gating
+    # via C2.5-8b night_surface-bytte.
+    if night_lights:
+        sources = water_reflections_module.generate_port_reflections(
+            port_config
+        )
+        water_reflections_module.bake_all_reflections(
+            surf, sources,
+            water_y_top=water_reflections_module.WATER_Y_TOP,
+            water_y_bottom=b.ground_top_y,
+        )
     if b.fill_buildings:
         _bake_fill_buildings(
             surf, b.fill_buildings, b.ground_top_y, night_lights,
