@@ -68,6 +68,19 @@ def test_world_state_has_action_budget() -> None:
     assert ws.action_budget.hours_used_tonight == 0.0
 
 
+def test_world_state_pending_event_id_default_none() -> None:
+    """Fase 3 C3-11: pending_event_id defaulter til None."""
+    ws = WorldState()
+    assert ws.pending_event_id is None
+
+
+def test_game_state_death_defaults() -> None:
+    """Fase 3 C3-11: dead + death_cause top-level på GameState."""
+    gs = GameState()
+    assert gs.dead is False
+    assert gs.death_cause == ""
+
+
 def test_action_budget_new_default_uses_balance() -> None:
     """ActionBudget.new_default leser balance.day/night_budget_hours."""
     ab = ActionBudget.new_default()
@@ -138,6 +151,10 @@ def test_roundtrip_preserves_stub_values(tmp_path: Path) -> None:
     state.pitch_lake_state.purchased = True
     state.world_state.action_budget.hours_used_today = 4.5
     state.world_state.action_budget.phase = "night"
+    # Fase 3 C3-11: death + pending_event_id roundtrip
+    state.dead = True
+    state.death_cause = "shipwreck"
+    state.world_state.pending_event_id = "storm"
 
     path = tmp_path / "stub_roundtrip.json"
     assert save_module.save(state, str(path)) is True
@@ -165,6 +182,10 @@ def test_roundtrip_preserves_stub_values(tmp_path: Path) -> None:
     assert loaded.pitch_lake_state.purchased is True
     assert loaded.world_state.action_budget.hours_used_today == 4.5
     assert loaded.world_state.action_budget.phase == "night"
+    # Fase 3 C3-11: death + pending_event_id bevart
+    assert loaded.dead is True
+    assert loaded.death_cause == "shipwreck"
+    assert loaded.world_state.pending_event_id == "storm"
 
 
 def test_load_v5_save_without_stubs_uses_defaults(tmp_path: Path) -> None:

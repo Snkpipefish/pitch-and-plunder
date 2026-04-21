@@ -32,6 +32,7 @@ from entities.player import Player
 from scenes.base_scene import BaseScene
 from scenes.exchange import ExchangeOverlay
 from ui.cache_dialog import CacheSubDialog
+from ui.event_dialog import EventDialog
 from ui.harbormaster_dialog import HarbormasterDialog
 from ui.rumors_dialog import RumorsDialog
 from ui.tavern_dialog import TavernDayDialog, TavernDialog, TavernNightDialog
@@ -320,6 +321,11 @@ class PortVillageScene(BaseScene):
         # Rykte-dialog (C3-9) — åpnes med R-tast, viser aktive rykter.
         # Kun les-visning. Lukkes med ESC.
         self._rumors_dialog: RumorsDialog | None = None
+        # Fase 3 C3-11: event-dialog. Åpnes automatisk av update() når
+        # `world_state.pending_event_id` er satt (typisk via port-event-
+        # sampling i tick_all_ports_dawn). Pure notifikasjon — Enter
+        # lukker og clearer pending_event_id.
+        self._event_dialog: EventDialog | None = None
 
         # Hint-indikator (multi-tilstand). "near" er børs-hint (2A-kompat);
         # "near_dock" er kart-hint (C5); "near_tavern" er tavern-hint (C3-3).
@@ -375,6 +381,11 @@ class PortVillageScene(BaseScene):
     # --- Input ---
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        # Fase 3 C3-11: event-dialog har høyeste prioritet — modal
+        # notifikasjon krever at spilleren lukker før alt annet.
+        if self._event_dialog is not None:
+            self._event_dialog.handle_event(event)
+            return
         # Når børsen er åpen konsumerer overlayet all input.
         if self._overlay is not None:
             self._overlay.handle_event(event, self._current_market_state())
@@ -624,6 +635,15 @@ class PortVillageScene(BaseScene):
                 )
             self._last_seen_day = curr_day
 
+        # Fase 3 C3-11: åpne event-dialog hvis pending_event_id er satt
+        # og ingen dialog er åpen. Resolver effekter først, deretter
+        # vis dialog. Ved død setter vi ikke noe ekstra — C3-12 score-
+        # overlay vil lese state.dead. Prioritering: ingen annen dialog
+        # åpen først (event-sampling skjer ved dawn som kan slå inn
+        # mens spilleren er midt i tavern-meny — da venter vi med
+        # notifikasjon til spilleren lukker gjeldende dialog).
+        self._maybe_open_pending_event()
+
         # Lanterne-swing og andre tidsavhengige effekter gaar videre ogsaa.
         self._elapsed += dt
         self._particles.update(dt)
@@ -693,9 +713,43 @@ class PortVillageScene(BaseScene):
                 self._rumors_dialog = None
                 # Ingen autosave — rykte-dialogen muterer ikke state.
             return
+        # Fase 3 C3-11: event-dialog lifecycle — lukker og autosaver
+        # (effekter på state er allerede applyert ved åpning).
+        if self._event_dialog is not None:
+            if self._event_dialog.want_close:
+                self._event_dialog = None
+                self.autosave()
+            return
         # Kun naar overlayet er lukket kan spilleren bevege seg.
         self._player.update(dt, self._player_min_x, self._player_max_x)
         self._center_camera_on_player()
+
+    def _maybe_open_pending_event(self) -> None:
+        """Åpne EventDialog hvis pending_event_id er satt og ingen annen
+        dialog er aktiv. Resolver effekter og clearer pending-flagget
+        før dialogen instansieres."""
+        if self._event_dialog is not None:
+            return
+        if (
+            self._overlay is not None
+            or self._tavern_dialog is not None
+            or self._harbormaster_dialog is not None
+            or self._cache_dialog is not None
+            or self._rumors_dialog is not None
+        ):
+            return
+        ev_id = self._state.world_state.pending_event_id
+        if ev_id is None:
+            return
+        from systems import events as _events
+        if not _events.is_initialized():
+            self._state.world_state.pending_event_id = None
+            return
+        title, body, _died = _events.resolve(self._state, ev_id)
+        self._state.world_state.pending_event_id = None
+        self._event_dialog = EventDialog(
+            font=self._font, title=title, body=body,
+        )
 
     def _tick_all_ports_dawn(self) -> None:
         """Tynn delegasjon til `economy.tick_all_ports_dawn` (C7a-refactor).
@@ -795,6 +849,10 @@ class PortVillageScene(BaseScene):
             self._cache_dialog.draw(surface)
         elif self._rumors_dialog is not None:
             self._rumors_dialog.draw(surface)
+        # Fase 3 C3-11: event-dialog tegnes ALLTID på topp hvis åpen
+        # (ikke elif — den har høyeste prioritet).
+        if self._event_dialog is not None:
+            self._event_dialog.draw(surface)
 
     # --- Lifecycle / save ---
 

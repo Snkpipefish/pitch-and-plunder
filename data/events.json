@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "events": [
+    {
+      "id": "shipwreck",
+      "context": "voyage",
+      "weight": 1.0,
+      "positive": false,
+      "title": "Forlis!",
+      "body": "Skipet kastes i stykker mot et rev. Du kaster deg i sjøen.",
+      "effects": [
+        {"type": "gold_loss_pct", "value": 50.0},
+        {"type": "shipwreck_death_roll", "value": 5.0}
+      ]
+    },
+    {
+      "id": "pirates_raid",
+      "context": "voyage",
+      "weight": 1.0,
+      "positive": false,
+      "title": "Ran",
+      "body": "Pirater border skipet og røver dere for en del av gullet.",
+      "effects": [
+        {"type": "gold_loss_pct", "value": 30.0}
+      ]
+    },
+    {
+      "id": "storm",
+      "context": "voyage",
+      "weight": 1.0,
+      "positive": false,
+      "title": "Storm",
+      "body": "En uventet storm driver dere ut av kurs. Reisen forsinkes med én dag.",
+      "effects": [
+        {"type": "voyage_delay_days", "value": 1}
+      ]
+    },
+    {
+      "id": "lucky_find",
+      "context": "voyage",
+      "weight": 1.0,
+      "positive": true,
+      "title": "Heldig funn",
+      "body": "Dere finner en forlatt vrakpakke med gull ombord.",
+      "effects": [
+        {"type": "gold_gain_fixed", "value": 80}
+      ]
+    },
+    {
+      "id": "sickness",
+      "context": "port",
+      "weight": 1.0,
+      "positive": false,
+      "title": "Sykdom",
+      "body": "En feber slår seg ned i mannskapet. Du må hvile og bruker gull på medisin.",
+      "effects": [
+        {"type": "rest_spike", "value": 0.4},
+        {"type": "gold_loss_pct", "value": 15.0},
+        {"type": "sickness_death_check", "value": 0.2}
+      ]
+    },
+    {
+      "id": "suspicion_spike",
+      "context": "port",
+      "weight": 1.0,
+      "positive": false,
+      "title": "Guvernøren hører rykter",
+      "body": "Noen har snakket. Guvernøren har fått nyss om deg.",
+      "effects": [
+        {"type": "suspicion_increase", "value": 20.0}
+      ]
+    },
+    {
+      "id": "lucky_acquaintance",
+      "context": "port",
+      "weight": 1.0,
+      "positive": true,
+      "title": "Heldig bekjentskap",
+      "body": "En gammel venn byr deg et drikk — og et gratis rykte.",
+      "effects": [
+        {"type": "gold_gain_fixed", "value": 0},
+        {"type": "rest_spike", "value": -0.05}
+      ]
+    },
+    {
+      "id": "drunken_brawl",
+      "context": "port",
+      "weight": 1.0,
+      "positive": true,
+      "title": "Fyllefest",
+      "body": "Nattens fest lar deg sove det av. Du våkner utmerket uthvilt.",
+      "effects": [
+        {"type": "rest_restore", "value": 1.0}
+      ]
+    }
+  ]
+}

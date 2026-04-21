@@ -50,6 +50,19 @@ def _ensure_port_config_initialized():
 
 
 @pytest.fixture(autouse=True)
+def _ensure_events_initialized():
+    """Fase 3 C3-11: initialiser events-katalogen fra data/events.json
+    hvis ikke allerede satt. test_events.py overstyrer med egen reset-
+    fixture for isolasjonstester.
+    """
+    from systems import events
+
+    if not events.is_initialized():
+        events.init(str(ROOT / "data" / "events.json"))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _block_default_save_path(monkeypatch, tmp_path):
     """Hindre at tester skriver til prod-save (`saves/savegame.json`).
 

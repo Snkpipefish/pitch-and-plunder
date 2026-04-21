@@ -407,6 +407,21 @@ def tick_all_ports_dawn(
     from systems.market_effects import on_dawn as market_effects_on_dawn
     market_effects_on_dawn(state)
 
+    # Fase 3 C3-11: port-event-sampling. Kun når spilleren er i havn
+    # (voyage is None) — voyage-events samples i VoyageScene per dawn-
+    # tikk. Sampler med balance.events.port_frequency_per_day_start og
+    # setter state.world_state.pending_event_id hvis et event treffer.
+    # Idempotent: hvis et pending_event_id allerede er satt (spilleren
+    # har ikke lukket forrige dialog), skippes ny sampling. Resolving
+    # skjer i PortVillageScene ved dialog-åpning for å holde state-
+    # mutasjon samlet med UI-presentasjon.
+    if state.world_state.voyage is None and state.world_state.pending_event_id is None:
+        from systems.events import sample_port_event, is_initialized as _events_ready
+        if _events_ready():
+            ev_id = sample_port_event(state)
+            if ev_id is not None:
+                state.world_state.pending_event_id = ev_id
+
     # C8: snapshot observed for current_port med dagens nye priser.
     # Bare når i havn — under reise har spilleren ikke direkte
     # marked-tilgang og from_port-snapshotet er fra avreise-tidspunktet.

@@ -40,6 +40,15 @@ def _pygame_display():
     pygame.display.quit()
 
 
+@pytest.fixture(autouse=True)
+def _disable_random_events(monkeypatch):
+    """Fase 3 C3-11: disable events i voyage-scene-integrasjonstester
+    for deterministisk dawn-tick-telling. Events dekkes av test_events.py."""
+    from systems import events as _events
+    monkeypatch.setattr(_events, "sample_voyage_event", lambda *a, **kw: None)
+    monkeypatch.setattr(_events, "sample_port_event", lambda *a, **kw: None)
+
+
 def _font() -> pygame.font.Font:
     return pygame.font.Font(None, 12)
 

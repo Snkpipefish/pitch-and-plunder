@@ -696,12 +696,19 @@ def _parse_world_state(raw: Any) -> WorldState:
     # Fase 3 (v2) stub: action_budget feltet. v5-saves uten feltet får
     # default fra balance via _parse_action_budget.
     action_budget = _parse_action_budget(raw.get("action_budget"))
+    # Fase 3 C3-11: pending_event_id — None hvis mangler eller tom.
+    raw_pending = raw.get("pending_event_id")
+    if isinstance(raw_pending, str) and raw_pending:
+        pending_event_id = raw_pending
+    else:
+        pending_event_id = None
     return WorldState(
         current_port=current_port,
         clock=clock,
         ship=ship,
         voyage=voyage,
         action_budget=action_budget,
+        pending_event_id=pending_event_id,
     )
 
 
@@ -817,6 +824,10 @@ def parse_v5(d: dict) -> GameState:
         pitch_lake_state=_parse_pitch_lake_state(d.get("pitch_lake_state")),
     )
     gs.arrested = bool(d.get("arrested", False))
+    # Fase 3 C3-11: death-state. Legacy saves uten feltet får False/"".
+    gs.dead = bool(d.get("dead", False))
+    death_cause = d.get("death_cause", "")
+    gs.death_cause = str(death_cause) if isinstance(death_cause, str) else ""
     return gs
 
 

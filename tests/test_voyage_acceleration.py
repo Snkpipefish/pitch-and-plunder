@@ -36,6 +36,16 @@ def _pygame_setup():
     pygame.font.quit()
 
 
+@pytest.fixture(autouse=True)
+def _disable_voyage_events(monkeypatch):
+    """Fase 3 C3-11: disable random voyage/port events for disse tempo-
+    testene slik at de forblir deterministiske. Events er dekket av
+    test_events.py."""
+    from systems import events as _events
+    monkeypatch.setattr(_events, "sample_voyage_event", lambda *a, **kw: None)
+    monkeypatch.setattr(_events, "sample_port_event", lambda *a, **kw: None)
+
+
 @pytest.fixture
 def font():
     return pygame.font.SysFont(None, 12)

@@ -61,10 +61,12 @@ from scenes.world_map import draw_port_markers_with_labels
 from scenes.world_map_builder import build_world_map_background
 from state import GameState
 from systems import balance as _balance
+from systems import events as _events
 from systems import voyage as _voyage
 from systems.economy import Market, tick_all_ports_dawn
 from systems.pitch_lake import PitchLake
 from systems.regime_manager import RegimeManager
+from ui.event_dialog import EventDialog
 from ui.toast import Toast, ToastQueue
 
 
@@ -182,6 +184,19 @@ class VoyageScene(BaseScene):
             center_x=constants.RENDER_WIDTH // 2,
         )
 
+        # Fase 3 C3-11: event-dialog. None naar ingen pending event.
+        # Animasjonen pauses mens dialogen er åpen — oppnås ved at
+        # update() returnerer tidlig før clock.update kjører (main.py
+        # oppdaterer clock uansett, så vi må eksplisitt holde
+        # seconds_into_day konstant). Praktisk: dialogen konsumerer
+        # alle input-events og vi lar update() returnere tidlig for
+        # å unngå nye dawn-ticks/arrival-deteksjon. Main.py sin
+        # clock.update kjører fortsatt, men skip_to_arrival-logikken
+        # og arrival-sjekk blokkeres. For en 5-sek-animasjon er dette
+        # akseptabelt — dialogen tar typisk over hele oppmerksomheten.
+        self._event_dialog: EventDialog | None = None
+        self._pending_death_after_dialog = False
+
     @property
     def toasts(self) -> ToastQueue:
         """Eksponer toast-køen for eksterne systemer."""
@@ -190,6 +205,10 @@ class VoyageScene(BaseScene):
     # --- Input ---
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        # Fase 3 C3-11: event-dialog konsumerer all input når åpen.
+        if self._event_dialog is not None:
+            self._event_dialog.handle_event(event)
+            return
         # Fase 3 C3-9.5: Enter/Space/ESC hopper over resterende
         # animasjon ved å sette clock.day = arrival_day direkte. Neste
         # update() ser days_passed = gjenværende dager, kjører dawn-
@@ -222,6 +241,27 @@ class VoyageScene(BaseScene):
     # --- Update ---
 
     def update(self, dt: float) -> None:
+        # Fase 3 C3-11: event-dialog pauser videre logikk — ingen dawn-
+        # ticks, ingen arrival-deteksjon mens spilleren leser eventet.
+        # Main.py oppdaterer clock uansett, så vi må fryse seconds_into_day
+        # for å forhindre at animasjonen skrider frem.
+        if self._event_dialog is not None:
+            self._toasts.update(dt)
+            # Frys seconds_into_day for å pause animasjon visuelt.
+            # Day er allerede bumped av main.py før event-sample; vi
+            # lar bare seconds_into_day stå stille.
+            self._state.world_state.clock.seconds_into_day = 0.0
+            if self._event_dialog.want_close:
+                self._event_dialog = None
+                if self._pending_death_after_dialog:
+                    self._pending_death_after_dialog = False
+                    # Gå til port_village slik at C3-12 score-overlay
+                    # kan trigges. C3-12 vil lese state.dead ved scene-
+                    # entry. Foreløpig (før C3-12 lander): PortVillageScene
+                    # fortsetter som normalt — score-overlay kommer senere.
+                    self.next_scene = "port_village"
+            return
+
         # Klokken oppdateres av main.run() (felles for alle scener);
         # VoyageScene må kun reagere på dag-skift og ankomst.
         self._toasts.update(dt)
@@ -241,7 +281,18 @@ class VoyageScene(BaseScene):
                 PitchLake.on_new_day(
                     self._state.pitch_lake_state, self._state,
                 )
-            self._last_seen_day = curr_day
+                # Fase 3 C3-11: voyage-event-sampling per passert dag.
+                # Kjøres ETTER tick_all_ports_dawn (samme dawn-pipeline-
+                # prinsipp som rumors/market_effects). Hvis en event
+                # samples, resolve umiddelbart og pause animasjonen via
+                # event-dialog. Break ut av for-loopen slik at
+                # resterende dager prosesseres etter at spilleren har
+                # lukket dialogen (neste update).
+                if self._maybe_trigger_voyage_event():
+                    break
+            # Oppdater _last_seen_day uansett; ytterligere dager prosesseres
+            # ved neste update etter event-dialog lukkes.
+            self._last_seen_day = self._state.world_state.clock.day
 
         # Ankomst-deteksjon. complete_voyage setter current_port til
         # to_port og clock-tempo tilbake til in_port; PortVillageScene-
@@ -251,6 +302,23 @@ class VoyageScene(BaseScene):
         if voyage is not None and curr_day >= voyage.arrival_day:
             _voyage.complete_voyage(self._state, _balance.get())
             self.next_scene = "port_village"
+
+    def _maybe_trigger_voyage_event(self) -> bool:
+        """Sample og eventuelt trigger voyage-event for denne dawn.
+        Returnerer True hvis event ble triggered (event-dialog åpnet)."""
+        if not _events.is_initialized():
+            return False
+        if self._state.arrested or self._state.dead:
+            return False
+        ev_id = _events.sample_voyage_event(self._state)
+        if ev_id is None:
+            return False
+        title, body, died = _events.resolve(self._state, ev_id)
+        self._event_dialog = EventDialog(
+            font=self._font, title=title, body=body,
+        )
+        self._pending_death_after_dialog = died
+        return True
 
     # --- Rendering ---
 
@@ -307,6 +375,10 @@ class VoyageScene(BaseScene):
 
         # Toasts (avreise-varsel ved fersk voyage)
         self._toasts.draw(surface)
+
+        # Fase 3 C3-11: event-dialog på topp (modal).
+        if self._event_dialog is not None:
+            self._event_dialog.draw(surface)
 
     # --- Lifecycle ---
 

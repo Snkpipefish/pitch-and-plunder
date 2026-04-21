@@ -22,6 +22,7 @@ from config import port_config as port_config_module
 from systems import balance as balance_module  # Må init-es før andre systemer
 from systems import debug_teleport
 from systems import dev_mode
+from systems import events as events_module
 
 
 # Eksplisitt init ved oppstart — feiler høylydt hvis balance.json eller
@@ -30,6 +31,10 @@ from systems import dev_mode
 # importeres via scenes/systems-under.
 balance_module.init()
 port_config_module.init()
+# Fase 3 C3-11: events.json må være lastet før økonomi-pipeline kaller
+# sample_port_event / sample_voyage_event. Samme filosofi som balance —
+# feil høylydt ved oppstart, ikke midt i handel.
+events_module.init()
 
 
 from scenes.base_scene import BaseScene  # noqa: E402

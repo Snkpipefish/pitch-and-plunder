@@ -44,6 +44,12 @@ class GameState:
     #: C3-12 score-overlay som trigger "arrestert"-slutt. Idempotent:
     #: en gang True, forblir True til game-over.
     arrested: bool = False
+    #: Fase 3 C3-11: Sett av event-kode-handler (shipwreck, sickness)
+    #: ved dødelig utfall. Konsumeres av C3-12 score-overlay som trigger
+    #: "død"-slutt. Samme top-level-mønster som `arrested`. `death_cause`
+    #: er en event-id eller kort nøkkel for UI-visning.
+    dead: bool = False
+    death_cause: str = ""
 
     def get_score(self) -> int:
         """Returnér spillerens nåværende score (Fase 3 C3-5).
