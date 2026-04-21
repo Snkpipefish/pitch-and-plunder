@@ -172,12 +172,21 @@ class TestVoyageArrivalWaitsForEventDialog:
     def test_arrival_triggers_after_event_dialog_closes(
         self, font, state, monkeypatch,
     ):
-        """Etter dialog-close skal neste update trigger complete_voyage."""
+        """Etter dialog-close skal neste update trigger complete_voyage.
+
+        Event samples kun én gang (første dawn-tick); etterfølgende
+        dawn-ticks returnerer None. Uten denne one-shot-logikken
+        ville C3-13b.1-fiksen triggere nytt event på dag 2's dawn-
+        tick (days-processed økning får loopen til å faktisk kjøre
+        videre) og arrival ville aldri nås.
+        """
         from systems import events as _events
         scene = self._scene(font, state, depart_day=1, days=2)
-        monkeypatch.setattr(
-            _events, "sample_voyage_event", lambda *a, **kw: "pirates_raid"
-        )
+        call_count = {"n": 0}
+        def sample_once(*a, **kw):
+            call_count["n"] += 1
+            return "pirates_raid" if call_count["n"] == 1 else None
+        monkeypatch.setattr(_events, "sample_voyage_event", sample_once)
         state.world_state.clock.day = 3
         scene.update(0.016)
         assert scene._event_dialog is not None
@@ -188,7 +197,8 @@ class TestVoyageArrivalWaitsForEventDialog:
         scene.update(0.016)
         assert scene._event_dialog is None
 
-        # Tredje update: dialog er None, arrival-detection fires.
+        # Tredje update: dialog er None, dag 2's dawn-tick kjører
+        # (C3-13b.1), arrival-detection fires etter.
         scene.update(0.016)
         assert scene.next_scene == "port_village", (
             "Scene-switch skal skje etter at event-dialogen er lukket"
@@ -211,3 +221,130 @@ class TestVoyageArrivalWaitsForEventDialog:
         assert scene._event_dialog is None
         assert scene.next_scene == "port_village"
         assert state.world_state.voyage is None
+
+
+# -----------------------------------------------------------------------------
+# Bug 1b (C3-13b.1): Dawn-tick-loop taper ikke dager ved event-break
+# -----------------------------------------------------------------------------
+
+
+class TestDawnTicksNotDroppedByEventBreak:
+    def _scene(self, font, state, depart_day=1, days=3):
+        from scenes.voyage import VoyageScene
+        state.world_state.voyage = VoyageState(
+            from_port="tortuga", to_port="havana",
+            depart_day=depart_day,
+            arrival_day=depart_day + days,
+            progress=0.0,
+        )
+        state.world_state.clock.day = depart_day
+        state.world_state.clock.seconds_into_day = 0.0
+        return VoyageScene(font, state)
+
+    def test_dawn_ticks_process_all_days_across_event_break(
+        self, font, state, monkeypatch,
+    ):
+        """3-dagers reise, event samples kun på første dawn-tick.
+        Spiller skipper resten. BÅDE dag 2 OG dag 3 dawn-tick skal
+        ha kjørt før complete_voyage.
+
+        Verifisering: MarketState.tick_id bumpes én gang per dawn-tick
+        per havn. Før update: 0. Etter 3 dawn-ticks: 3 per havn.
+        """
+        from systems import events as _events
+        scene = self._scene(font, state, depart_day=1, days=3)
+
+        # Event kun på første dawn-tick, så None etterpå.
+        call_count = {"n": 0}
+        def sample_once(*a, **kw):
+            call_count["n"] += 1
+            return "pirates_raid" if call_count["n"] == 1 else None
+        monkeypatch.setattr(_events, "sample_voyage_event", sample_once)
+
+        before_tick_ids = {
+            pid: ms.tick_id
+            for pid, ms in state.economy_state.markets.items()
+        }
+
+        # Avanser clock til arrival (dag 4) → 3 dawn-ticks skal kjøre.
+        state.world_state.clock.day = 4
+        scene.update(0.016)  # iteration 1 kjører dawn-tick for dag 2, event → break
+
+        # Én dawn-tick er prosessert, _last_seen_day skal være 2.
+        assert scene._last_seen_day == 2, (
+            f"Etter ett dawn-tick-break: _last_seen_day skal være 2, "
+            f"fikk {scene._last_seen_day}"
+        )
+        assert scene._event_dialog is not None
+
+        # Lukk dialogen, kjør neste update — resterende 2 dawn-ticks skal fire.
+        scene._event_dialog._want_close = True
+        scene.update(0.016)  # dialog close, return
+        assert scene._event_dialog is None
+
+        # Tredje update: dawn-loop fortsetter fra dag 3 til dag 4.
+        scene.update(0.016)
+
+        # Alle 3 dawn-ticks skal ha fyrt — tick_id bumpet 3 ganger per havn.
+        for pid, ms in state.economy_state.markets.items():
+            assert ms.tick_id == before_tick_ids[pid] + 3, (
+                f"{pid}: forventet +3 dawn-ticks totalt, "
+                f"fikk {ms.tick_id - before_tick_ids[pid]}"
+            )
+
+        # Voyage skal være fullført.
+        assert state.world_state.voyage is None
+        assert scene.next_scene == "port_village"
+
+    def test_event_on_first_day_multi_day_route_preserves_second_dawn(
+        self, font, state, monkeypatch,
+    ):
+        """Enklere 2-dagers case: event på dag 1, verifiser at dag 2
+        dawn-tick kjører før complete_voyage."""
+        from systems import events as _events
+        scene = self._scene(font, state, depart_day=1, days=2)
+
+        call_count = {"n": 0}
+        def sample_once(*a, **kw):
+            call_count["n"] += 1
+            return "pirates_raid" if call_count["n"] == 1 else None
+        monkeypatch.setattr(_events, "sample_voyage_event", sample_once)
+
+        before_tick_ids = {
+            pid: ms.tick_id
+            for pid, ms in state.economy_state.markets.items()
+        }
+
+        state.world_state.clock.day = 3  # arrival
+        scene.update(0.016)  # event break på dag 2 dawn-tick
+
+        assert scene._last_seen_day == 2
+        scene._event_dialog._want_close = True
+        scene.update(0.016)
+        scene.update(0.016)
+
+        for pid, ms in state.economy_state.markets.items():
+            assert ms.tick_id == before_tick_ids[pid] + 2, (
+                f"{pid}: forventet +2 dawn-ticks, "
+                f"fikk {ms.tick_id - before_tick_ids[pid]}"
+            )
+        assert state.world_state.voyage is None
+
+    def test_no_event_all_days_processed_in_one_update(
+        self, font, state, monkeypatch,
+    ):
+        """Regresjons-guard: uten event kjører alle dawn-ticks i ett update."""
+        from systems import events as _events
+        scene = self._scene(font, state, depart_day=1, days=3)
+        monkeypatch.setattr(
+            _events, "sample_voyage_event", lambda *a, **kw: None,
+        )
+        before_tick_ids = {
+            pid: ms.tick_id
+            for pid, ms in state.economy_state.markets.items()
+        }
+        state.world_state.clock.day = 4
+        scene.update(0.016)
+        for pid, ms in state.economy_state.markets.items():
+            assert ms.tick_id == before_tick_ids[pid] + 3
+        assert scene._last_seen_day == 4

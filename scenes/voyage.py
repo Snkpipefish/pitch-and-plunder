@@ -272,8 +272,15 @@ class VoyageScene(BaseScene):
         # Samme algoritme som PortVillageScene; sikrer at markedet i
         # alle 4 havner utvikler seg uavhengig av at spilleren er på
         # sjøen (per spec §7.3).
+        #
+        # Fase 3 C3-13b.1: `_last_seen_day` oppdateres basert på FAKTISK
+        # prosesserte dawn-ticks, ikke clock.day ved exit. Hvis et
+        # voyage-event bryter loopen tidlig, skal resterende dawn-
+        # ticks prosesseres ved neste update etter dialog-close —
+        # ingen dager kan tapes.
         if curr_day != self._last_seen_day:
             days_passed = max(0, curr_day - self._last_seen_day)
+            processed = 0
             for _ in range(days_passed):
                 tick_all_ports_dawn(
                     self._state, self._market, self._regime_manager,
@@ -281,18 +288,20 @@ class VoyageScene(BaseScene):
                 PitchLake.on_new_day(
                     self._state.pitch_lake_state, self._state,
                 )
+                processed += 1
                 # Fase 3 C3-11: voyage-event-sampling per passert dag.
                 # Kjøres ETTER tick_all_ports_dawn (samme dawn-pipeline-
                 # prinsipp som rumors/market_effects). Hvis en event
                 # samples, resolve umiddelbart og pause animasjonen via
-                # event-dialog. Break ut av for-loopen slik at
-                # resterende dager prosesseres etter at spilleren har
-                # lukket dialogen (neste update).
+                # event-dialog. Break ut av for-loopen — resterende
+                # dager prosesseres ved neste update etter dialog-close.
                 if self._maybe_trigger_voyage_event():
                     break
-            # Oppdater _last_seen_day uansett; ytterligere dager prosesseres
-            # ved neste update etter event-dialog lukkes.
-            self._last_seen_day = self._state.world_state.clock.day
+            # Bruk faktisk prosesserte dager for å spore progresjon;
+            # hvis vi brøt tidlig er _last_seen_day < curr_day, slik
+            # at neste update finner `curr_day != _last_seen_day` og
+            # prosesserer de gjenværende.
+            self._last_seen_day += processed
 
         # Ankomst-deteksjon. complete_voyage setter current_port til
         # to_port og clock-tempo tilbake til in_port; PortVillageScene-
