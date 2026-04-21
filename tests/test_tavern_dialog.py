@@ -19,6 +19,7 @@ import constants
 from state import GameState
 from ui.tavern_dialog import (
     ACTION_BUY_ROOM,
+    ACTION_CHECK_SUSPICION,
     ACTION_ORDER_SABOTAGE,
     ACTION_PITCH_LAKE_PURCHASE,
     ACTION_RUMOR_LISTEN_FREE,
@@ -71,10 +72,10 @@ def _keydown(key: int) -> pygame.event.Event:
 
 class TestDayEntries:
     def test_tortuga_fresh_save_has_three_entries(self, font, state):
-        """Tortuga før bek-anlegg-kjøp: rom + rykter-stub + bek-kjøp.
+        """Tortuga før bek-anlegg-kjøp (C3-13a): rom + sjekk-mistanke + bek.
 
-        C3-3: bek-entry var stubbed (active=False).
-        C3-6: bek-entry er aktiv med pris-label.
+        C3-13a: rumor_listen_free-stubben er erstattet med gratis
+        check_suspicion-entry. Alle tre oppføringer er aktive.
         """
         assert state.pitch_lake_state.purchased is False
         d = TavernDayDialog(font, state, port_id="tortuga")
@@ -82,8 +83,8 @@ class TestDayEntries:
         assert len(entries) == 3
         assert entries[0].action_id == ACTION_BUY_ROOM
         assert entries[0].active is True
-        assert entries[1].action_id == ACTION_RUMOR_LISTEN_FREE
-        assert entries[1].active is False  # rykter fortsatt stubbet (C3-9)
+        assert entries[1].action_id == ACTION_CHECK_SUSPICION
+        assert entries[1].active is True  # C3-13a: aktivert (gratis)
         assert entries[2].action_id == ACTION_PITCH_LAKE_PURCHASE
         assert entries[2].active is True  # C3-6: aktivert
 
@@ -94,7 +95,8 @@ class TestDayEntries:
         entries = d._build_entries()
         action_ids = [e.action_id for e in entries]
         assert ACTION_PITCH_LAKE_PURCHASE not in action_ids
-        assert len(entries) == 2  # rom + rykter-stub
+        # C3-13a: rom + sjekk-mistanke
+        assert len(entries) == 2
 
     def test_non_tortuga_hides_pitch_entry(self, font, state):
         """Port Royal har ingen bek-entry uansett purchased-status."""
@@ -104,69 +106,57 @@ class TestDayEntries:
         assert ACTION_PITCH_LAKE_PURCHASE not in action_ids
         assert len(entries) == 2
 
-    def test_tortuga_active_entries_include_rom_and_bek(self, font, state):
-        """C3-6: Tortuga har to aktive entries før bek-kjøp (rom + bek).
-        Etter kjøp: kun rom aktiv.
-        """
+    def test_tortuga_active_entries_include_rom_bek_and_suspicion(
+        self, font, state,
+    ):
+        """C3-13a: Tortuga har tre aktive entries før bek-kjøp."""
         d = TavernDayDialog(font, state, port_id="tortuga")
         active_ids = [e.action_id for e in d._build_entries() if e.active]
-        assert set(active_ids) == {ACTION_BUY_ROOM, ACTION_PITCH_LAKE_PURCHASE}
+        assert set(active_ids) == {
+            ACTION_BUY_ROOM, ACTION_CHECK_SUSPICION, ACTION_PITCH_LAKE_PURCHASE,
+        }
 
-    def test_non_tortuga_only_rom_is_active(self, font, state):
-        """Andre havner har ikke bek-entry; kun rom er aktiv."""
+    def test_non_tortuga_active_entries(self, font, state):
+        """Andre havner har kun rom + sjekk-mistanke aktive."""
         d = TavernDayDialog(font, state, port_id="havana")
         active_ids = [e.action_id for e in d._build_entries() if e.active]
-        assert active_ids == [ACTION_BUY_ROOM]
+        assert set(active_ids) == {ACTION_BUY_ROOM, ACTION_CHECK_SUSPICION}
 
 
 class TestNightEntries:
-    def test_six_entries_fixed_order(self, font, state):
-        """C3-9: natt-menyen har nå 6 entries (rom + to rykte-typer +
-        sabotasje/falskt-rykte/smugler stubbed)."""
+    def test_five_entries_fixed_order(self, font, state):
+        """C3-13a: natt-menyen har 5 entries (smuggler_contact fjernet).
+        Alle er aktive."""
         from ui.tavern_dialog import (
             ACTION_BUY_RUMOR_REGIME, ACTION_BUY_RUMOR_SPIKE,
         )
         d = TavernNightDialog(font, state, port_id="tortuga")
         entries = d._build_entries()
-        assert len(entries) == 6
+        assert len(entries) == 5
         assert [e.action_id for e in entries] == [
             ACTION_BUY_ROOM,
             ACTION_BUY_RUMOR_REGIME,
             ACTION_BUY_RUMOR_SPIKE,
             ACTION_ORDER_SABOTAGE,
             ACTION_SPREAD_FALSE_RUMOR,
-            "smuggler_contact",
         ]
 
-    def test_five_entries_active_c3_10(self, font, state):
-        """C3-10: 5 aktive entries (rom + 2 rykter + sabotasje + falsk
-        rykte). Kun smuggler_contact er fortsatt stubbed."""
-        from ui.tavern_dialog import (
-            ACTION_BUY_RUMOR_REGIME, ACTION_BUY_RUMOR_SPIKE,
-        )
+    def test_all_night_entries_active(self, font, state):
+        """C3-13a: alle 5 natt-oppføringer er aktive."""
         d = TavernNightDialog(font, state, port_id="tortuga")
         entries = d._build_entries()
-        active_ids = {e.action_id for e in entries if e.active}
-        assert active_ids == {
-            ACTION_BUY_ROOM,
-            ACTION_BUY_RUMOR_REGIME,
-            ACTION_BUY_RUMOR_SPIKE,
-            ACTION_ORDER_SABOTAGE,
-            ACTION_SPREAD_FALSE_RUMOR,
-        }
-        # Kun smuggler_contact er inaktiv
-        inactive_ids = {e.action_id for e in entries if not e.active}
-        assert inactive_ids == {"smuggler_contact"}
+        assert all(e.active for e in entries)
 
-    def test_cost_label_includes_stub_tag(self, font, state):
-        d = TavernNightDialog(font, state, port_id="tortuga")
-        entries = d._build_entries()
-        # Inaktive entries har "(kommer i ...)"-tag i cost_label
-        inactive = [e for e in entries if not e.active]
-        assert all(
-            "kommer i" in e.cost_label or "senere fase" in e.cost_label
-            for e in inactive
-        )
+    def test_no_placeholder_tags_in_cost_labels(self, font, state):
+        """C3-13a: ingen "(kommer i ...)" eller "(senere fase)" tags
+        gjenstår i cost-labels for verken dag- eller natt-meny."""
+        day = TavernDayDialog(font, state, port_id="tortuga")
+        night = TavernNightDialog(font, state, port_id="tortuga")
+        all_labels = [e.cost_label for e in day._build_entries()]
+        all_labels += [e.cost_label for e in night._build_entries()]
+        for lbl in all_labels:
+            assert "kommer i" not in lbl, f"Placeholder-tag igjen: {lbl!r}"
+            assert "senere fase" not in lbl, f"Placeholder-tag igjen: {lbl!r}"
 
 
 # -----------------------------------------------------------------------------
@@ -180,47 +170,46 @@ class TestNavigationSkipsInactive:
         # rom-entry på index 0, som er aktiv
         assert d.selected == 0
 
-    def test_down_skips_rumor_stub_to_bek(self, font, state):
-        """C3-6: Tortuga har rom (0) + rykter-stub (1, inaktiv) + bek-
-        kjøp (2, aktiv). Down fra rom skipper rykter og lander på bek."""
+    def test_down_cycles_day_entries(self, font, state):
+        """C3-13a: Tortuga dag-meny har 3 aktive entries. Down cycler
+        gjennom rom → sjekk-mistanke → bek → rom (wrap)."""
         d = TavernDayDialog(font, state, port_id="tortuga")
         assert d.selected == 0  # rom
         d.handle_event(_keydown(pygame.K_DOWN))
-        assert d.selected == 2  # hopper over inaktiv rykter-stub
+        assert d.selected == 1  # sjekk-mistanke
+        d.handle_event(_keydown(pygame.K_DOWN))
+        assert d.selected == 2  # bek
+        d.handle_event(_keydown(pygame.K_DOWN))
+        assert d.selected == 0  # wrap
 
-    def test_up_wraps_around_through_active_only(self, font, state):
-        """Up fra rom (0) wrap til bek-kjøp (2) siden rykter (1) er stubbet."""
+    def test_up_wraps_through_active(self, font, state):
+        """Up fra rom (0) går til siste aktive (bek på index 2)."""
         d = TavernDayDialog(font, state, port_id="tortuga")
         d.handle_event(_keydown(pygame.K_UP))
         assert d.selected == 2
 
-    def test_down_from_bek_wraps_to_rom(self, font, state):
-        d = TavernDayDialog(font, state, port_id="tortuga")
-        d._selected = 2  # bek
-        d.handle_event(_keydown(pygame.K_DOWN))
-        assert d.selected == 0  # wrap til rom (hopper over rykter-stub)
-
-    def test_after_purchase_only_rom_active_tortuga(self, font, state):
-        """Etter bek-kjøp har Tortuga kun rom som aktiv (rykter fortsatt
-        stubbet). Down/up wrapper til rom."""
+    def test_after_purchase_two_active_tortuga(self, font, state):
+        """C3-13a: etter bek-kjøp har Tortuga rom + sjekk-mistanke (2 aktive)."""
         state.pitch_lake_state.purchased = True
         d = TavernDayDialog(font, state, port_id="tortuga")
-        assert d.selected == 0
+        assert d.selected == 0  # rom
         d.handle_event(_keydown(pygame.K_DOWN))
-        assert d.selected == 0  # eneste aktive
-        d.handle_event(_keydown(pygame.K_UP))
-        assert d.selected == 0
+        assert d.selected == 1  # sjekk-mistanke
+        d.handle_event(_keydown(pygame.K_DOWN))
+        assert d.selected == 0  # wrap til rom
 
-    def test_non_tortuga_only_rom_active_wraps(self, font, state):
-        """Port Royal har kun rom aktivt (ingen bek-entry)."""
+    def test_non_tortuga_two_active(self, font, state):
+        """C3-13a: andre havner har rom + sjekk-mistanke (2 aktive)."""
         d = TavernDayDialog(font, state, port_id="port_royal")
+        assert d.selected == 0
+        d.handle_event(_keydown(pygame.K_DOWN))
+        assert d.selected == 1
         d.handle_event(_keydown(pygame.K_DOWN))
         assert d.selected == 0
 
-    def test_night_navigation_cycles_five_active_c3_10(self, font, state):
-        """C3-10: natt-meny har 5 aktive entries (rom, regime-rykte,
-        spike-rykte, sabotasje, falsk-rykte). Down cycler gjennom alle
-        5, hopper over smuggler_contact (stubbed)."""
+    def test_night_navigation_cycles_five_active(self, font, state):
+        """C3-13a: natt-meny har 5 aktive entries. Down cycler gjennom
+        alle 5 uten noe stub å hoppe over."""
         d = TavernNightDialog(font, state, port_id="tortuga")
         assert d.selected == 0  # rom
         d.handle_event(_keydown(pygame.K_DOWN))
@@ -232,7 +221,7 @@ class TestNavigationSkipsInactive:
         d.handle_event(_keydown(pygame.K_DOWN))
         assert d.selected == 4  # spre falskt rykte
         d.handle_event(_keydown(pygame.K_DOWN))
-        assert d.selected == 0  # wrap til rom (skip smuggler_contact)
+        assert d.selected == 0  # wrap til rom
 
 
 # -----------------------------------------------------------------------------

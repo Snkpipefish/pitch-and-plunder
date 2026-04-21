@@ -30,7 +30,9 @@ _BODY_MAX_WIDTH = DEFAULT_PANEL_W - 2 * _LABEL_X_OFFSET
 _HINT_Y_OFFSET_FROM_BOTTOM = 22
 
 _TITLE_COLOR = constants.COLOR_MOON_CORE
-_BODY_COLOR = constants.COLOR_FOG
+# C3-13a: COLOR_FOG (58,58,74) leste dårlig mot stein-dark panel.
+# COLOR_SHIRT (232,220,196) gir høy kontrast uten å bryte palett.
+_BODY_COLOR = constants.COLOR_SHIRT
 _HINT_COLOR = constants.COLOR_STONE_LIT
 
 

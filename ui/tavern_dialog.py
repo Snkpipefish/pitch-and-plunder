@@ -1,21 +1,24 @@
-"""TavernDayDialog og TavernNightDialog — Fase 3 C3-3.
+"""TavernDayDialog og TavernNightDialog — Fase 3.
 
-Arver fra DialogOverlay. Dag- og natt-meny per FASE_3.md §1.6:
+Arver fra DialogOverlay. Dag- og natt-meny per FASE_3.md §1.6 med
+C3-13a tekst-polering:
 
 **TavernDayDialog** (vises når night_factor < 0.5):
-- Leie rom  —  AKTIV i C3-3
-- Lytte på rykter (gratis-tier)  —  stubbed (C3-9)
-- Invester i bek-anlegg (kun Tortuga, kun før kjøp)  —  stubbed (C3-6)
+- Drikke rom (restitusjon + gull-kost)
+- Vurder ryktet ditt (gratis statusinfo om mistanke + decay)
+- Invester i bek-produksjon (kun Tortuga, kun før kjøp)
 
 **TavernNightDialog** (vises når night_factor ≥ 0.5):
-- Leie rom  —  AKTIV i C3-3
-- Kjøpe rykter  —  stubbed (C3-9)
-- Bestille sabotasje  —  stubbed (C3-10)
-- Spre falskt rykte  —  stubbed (C3-10)
-- Snakke med smugler  —  stubbed (senere fase)
+- Drikke rom
+- Kjøpe regime-rykte
+- Kjøpe spike-rykte
+- Bestille sabotasje
+- Spre falskt rykte
 
-Inaktive oppføringer tegnes med dempet farge og kan IKKE navigeres til
-(up/down skipper dem). Enter aktiverer kun aktiv seleksjon.
+Alle oppføringer er aktive (ingen stubbed-tags). C3-13a fjernet
+rumor_listen_free-oppføringen fra dag-menyen og smuggler_contact-
+oppføringen fra natt-menyen. Descriptor-linje nederst i panelet
+viser forklaring for cursor-entryen.
 
 Rom-kjøp (C3-3):
 - Trekker `balance.rest.room_cost_gold` (default 10) fra gull.
@@ -60,20 +63,21 @@ _COMMODITY_NORWEGIAN: dict[str, str] = {
 }
 
 
-#: Action-ID-er brukt i entry-aktivering. Ikke-aktive entries har sin id
-#: bare for debug-formål — de plukkes ikke opp av handle_event.
+#: Action-ID-er brukt i entry-aktivering.
 ACTION_BUY_ROOM = "buy_room"
-ACTION_RUMOR_LISTEN_FREE = "rumor_listen_free"    # stubbed senere
+ACTION_CHECK_SUSPICION = "check_suspicion"        # C3-13a (gratis status)
 ACTION_BUY_RUMOR_REGIME = "buy_rumor_regime"      # C3-9 (regime_preview)
 ACTION_BUY_RUMOR_SPIKE = "buy_rumor_spike"        # C3-9 (price_spike_warning)
 ACTION_PITCH_LAKE_PURCHASE = "pitch_lake_purchase"  # C3-6
 ACTION_ORDER_SABOTAGE = "order_sabotage"          # C3-10
 ACTION_SPREAD_FALSE_RUMOR = "spread_false_rumor"  # C3-10
-ACTION_SMUGGLER_CONTACT = "smuggler_contact"      # senere fase
 
-# Legacy-alias (C3-3 stub-navn). Brukes ikke lenger i kode, men imports
-# fra test-filer eller ekstern kode skal ikke bryte.
+# Legacy-alias: rumor_listen_free var stubbed oppføring i C3-3..C3-10
+# og fjernet i C3-13a. Alias peker til regime-rykte for eldre test-
+# imports som har sluttet å eksistere i kodebasen.
+ACTION_RUMOR_LISTEN_FREE = ACTION_CHECK_SUSPICION  # C3-13a
 ACTION_RUMOR_LISTEN_PAID = ACTION_BUY_RUMOR_REGIME
+ACTION_SMUGGLER_CONTACT = "smuggler_contact"  # ikke lenger i menyen
 
 
 @dataclass
@@ -83,13 +87,16 @@ class TavernEntry:
     `active` styrer om oppføringen kan velges med cursor og aktiveres
     med Enter. Inaktive oppføringer tegnes dempet og skipes av
     navigasjon. `cost_label` er informativ tekst ("10 gull, 1.0 h")
-    som rendres ved siden av `label`.
+    som rendres ved siden av `label`. `description` (C3-13a) er en
+    kort forklarings-linje som vises nederst i panelet når entryen
+    er selected — tom streng skjuler linjen.
     """
 
     action_id: str
     label: str
     cost_label: str
     active: bool
+    description: str = ""
 
 
 # --- Rendering-konstanter ---
@@ -100,15 +107,21 @@ _ENTRIES_START_Y_OFFSET = 56
 _ENTRY_ROW_HEIGHT = 22
 _LABEL_X_OFFSET = 24
 _COST_X_FROM_RIGHT = 24
-_HINT_Y_OFFSET_FROM_BOTTOM = 22
+_HINT_Y_OFFSET_FROM_BOTTOM = 18
+# C3-13a: descriptor-linjer over hint-linjen. Opp til to linjer wrappet;
+# andre linje landes ~12px over hint, første linje ~12px over den igjen.
+_DESCRIPTION_Y_OFFSET_FROM_BOTTOM_1 = 46
+_DESCRIPTION_Y_OFFSET_FROM_BOTTOM_2 = 32
+_DESCRIPTION_MAX_LINES = 2
 
 _ACTIVE_COLOR = constants.COLOR_SHIRT
 _ACTIVE_COST_COLOR = constants.COLOR_STONE_LIT
-_INACTIVE_COLOR = constants.COLOR_FOG
+_INACTIVE_COLOR = constants.COLOR_STONE_LIT
 _TITLE_COLOR = constants.COLOR_MOON_CORE
 _GOLD_COLOR = constants.COLOR_MOON_CORE
 _CURSOR_COLOR = constants.COLOR_LANTERN
 _HINT_COLOR = constants.COLOR_STONE_LIT
+_DESCRIPTION_COLOR = constants.COLOR_STONE_BRIGHT
 
 
 class TavernDialog(DialogOverlay):
@@ -260,6 +273,8 @@ class TavernDialog(DialogOverlay):
             return
         if entry.action_id == ACTION_BUY_ROOM:
             self._do_buy_room()
+        elif entry.action_id == ACTION_CHECK_SUSPICION:
+            self._do_check_suspicion()
         elif entry.action_id == ACTION_PITCH_LAKE_PURCHASE:
             self._do_purchase_pitch_lake()
         elif entry.action_id == ACTION_BUY_RUMOR_REGIME:
@@ -272,6 +287,24 @@ class TavernDialog(DialogOverlay):
             self._do_spread_false_rumor()
 
     # --- Aktive handlinger ---
+
+    def _do_check_suspicion(self) -> None:
+        """Gratis statusinfo. Fase 3 C3-13a.
+
+        Pusher en toast med nåværende mistanke + decay-rate. Ingen
+        state-mutasjon — hverken gull, rest eller handlings-tid.
+        Oppføringen er alltid aktiv og gir spilleren eksplisitt
+        tilbakemelding om at mistanken faller passivt.
+        """
+        bal = _balance.get().suspicion
+        current = int(self._state.player_state.suspicion)
+        threshold = int(bal.threshold)
+        decay = int(bal.daily_decay)
+        self._push_toast(
+            f"Mistanke {current}/{threshold} \u2014 faller {decay} per dag",
+            constants.COLOR_STONE_BRIGHT,
+            duration=3.5,
+        )
 
     def _do_buy_room(self) -> None:
         """Rom-kjøp: trekk gull, gjenopprett rest til 1.0, toast-feedback.
@@ -290,7 +323,7 @@ class TavernDialog(DialogOverlay):
             return
         _rest.restore(self._state)
         self._push_toast(
-            "Rommet er leid (hvile: full)",
+            "Rommen gjorde susen (hvile: full)",
             constants.COLOR_LANTERN_BRIGHT,
         )
 
@@ -535,11 +568,61 @@ class TavernDialog(DialogOverlay):
             cost_x = px + w - _COST_X_FROM_RIGHT - cost_surf.get_width()
             surface.blit(cost_surf, (cost_x, row_y))
 
+        # C3-13a: descriptor-linjer for cursor-entryen (opp til 2 wrappet).
+        if draw_cursor:
+            description = entries[self._selected].description
+            if description:
+                desc_surfs = self._render_description(description, w)
+                y_offsets = (
+                    _DESCRIPTION_Y_OFFSET_FROM_BOTTOM_1,
+                    _DESCRIPTION_Y_OFFSET_FROM_BOTTOM_2,
+                )
+                for line_surf, y_off in zip(desc_surfs, y_offsets):
+                    surface.blit(
+                        line_surf,
+                        (px + _LABEL_X_OFFSET, py + h - y_off),
+                    )
+
         assert self._hint_surf is not None
         surface.blit(
             self._hint_surf,
             (px + _LABEL_X_OFFSET, py + h - _HINT_Y_OFFSET_FROM_BOTTOM),
         )
+
+    def _render_description(
+        self, text: str, panel_w: int,
+    ) -> list[pygame.Surface]:
+        """Render (og cache) wrappet description for cursor-entryen.
+
+        C3-13a: opp til 2 linjer per entry. Caches per-tekst slik at
+        cursor-bytte kun re-blitter. Wrapper på ord-grenser mot
+        panel_w - 2 * _LABEL_X_OFFSET.
+        """
+        cached = getattr(self, "_description_cache", {})
+        if text in cached:
+            return cached[text]
+        max_width = panel_w - 2 * _LABEL_X_OFFSET
+        words = text.split()
+        lines: list[str] = []
+        current = words[0] if words else ""
+        for word in words[1:]:
+            candidate = current + " " + word
+            if self._font.size(candidate)[0] <= max_width:
+                current = candidate
+            else:
+                lines.append(current)
+                current = word
+                if len(lines) >= _DESCRIPTION_MAX_LINES:
+                    break
+        if len(lines) < _DESCRIPTION_MAX_LINES and current:
+            lines.append(current)
+        surfs = [
+            self._font.render(line, False, _DESCRIPTION_COLOR).convert_alpha()
+            for line in lines
+        ]
+        cached[text] = surfs
+        self._description_cache = cached
+        return surfs
 
 
 # -----------------------------------------------------------------------------
@@ -548,7 +631,7 @@ class TavernDialog(DialogOverlay):
 
 
 class TavernDayDialog(TavernDialog):
-    """Tavern dag-meny. Rom-kjøp aktiv; rykter + bek-anlegg stubbed."""
+    """Tavern dag-meny. Alle oppføringer aktive (C3-13a)."""
 
     _TIME_LABEL = "dag"
 
@@ -557,15 +640,29 @@ class TavernDayDialog(TavernDialog):
         entries: list[TavernEntry] = [
             TavernEntry(
                 action_id=ACTION_BUY_ROOM,
-                label="Leie rom",
-                cost_label=f"{bal.rest.room_cost_gold} gull, {bal.rest.room_cost_hours:.1f} h",
+                label="Drikke rom",
+                cost_label=(
+                    f"{bal.rest.room_cost_gold} gull, "
+                    f"{bal.rest.room_cost_hours:.1f} h"
+                ),
                 active=True,
+                description=(
+                    "Et stort krus rom setter deg p\u00E5 beina igjen. "
+                    "Gjenoppretter full hvile."
+                ),
             ),
+            # C3-13a: gratis statusinfo om mistanke + decay-forklaring.
+            # Erstatter rumor_listen_free-stubben.
             TavernEntry(
-                action_id=ACTION_RUMOR_LISTEN_FREE,
-                label="Lytte på rykter (gratis)",
-                cost_label="(kommer i C3-9)",
-                active=False,
+                action_id=ACTION_CHECK_SUSPICION,
+                label="Vurder ryktet ditt",
+                cost_label="gratis",
+                active=True,
+                description=(
+                    "Sp\u00F8r verten hva folk sier om deg. Ryktet falmer "
+                    f"{int(bal.suspicion.daily_decay)} per dag hvis du "
+                    "oppf\u00F8rer deg respektabelt."
+                ),
             ),
         ]
         # Bek-anlegg-kjøp (Fase 3 C3-6): kun i Tortuga, kun før kjøp.
@@ -588,6 +685,11 @@ class TavernDayDialog(TavernDialog):
                         f"{purchase_hours:.1f} h"
                     ),
                     active=True,
+                    description=(
+                        "Kj\u00F8p Tortuga-bek-anlegget. Produserer "
+                        f"{bal.pitch_lake.production_per_day} bek per dag, "
+                        f"upkeep {bal.pitch_lake.upkeep_per_day} gull per dag."
+                    ),
                 )
             )
         return entries
@@ -599,7 +701,7 @@ class TavernDayDialog(TavernDialog):
 
 
 class TavernNightDialog(TavernDialog):
-    """Tavern natt-meny. Rom-kjøp aktiv; rykter/sabotasje/smugler stubbed."""
+    """Tavern natt-meny. Alle 5 oppføringer aktive (C3-13a)."""
 
     _TIME_LABEL = "natt"
 
@@ -611,33 +713,54 @@ class TavernNightDialog(TavernDialog):
         return [
             TavernEntry(
                 action_id=ACTION_BUY_ROOM,
-                label="Leie rom",
-                cost_label=f"{bal.rest.room_cost_gold} gull, {bal.rest.room_cost_hours:.1f} h",
+                label="Drikke rom",
+                cost_label=(
+                    f"{bal.rest.room_cost_gold} gull, "
+                    f"{bal.rest.room_cost_hours:.1f} h"
+                ),
                 active=True,
+                description=(
+                    "Et stort krus rom setter deg p\u00E5 beina igjen. "
+                    "Gjenoppretter full hvile."
+                ),
             ),
             # C3-9: regime-rykte (alltid suksess, sampler annen havn)
             TavernEntry(
                 action_id=ACTION_BUY_RUMOR_REGIME,
-                label="Kjøpe regime-rykte",
+                label="Lytt etter regime-rykter",
                 cost_label=rumor_cost_label,
                 active=True,
+                description=(
+                    "H\u00F8r hva tradere sier om markedet i en annen havn. "
+                    "Avsl\u00F8rer neste regime-skift."
+                ),
             ),
             # C3-9: spike-rykte (kan gi refund hvis ingen kandidater)
             TavernEntry(
                 action_id=ACTION_BUY_RUMOR_SPIKE,
-                label="Kjøpe spike-rykte",
+                label="Lytt etter pris-rykter",
                 cost_label=rumor_cost_label,
                 active=True,
+                description=(
+                    "H\u00F8r om kommende prisbevegelser. Kan v\u00E6re tom "
+                    "hvis ingen ferske rykter finnes \u2014 du f\u00E5r "
+                    "gullet tilbake."
+                ),
             ),
             # C3-10: sabotasje (pris-hever i target-havn)
             TavernEntry(
                 action_id=ACTION_ORDER_SABOTAGE,
-                label="Bestille sabotasje",
+                label="Bestill sabotasje",
                 cost_label=(
                     f"{bal.sabotage.base_cost_gold} gull, "
                     f"{bal.actions.cost_hours_per_action.get('order_sabotage', 2.0):.1f} h"
                 ),
                 active=True,
+                description=(
+                    "Betal smuglere for \u00E5 forstyrre forsyning av en "
+                    "vare til en annen havn. Prisen der stiger om noen "
+                    "dager. \u00D8ker mistanken mot deg."
+                ),
             ),
             # C3-10: falskt rykte (pris-senker i target-havn)
             TavernEntry(
@@ -648,11 +771,10 @@ class TavernNightDialog(TavernDialog):
                     f"{bal.actions.cost_hours_per_action.get('spread_false_rumor', 2.0):.1f} h"
                 ),
                 active=True,
-            ),
-            TavernEntry(
-                action_id=ACTION_SMUGGLER_CONTACT,
-                label="Snakke med smugler",
-                cost_label="(senere fase)",
-                active=False,
+                description=(
+                    "Betal sladrere for \u00E5 skape panikk om en vare i "
+                    "en annen havn. Prisen der faller om noen dager. "
+                    "\u00D8ker mistanken mindre enn sabotasje."
+                ),
             ),
         ]

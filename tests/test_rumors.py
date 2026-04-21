@@ -364,6 +364,7 @@ class TestRumorsDialog:
         assert d.want_close is False
 
     def test_format_rumor_line_regime_preview(self):
+        """C3-13a: right-kolonne er eksplisitt "N dager igjen"."""
         from ui.rumors_dialog import format_rumor_line
         rumor = ActiveRumor(
             rumor_type="regime_preview", port_id="havana",
@@ -375,9 +376,10 @@ class TestRumorsDialog:
         assert "Havana" in label
         assert "rom" in label  # norsk vare-navn
         assert "stigende" in label
-        assert days == "3d"
+        assert days == "3 dager igjen"
 
     def test_format_rumor_line_spike(self):
+        """C3-13a: 2 dager → "2 dager igjen" (plural)."""
         from ui.rumors_dialog import format_rumor_line
         rumor = ActiveRumor(
             rumor_type="price_spike_warning", port_id="port_royal",
@@ -388,7 +390,18 @@ class TestRumorsDialog:
         assert "Spike" in label
         assert "Port Royal" in label
         assert "sukker" in label
-        assert days == "2d"
+        assert days == "2 dager igjen"
+
+    def test_format_rumor_line_singular_day(self):
+        """C3-13a: 1 dag → "1 dag igjen" (singular)."""
+        from ui.rumors_dialog import format_rumor_line
+        rumor = ActiveRumor(
+            rumor_type="regime_preview", port_id="havana",
+            commodity_id="sugar", days_remaining=1,
+            payload={"predicted_regime": "falling"},
+        )
+        _label, days = format_rumor_line(rumor)
+        assert days == "1 dag igjen"
 
 
 # -----------------------------------------------------------------------------

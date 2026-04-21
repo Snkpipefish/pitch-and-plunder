@@ -80,18 +80,25 @@ def _regime_display(regime: str) -> str:
 def format_rumor_line(rumor: ActiveRumor) -> tuple[str, str]:
     """Returnér (label_text, right_text) for én rykte-rad.
 
+    Fase 3 C3-13a: right-kolonnen viser eksplisitt TTL ("3 dager igjen")
+    i stedet for tvetydig kort form "3d" — spilleren skal forstå at
+    tallet er GJENVÆRENDE varighet, ikke tid siden kjøp. Singular/
+    plural: "1 dag igjen" / "N dager igjen".
+
     label: "Regime: {port} / {vare} → {regime}"
-    right: "{days_remaining}d"
+    right: "{N} dag(er) igjen"
 
     Spike:
     label: "Spike: {port} / {vare} ({direction})"
-    right: "{days_remaining}d"
+    right: "{N} dag(er) igjen"
 
     Hjelpefunksjon — også brukbar fra HUD eller tester.
     """
     port = _port_display_name(rumor.port_id)
     commodity = _commodity_display_name(rumor.commodity_id)
-    days = f"{rumor.days_remaining}d"
+    n = rumor.days_remaining
+    unit = "dag" if n == 1 else "dager"
+    days = f"{n} {unit} igjen"
     if rumor.rumor_type == "regime_preview":
         regime = _regime_display(rumor.payload.get("predicted_regime", "?"))
         label = f"Regime: {port} / {commodity} \u2192 {regime}"
