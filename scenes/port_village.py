@@ -647,7 +647,35 @@ class PortVillageScene(BaseScene):
 
     # --- Logikk ---
 
+    def _any_dialog_open(self) -> bool:
+        """Returner True hvis en hvilken som helst overlay/dialog er aktiv.
+
+        Fase 3 C3-13b: sentral sjekk for input-state-lekkasje-fiks.
+        Dialoger konsumerer KEYUP-events, så Player-spritens press/release-
+        flagg kan bli hengende hvis en dialog åpnes mens en bevegelses-
+        tast holdes nede. Ved å nulle flaggene hver frame så lenge en
+        dialog er åpen, sikrer vi at spilleren må slippe og trykke på
+        nytt etter at dialogen er lukket — ingen drift.
+        """
+        return (
+            self._overlay is not None
+            or self._tavern_dialog is not None
+            or self._harbormaster_dialog is not None
+            or self._cache_dialog is not None
+            or self._rumors_dialog is not None
+            or self._event_dialog is not None
+            or self._pause_menu is not None
+            or self._confirm_new_game is not None
+            or self._score_overlay is not None
+        )
+
     def update(self, dt: float) -> None:
+        # Fase 3 C3-13b: input-state-lekkasje-fiks. Nullstill player-
+        # movement-flags hver frame så lenge en dialog er åpen. KEYUP-
+        # events for D/A går til dialogen (ikke scene), så uten denne
+        # fiksen fortsetter spilleren å gå når dialogen lukkes.
+        if self._any_dialog_open():
+            self._player.press(0)
         # Dag-skift: ved daggry settes nye priser for ALLE 4 havner, og
         # regime-klokkene tikkes. Rekkefølgen er viktig: on_dawn først
         # slik at "siste dag" av et regime fortsatt har sin retnings-
@@ -682,6 +710,13 @@ class PortVillageScene(BaseScene):
         # mens spilleren er midt i tavern-meny — da venter vi med
         # notifikasjon til spilleren lukker gjeldende dialog).
         self._maybe_open_pending_event()
+
+        # Fase 3 C3-13b: re-sjekk etter _maybe_open_* i tilfelle en
+        # dialog akkurat ble åpnet automatisk denne framen. Samme
+        # invariant som initial-sjekken — ingen dialog åpen uten at
+        # player-movement er nullstilt i samme frame.
+        if self._any_dialog_open():
+            self._player.press(0)
 
         # Lanterne-swing og andre tidsavhengige effekter gaar videre ogsaa.
         self._elapsed += dt

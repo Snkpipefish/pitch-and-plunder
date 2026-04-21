@@ -298,6 +298,15 @@ class VoyageScene(BaseScene):
         # to_port og clock-tempo tilbake til in_port; PortVillageScene-
         # fabrikken (main.py) leser current_port og konstruerer riktig
         # havn-scene.
+        #
+        # Fase 3 C3-13b: vent på at event-dialogen er lukket før
+        # scene-switch. Uten denne guarden rakk ikke dialogen å rendre
+        # hvis et voyage-event ble samplet på siste dag av reisen —
+        # complete_voyage triggeret scene-switch i samme update() som
+        # åpnet dialogen. Neste update() etter close vil fortsatt se
+        # curr_day >= arrival_day og trigger ankomsten normalt.
+        if self._event_dialog is not None:
+            return
         voyage = self._state.world_state.voyage
         if voyage is not None and curr_day >= voyage.arrival_day:
             _voyage.complete_voyage(self._state, _balance.get())
