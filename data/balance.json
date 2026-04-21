@@ -52,7 +52,7 @@
   },
   "sabotage": {
     "base_cost_gold": 50,
-    "impact_delay_days": 2,
+    "impact_delay_days": 3,
     "magnitude_pct": 10.0,
     "false_rumor_base_cost_gold": 40,
     "false_rumor_magnitude_pct": 10.0,
@@ -60,7 +60,7 @@
     "suspicion_increase_false_rumor": 8.0
   },
   "events": {
-    "voyage_frequency_per_day": 0.5,
+    "voyage_frequency_per_day": 0.2,
     "port_frequency_per_day_start": 0.2,
     "positive_ratio": 0.3
   },
