@@ -24,9 +24,11 @@ def state():
 # -----------------------------------------------------------------------------
 
 
-def test_catalog_loads_all_eight_events() -> None:
+def test_catalog_loads_all_twelve_events() -> None:
+    """C3-13e: 8 voyage + 4 port = 12 totalt (C3-11 hadde 8 totalt)."""
     cat = events_module.get_all()
-    assert len(cat) == 8
+    assert len(cat) == 12
+    # C3-11 første batch
     assert "shipwreck" in cat
     assert "pirates_raid" in cat
     assert "storm" in cat
@@ -35,14 +37,19 @@ def test_catalog_loads_all_eight_events() -> None:
     assert "suspicion_spike" in cat
     assert "lucky_acquaintance" in cat
     assert "drunken_brawl" in cat
+    # C3-13e utvidelse
+    assert "drivgods" in cat
+    assert "vindstille" in cat
+    assert "tunfisk_stim" in cat
+    assert "kahyttfeber" in cat
 
 
 def test_event_contexts_partitioned() -> None:
-    """4 voyage + 4 port."""
+    """C3-13e: 8 voyage + 4 port."""
     cat = events_module.get_all()
     voyage = [e for e in cat.values() if e.context == "voyage"]
     port = [e for e in cat.values() if e.context == "port"]
-    assert len(voyage) == 4
+    assert len(voyage) == 8
     assert len(port) == 4
 
 
@@ -294,3 +301,137 @@ def test_voyage_context_skips_port_event_sampling(state) -> None:
         state.world_state.pending_event_id = None
         tick_all_ports_dawn(state, market, rm)
         assert state.world_state.pending_event_id is None
+
+
+# -----------------------------------------------------------------------------
+# Rotasjons-mekanikk (C3-13e)
+# -----------------------------------------------------------------------------
+
+
+class TestRotationMechanic:
+    def test_last_event_id_default_empty(self, state) -> None:
+        """Fersk state har tom last_event_id."""
+        assert state.world_state.last_event_id == ""
+
+    def test_sample_sets_last_event_id(self, state) -> None:
+        """Ved suksessfull sampling oppdateres last_event_id."""
+        # Bruk seed som treffer en event (freq=0.2 i default balance)
+        # Prøv mange seeds til en treffer.
+        for seed in range(200):
+            rng = random.Random(seed)
+            result = events_module.sample_voyage_event(state, rng)
+            if result is not None:
+                assert state.world_state.last_event_id == result
+                return
+        pytest.fail("Ingen voyage-event samplet over 200 seeds")
+
+    def test_filter_excludes_last_event_id(self, state) -> None:
+        """Med last_event_id satt skal den IDen aldri returneres
+        (så lenge det finnes andre kandidater).
+
+        Merk: sample_voyage_event muterer last_event_id ved suksess,
+        så vi reset-er før hvert kall for å holde rotasjonen konstant
+        mot "storm" i denne testen.
+        """
+        results = []
+        for seed in range(500):
+            state.world_state.last_event_id = "storm"  # reset før hver sample
+            rng = random.Random(seed)
+            r = events_module.sample_voyage_event(state, rng)
+            if r is not None:
+                results.append(r)
+        assert len(results) > 0, "Forventet noen samples med freq=0.2"
+        assert "storm" not in results, (
+            f"last_event_id=storm skulle ha blitt filtrert. Fikk {set(results)}"
+        )
+
+    def test_fallback_allows_repeat_when_only_candidate(
+        self, state, monkeypatch,
+    ):
+        """Hvis filtrering tømmer kandidat-listen, fallback tillater
+        gjentak i stedet for None-retur."""
+        # Force kun ett voyage-event i katalogen via patch
+        import systems.events as ev_mod
+        original_catalog = dict(ev_mod._catalog)
+        monkeypatch.setattr(
+            ev_mod, "_catalog", {
+                "solo": ev_mod.Event(
+                    id="solo", context="voyage", weight=1.0,
+                    positive=True, title="T", body="B", effects=(),
+                ),
+            },
+        )
+        state.world_state.last_event_id = "solo"  # eneste tilgjengelig
+        # Kraftig trigger-sannsynlighet: mange seeds bør gi minst én
+        # returnerer "solo" tross rotasjon (fallback).
+        returned_solo = False
+        for seed in range(200):
+            rng = random.Random(seed)
+            r = events_module.sample_voyage_event(state, rng)
+            if r == "solo":
+                returned_solo = True
+                break
+        assert returned_solo, "Fallback skulle tillate gjentak som siste utvei"
+
+    def test_port_and_voyage_share_last_event_id(self, state) -> None:
+        """Rotasjonen bruker felles last_event_id — port-event-
+        sampling respekterer forbudet satt av tidligere voyage- eller
+        port-event. Reset før hvert kall for å holde rotasjonen
+        konstant i denne testen."""
+        results = []
+        for seed in range(500):
+            state.world_state.last_event_id = "suspicion_spike"
+            rng = random.Random(seed)
+            r = events_module.sample_port_event(state, rng)
+            if r is not None:
+                results.append(r)
+        assert "suspicion_spike" not in results, (
+            f"port-event-sampling respekterer ikke last_event_id: {set(results)}"
+        )
+
+    def test_last_event_id_persists_via_save_load(
+        self, state, tmp_path
+    ):
+        """Save/load bevarer last_event_id."""
+        from pathlib import Path
+        state.world_state.last_event_id = "drivgods"
+        path = tmp_path / "save.json"
+        assert save_module.save(state, str(path)) is True
+        loaded = save_module.load(str(path))
+        assert loaded is not None
+        assert loaded.world_state.last_event_id == "drivgods"
+
+    def test_load_legacy_save_defaults_empty(self, tmp_path):
+        """Legacy save uten last_event_id-felt defaulter til ""."""
+        from pathlib import Path
+        minimal = {
+            "version": 6,
+            "player_state": {
+                "position_x": 320.0, "gold": 300,
+                "inventory": {
+                    "sugar": {"quantity": 0, "avg_cost": 0.0},
+                    "rum": {"quantity": 0, "avg_cost": 0.0},
+                    "tobacco": {"quantity": 0, "avg_cost": 0.0},
+                    "pitch": {"quantity": 0, "avg_cost": 0.0},
+                },
+            },
+            "world_state": {
+                "current_port": "tortuga",
+                "clock": {"day": 1, "seconds_into_day": 0.0, "seconds_per_day": 180.0},
+                "ship": {"class_id": "sloop", "name": "Sjarken", "cargo_capacity": 40},
+                "voyage": None,
+                # MANGLER: last_event_id
+            },
+            "economy_state": {"markets": {}, "regimes": {}, "observed": {}},
+            "pitch_lake_state": {
+                "home_port": "tortuga", "production_per_day": 2,
+                "upkeep_per_day": 8, "pending_units": 0,
+                "total_produced": 0, "last_production_day": 0,
+                "purchased": True,
+            },
+        }
+        path = tmp_path / "legacy.json"
+        path.write_text(json.dumps(minimal), encoding="utf-8")
+        loaded = save_module.load(str(path))
+        assert loaded is not None
+        assert loaded.world_state.last_event_id == ""

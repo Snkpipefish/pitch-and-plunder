@@ -47,6 +47,51 @@
       ]
     },
     {
+      "id": "drivgods",
+      "context": "voyage",
+      "weight": 1.0,
+      "positive": true,
+      "title": "Drivgods",
+      "body": "Utkikken roper 'Last i vannet!' Dere fisker opp noen t\u00F8nner og kister.",
+      "effects": [
+        {"type": "gold_gain_fixed", "value": 50}
+      ]
+    },
+    {
+      "id": "vindstille",
+      "context": "voyage",
+      "weight": 1.0,
+      "positive": false,
+      "title": "Vindstille",
+      "body": "Vinden d\u00F8r. Seilene henger slapt i to d\u00F8gn mens dere driver med str\u00F8mmen.",
+      "effects": [
+        {"type": "voyage_delay_days", "value": 1}
+      ]
+    },
+    {
+      "id": "tunfisk_stim",
+      "context": "voyage",
+      "weight": 1.0,
+      "positive": true,
+      "title": "Tunfisk-stim",
+      "body": "En stim tunfisk f\u00F8lger skipet. Mannskapet fisker opp proviant dere kan selge.",
+      "effects": [
+        {"type": "gold_gain_fixed", "value": 35}
+      ]
+    },
+    {
+      "id": "kahyttfeber",
+      "context": "voyage",
+      "weight": 1.0,
+      "positive": false,
+      "title": "Kahyttfeber",
+      "body": "Dunst fra lasterommet kvalmer mannskapet. Dere klarer knapt \u00E5 navigere.",
+      "effects": [
+        {"type": "rest_spike", "value": 0.4},
+        {"type": "gold_loss_pct", "value": 8.0}
+      ]
+    },
+    {
       "id": "sickness",
       "context": "port",
       "weight": 1.0,

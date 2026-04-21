@@ -213,6 +213,12 @@ def _sample_event(
 
     Short-circuit ved arrested/dead — døde/arresterte får ingen nye
     events.
+
+    Fase 3 C3-13e: ekskluderer `state.world_state.last_event_id` fra
+    kandidat-listen for å forhindre back-to-back-gjentak (gjelder
+    både voyage- og port-events via felles flagg). Fallback: hvis
+    filtreringen tømmer listen, tillates gjentak heller enn None-
+    retur slik at sampling ikke feiler stille.
     """
     if state.arrested or state.dead:
         return None
@@ -231,6 +237,14 @@ def _sample_event(
         candidates = [
             ev for ev in _catalog.values() if ev.context == context
         ]
+    # Rotasjon: fjern forrige event-id fra kandidat-listen.
+    last_id = state.world_state.last_event_id
+    if last_id:
+        filtered = [ev for ev in candidates if ev.id != last_id]
+        # Fallback: kun behold filtrert liste hvis den ikke ble tom.
+        # Ellers tillat gjentak som sikkerhetsventil.
+        if filtered:
+            candidates = filtered
     return _pick_weighted(candidates, rng)
 
 
@@ -238,22 +252,38 @@ def sample_voyage_event(
     state: "GameState", rng: Optional[random.Random] = None,
 ) -> Optional[str]:
     """Sample et voyage-event for denne dawn-tikken. Returnerer event-id
-    eller None."""
+    eller None.
+
+    Fase 3 C3-13e: ved suksessfull sampling oppdateres
+    `state.world_state.last_event_id` slik at neste sampling (voyage
+    eller port) ekskluderer samme event.
+    """
     rng = rng or random.Random()
     freq = _balance.get().events.voyage_frequency_per_day
     ev = _sample_event(state, "voyage", freq, rng)
-    return ev.id if ev is not None else None
+    if ev is None:
+        return None
+    state.world_state.last_event_id = ev.id
+    return ev.id
 
 
 def sample_port_event(
     state: "GameState", rng: Optional[random.Random] = None,
 ) -> Optional[str]:
     """Sample et port-event for denne dawn-tikken. Returnerer event-id
-    eller None."""
+    eller None.
+
+    Fase 3 C3-13e: ved suksessfull sampling oppdateres
+    `state.world_state.last_event_id` (felles rotasjons-flagg med
+    voyage-events).
+    """
     rng = rng or random.Random()
     freq = _balance.get().events.port_frequency_per_day_start
     ev = _sample_event(state, "port", freq, rng)
-    return ev.id if ev is not None else None
+    if ev is None:
+        return None
+    state.world_state.last_event_id = ev.id
+    return ev.id
 
 
 # --- Resolver ---

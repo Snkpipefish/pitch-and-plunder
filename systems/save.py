@@ -715,6 +715,10 @@ def _parse_world_state(raw: Any) -> WorldState:
         pending_event_id = raw_pending
     else:
         pending_event_id = None
+    # Fase 3 C3-13e: last_event_id — tom streng hvis mangler (legacy
+    # saves) eller invalid type.
+    raw_last = raw.get("last_event_id", "")
+    last_event_id = raw_last if isinstance(raw_last, str) else ""
     return WorldState(
         current_port=current_port,
         clock=clock,
@@ -722,6 +726,7 @@ def _parse_world_state(raw: Any) -> WorldState:
         voyage=voyage,
         action_budget=action_budget,
         pending_event_id=pending_event_id,
+        last_event_id=last_event_id,
     )
 
 

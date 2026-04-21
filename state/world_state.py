@@ -32,3 +32,8 @@ class WorldState:
     #: tick_all_ports_dawn, voyage-events i VoyageScene dawn-tick).
     #: Konsumeres av PortVillageScene (viser dialog, clearer til None).
     pending_event_id: Optional[str] = None
+    #: Fase 3 C3-13e: Id til forrige trigget event (voyage eller port).
+    #: Brukes av EventSampler for å forhindre at samme event trigger
+    #: to ganger på rad. Fallback: hvis alle andre kandidater er
+    #: filtrert bort, tillates gjentak heller enn None-retur.
+    last_event_id: str = ""
