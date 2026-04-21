@@ -85,8 +85,10 @@ def _keydown(key: int, mod: int = 0) -> pygame.event.Event:
 
 class TestBalanceField:
     def test_voyage_animation_seconds_in_default_balance(self):
+        """C3-13c: bumpet fra 5.0 til 10.0 som UX-polish (mer tid til
+        å lese voyage-events og følge skipets bevegelse)."""
         bal = _balance.get()
-        assert bal.time.voyage_animation_seconds == 5.0
+        assert bal.time.voyage_animation_seconds == 10.0
 
     def test_is_session_category(self):
         """voyage_animation_seconds er SESSION (slår inn neste scene-init)."""
@@ -125,27 +127,27 @@ class TestBalanceField:
 
 class TestTempoScaling:
     def test_fresh_2_day_voyage_sets_tempo(self, font):
-        """2-dagers reise: seconds_per_day = 5.0 / 2 = 2.5."""
+        """2-dagers reise: seconds_per_day = 10.0 / 2 = 5.0 (C3-13c)."""
         from scenes.voyage import VoyageScene
         state = _state_with_voyage(days=2)
         VoyageScene(font, state)
-        assert state.world_state.clock.seconds_per_day == pytest.approx(2.5)
+        assert state.world_state.clock.seconds_per_day == pytest.approx(5.0)
 
     def test_fresh_5_day_voyage_sets_tempo(self, font):
-        """5-dagers reise: seconds_per_day = 5.0 / 5 = 1.0. Total animation
-        = 5.0 sek wall-clock."""
+        """5-dagers reise: seconds_per_day = 10.0 / 5 = 2.0. Total
+        animation = 10.0 sek wall-clock (C3-13c)."""
         from scenes.voyage import VoyageScene
         state = _state_with_voyage(days=5)
         VoyageScene(font, state)
-        assert state.world_state.clock.seconds_per_day == pytest.approx(1.0)
+        assert state.world_state.clock.seconds_per_day == pytest.approx(2.0)
 
     def test_resume_mid_voyage_recomputes_tempo(self, font):
-        """5-dagers reise, 3 dager gått: 2 dager igjen → 5.0 / 2 = 2.5."""
+        """5-dagers reise, 3 dager gått: 2 dager igjen → 10.0 / 2 = 5.0."""
         from scenes.voyage import VoyageScene
         state = _state_with_voyage(days=5, current_day_offset=3)
         VoyageScene(font, state)
         # days_remaining = (1+5) - (1+3) = 2
-        assert state.world_state.clock.seconds_per_day == pytest.approx(2.5)
+        assert state.world_state.clock.seconds_per_day == pytest.approx(5.0)
 
     def test_scene_init_resets_seconds_into_day(self, font):
         """seconds_into_day nullstilles ved scene-init (sub-day-progress
@@ -310,8 +312,8 @@ class TestSaveLoadResume:
         state2 = save_module.load(str(path))
         assert state2 is not None
         VoyageScene(font, state2)
-        # 2 dager remaining (arrival=6, current=4) → 5.0/2 = 2.5
-        assert state2.world_state.clock.seconds_per_day == pytest.approx(2.5)
+        # C3-13c: 2 dager remaining (arrival=6, current=4) → 10.0/2 = 5.0
+        assert state2.world_state.clock.seconds_per_day == pytest.approx(5.0)
 
     def test_resume_then_skip_still_completes_voyage(
         self, font, tmp_path

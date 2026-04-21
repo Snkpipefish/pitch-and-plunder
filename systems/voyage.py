@@ -100,15 +100,30 @@ def compute_progress(
 ) -> float:
     """Returner progresjon 0.0–1.0 basert på klokken (deterministisk).
 
-    elapsed_sec = (clock.day - depart_day) * spd_at_sea + clock.seconds_into_day
-    total_sec   = (arrival_day - depart_day) * spd_at_sea
+    elapsed_sec = (clock.day - depart_day) * clock.seconds_per_day
+                  + clock.seconds_into_day
+    total_sec   = (arrival_day - depart_day) * clock.seconds_per_day
     progress    = clamp(elapsed_sec / total_sec, 0, 1)
+
+    Fase 3 C3-13c: bruker `clock.seconds_per_day` (den LIVE verdien)
+    istedenfor `balance.time.seconds_per_day_at_sea` (statisk).
+    VoyageScene-akselerasjonen (C3-9.5) overstyrer clock.seconds_per_day
+    ved scene-init; hvis progress-formelen brukte den statiske balance-
+    verdien, ville within-day-progresjon bare være ~1/spd_ratio av en
+    full dags-fraksjon → skipet teleporterte ved hver dawn-tick
+    istedenfor å skli kontinuerlig. Med clock.seconds_per_day er
+    days_elapsed * spd og seconds_into_day i samme tidsskala, slik at
+    sub-day og day-crossing gir smooth lineær progresjon.
+
+    `balance`-parameteren er beholdt i signaturen for API-kompatibilitet
+    men er ikke lenger brukt i beregningen.
 
     Ved same-day-rute (arrival_day == depart_day): returner 1.0 for å
     unngå division-by-zero. Min-rute er 2 dager i 2B, så dette er
     defensiv.
     """
-    spd = balance.time.seconds_per_day_at_sea
+    del balance  # C3-13c: ikke brukt lenger, beholdt for API-kompat
+    spd = clock.seconds_per_day
     days_total = voyage.arrival_day - voyage.depart_day
     total_sec = days_total * spd
     if total_sec <= 0.0:

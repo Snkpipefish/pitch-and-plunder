@@ -122,11 +122,15 @@ class TestComputeProgress:
         assert voyage.compute_progress(v, clock, bal) == 1.0
 
     def test_progress_uses_seconds_into_day(self):
+        """C3-13c: compute_progress bruker clock.seconds_per_day, ikke
+        balance.time.seconds_per_day_at_sea. Clock må settes eksplisitt
+        for å teste sub-day-progresjon."""
         bal = balance.get()
         v = _voyage_2_days()
         spd = bal.time.seconds_per_day_at_sea
-        # Halvveis i dag 0 av 2: clock=5, sec_into_day = spd/2
-        clock = GameClock(day=5, seconds_into_day=spd / 2)
+        # Halvveis i dag 0 av 2: clock=5, sec_into_day = spd/2, med
+        # eksplisitt seconds_per_day=spd (at-sea-tempo).
+        clock = GameClock(day=5, seconds_into_day=spd / 2, seconds_per_day=spd)
         # 0.5 * spd / (2 * spd) = 0.25
         assert abs(voyage.compute_progress(v, clock, bal) - 0.25) < 1e-9
 
@@ -138,6 +142,29 @@ class TestComputeProgress:
         )
         clock = GameClock(day=5, seconds_into_day=0.0)
         assert voyage.compute_progress(v, clock, bal) == 1.0
+
+    def test_progress_smooth_with_accelerated_clock(self):
+        """C3-13c: progress skalerer riktig med clock.seconds_per_day,
+        ikke med balance.time.seconds_per_day_at_sea. Akselerert tempo
+        skal gi sub-day-progresjon som fyller hele dags-fraksjonen —
+        ikke bare en liten sliver som gir teleport ved dawn.
+        """
+        bal = balance.get()
+        v = _voyage_2_days()
+        # Akselerert: seconds_per_day=5.0 (i stedet for balance 75.0)
+        accelerated = 5.0
+        # Halvveis i dag 0: seconds_into_day=2.5 (halvveis av 5.0)
+        clock = GameClock(
+            day=5, seconds_into_day=2.5, seconds_per_day=accelerated,
+        )
+        # Forventet: 0.5 dag av 2 = 0.25
+        assert abs(voyage.compute_progress(v, clock, bal) - 0.25) < 1e-9
+        # 80% gjennom dag 0:
+        clock = GameClock(
+            day=5, seconds_into_day=4.0, seconds_per_day=accelerated,
+        )
+        # Forventet: 0.8 dag av 2 = 0.4
+        assert abs(voyage.compute_progress(v, clock, bal) - 0.4) < 1e-9
 
 
 # -----------------------------------------------------------------------------
