@@ -636,6 +636,16 @@ def _parse_player_state(raw: Any) -> PlayerState:
         rest = bal.rest.default_start
     port_caches = _parse_port_caches(raw.get("port_caches"))
     active_rumors = _parse_active_rumors(raw.get("active_rumors"))
+    # Fase 3 C3-12: løp-statistikk-tellere. Defensive parsing —
+    # legacy saves uten feltet får 0.
+    def _int_or_zero(key: str) -> int:
+        try:
+            return int(raw.get(key, 0))
+        except (TypeError, ValueError):
+            return 0
+    total_sabotages = _int_or_zero("total_sabotages")
+    total_false_rumors = _int_or_zero("total_false_rumors")
+    total_voyages = _int_or_zero("total_voyages")
     return PlayerState(
         position_x=position_x,
         gold=gold,
@@ -644,6 +654,9 @@ def _parse_player_state(raw: Any) -> PlayerState:
         rest=rest,
         port_caches=port_caches,
         active_rumors=active_rumors,
+        total_sabotages=total_sabotages,
+        total_false_rumors=total_false_rumors,
+        total_voyages=total_voyages,
     )
 
 

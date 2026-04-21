@@ -47,3 +47,8 @@ class PlayerState:
     rest: float = 1.0
     port_caches: dict[str, int] = field(default_factory=dict)
     active_rumors: list[ActiveRumor] = field(default_factory=list)
+    # Fase 3 C3-12: løp-statistikk for score-overlay. Inkrementeres i
+    # handlerne ved suksessfull handling (etter gull-trekk OK).
+    total_sabotages: int = 0
+    total_false_rumors: int = 0
+    total_voyages: int = 0

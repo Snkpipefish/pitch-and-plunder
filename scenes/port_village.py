@@ -34,7 +34,9 @@ from scenes.exchange import ExchangeOverlay
 from ui.cache_dialog import CacheSubDialog
 from ui.event_dialog import EventDialog
 from ui.harbormaster_dialog import HarbormasterDialog
+from ui.pause_menu_dialog import ConfirmNewGameDialog, PauseMenuDialog
 from ui.rumors_dialog import RumorsDialog
+from ui.score_overlay import ScoreOverlay
 from ui.tavern_dialog import TavernDayDialog, TavernDialog, TavernNightDialog
 from scenes.parallax_backdrops import (
     build_backdrop_variants,
@@ -326,6 +328,15 @@ class PortVillageScene(BaseScene):
         # sampling i tick_all_ports_dawn). Pure notifikasjon — Enter
         # lukker og clearer pending_event_id.
         self._event_dialog: EventDialog | None = None
+        # Fase 3 C3-12: score-overlay. Åpnes automatisk av update() når
+        # `game_state.get_game_over_reason()` er ikke-None. Enter/Esc →
+        # want_quit; F6 → want_restart.
+        self._score_overlay: ScoreOverlay | None = None
+        # Pause-meny (ESC-meny) + confirm-new-game-dialog. Peer til
+        # øvrige dialoger; ESC i scenen åpner pause-meny når ingen
+        # annen dialog er aktiv.
+        self._pause_menu: PauseMenuDialog | None = None
+        self._confirm_new_game: ConfirmNewGameDialog | None = None
 
         # Hint-indikator (multi-tilstand). "near" er børs-hint (2A-kompat);
         # "near_dock" er kart-hint (C5); "near_tavern" er tavern-hint (C3-3).
@@ -381,6 +392,20 @@ class PortVillageScene(BaseScene):
     # --- Input ---
 
     def handle_event(self, event: pygame.event.Event) -> None:
+        # Fase 3 C3-12: score-overlay har høyeste prioritet (spillet er
+        # over — ingen annen input skal gå gjennom).
+        if self._score_overlay is not None:
+            self._score_overlay.handle_event(event)
+            return
+        # Confirm-new-game-dialog dekker over pause-menyen.
+        if self._confirm_new_game is not None:
+            self._confirm_new_game.handle_event(event)
+            return
+        # Pause-menyen dekker over alt øvrig spill-input (men ikke
+        # score-overlay eller confirm-dialog).
+        if self._pause_menu is not None:
+            self._pause_menu.handle_event(event)
+            return
         # Fase 3 C3-11: event-dialog har høyeste prioritet — modal
         # notifikasjon krever at spilleren lukker før alt annet.
         if self._event_dialog is not None:
@@ -408,7 +433,10 @@ class PortVillageScene(BaseScene):
             return
         if event.type == pygame.KEYDOWN:
             if event.key in constants.KEY_MENU:
-                self.want_quit = True
+                # Fase 3 C3-12: ESC åpner pause-meny i stedet for
+                # å quit-e direkte. Avslutning går via pause-meny-
+                # "Avslutt" for å gjøre det eksplisitt.
+                self._open_pause_menu()
             elif event.key in constants.KEY_RUMORS:
                 # Fase 3 C3-9: R åpner RumorsDialog (rykte-liste).
                 self._open_rumors_dialog()
@@ -512,6 +540,12 @@ class PortVillageScene(BaseScene):
         if self._player_can_interact_with_dock():
             return "near_dock"
         return "far"
+
+    def _open_pause_menu(self) -> None:
+        """Åpne pause-meny. Fase 3 C3-12."""
+        self._player.press(0)
+        self._pause_menu = PauseMenuDialog(self._font)
+        # Ingen autosave — pause-meny muterer ikke state.
 
     def _open_exchange(self) -> None:
         # Slipp eventuelle holdte tastetrykk slik at spilleren ikke fortsetter
@@ -635,6 +669,11 @@ class PortVillageScene(BaseScene):
                 )
             self._last_seen_day = curr_day
 
+        # Fase 3 C3-12: game-over-deteksjon. Hvis score-overlay ikke
+        # allerede er åpen og spillet er over, åpne den. Tar prioritet
+        # over event-dialogen — når spillet er slutt skal score vises.
+        self._maybe_open_score_overlay()
+
         # Fase 3 C3-11: åpne event-dialog hvis pending_event_id er satt
         # og ingen dialog er åpen. Resolver effekter først, deretter
         # vis dialog. Ved død setter vi ikke noe ekstra — C3-12 score-
@@ -720,9 +759,61 @@ class PortVillageScene(BaseScene):
                 self._event_dialog = None
                 self.autosave()
             return
+        # Fase 3 C3-12: pause-meny + confirm-new-game lifecycle.
+        if self._confirm_new_game is not None:
+            if self._confirm_new_game.want_close:
+                if self._confirm_new_game.want_restart:
+                    self.want_restart = True
+                self._confirm_new_game = None
+            return
+        if self._pause_menu is not None:
+            if self._pause_menu.want_close:
+                if self._pause_menu.want_quit_game:
+                    self.want_quit = True
+                elif self._pause_menu.want_restart_confirm:
+                    self._confirm_new_game = ConfirmNewGameDialog(self._font)
+                self._pause_menu = None
+            return
+        # Score-overlay lifecycle. want_close → want_quit (main-loop
+        # avslutter); want_restart → flag som main-loop leser for å
+        # bygge ny state.
+        if self._score_overlay is not None:
+            if self._score_overlay.want_close:
+                if self._score_overlay.want_restart:
+                    self.want_restart = True
+                else:
+                    self.want_quit = True
+                self._score_overlay = None
+            return
         # Kun naar overlayet er lukket kan spilleren bevege seg.
         self._player.update(dt, self._player_min_x, self._player_max_x)
         self._center_camera_on_player()
+
+    def _maybe_open_score_overlay(self) -> None:
+        """Sjekk game-over og åpne ScoreOverlay hvis aktiv. Fase 3 C3-12.
+
+        Åpnes kun én gang — hvis score-overlay allerede er vist (eller
+        har blitt lukket denne frame) skip. Lukker andre dialoger som
+        ville dominere input slik at score-overlay har full prioritet.
+        """
+        if self._score_overlay is not None:
+            return
+        reason = self._state.get_game_over_reason()
+        if reason is None:
+            return
+        # Lukk pågående dialoger når spillet er slutt — ingen kjøp,
+        # ingen meny-navigasjon skal skje.
+        self._overlay = None
+        self._tavern_dialog = None
+        self._harbormaster_dialog = None
+        self._cache_dialog = None
+        self._rumors_dialog = None
+        self._event_dialog = None
+        self._pause_menu = None
+        self._confirm_new_game = None
+        self._score_overlay = ScoreOverlay(
+            font=self._font, game_state=self._state, reason=reason,
+        )
 
     def _maybe_open_pending_event(self) -> None:
         """Åpne EventDialog hvis pending_event_id er satt og ingen annen
@@ -853,6 +944,14 @@ class PortVillageScene(BaseScene):
         # (ikke elif — den har høyeste prioritet).
         if self._event_dialog is not None:
             self._event_dialog.draw(surface)
+        # Fase 3 C3-12: pause-meny + confirm + score-overlay tegnes
+        # sekvensielt slik at confirm og score kan vises over pause.
+        if self._pause_menu is not None:
+            self._pause_menu.draw(surface)
+        if self._confirm_new_game is not None:
+            self._confirm_new_game.draw(surface)
+        if self._score_overlay is not None:
+            self._score_overlay.draw(surface)
 
     # --- Lifecycle / save ---
 

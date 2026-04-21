@@ -51,6 +51,27 @@ class GameState:
     dead: bool = False
     death_cause: str = ""
 
+    def get_game_over_reason(self) -> str | None:
+        """Returnér game-over-årsak hvis spillet er over, ellers None.
+
+        Fase 3 C3-12. Prioritert rekkefølge:
+        - "arrested": spilleren ble tatt av guvernøren (suspicion ≥ threshold)
+        - f"dead:{death_cause}": spilleren døde (forlis/sykdom/osv)
+        - "completed": 100-dagers løpet er fullført (clock.day > 100)
+        - None: spillet pågår
+
+        Derived property — ingen state-felt-duplikasjon. Score-overlay
+        og pause-meny bruker denne som eneste sannhetskilde for
+        game-over-state. FASE_3.md §1.1: "100-dagers løp med score".
+        """
+        if self.arrested:
+            return "arrested"
+        if self.dead:
+            return f"dead:{self.death_cause}"
+        if self.world_state.clock.day > 100:
+            return "completed"
+        return None
+
     def get_score(self) -> int:
         """Returnér spillerens nåværende score (Fase 3 C3-5).
 

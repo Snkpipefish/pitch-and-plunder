@@ -207,6 +207,9 @@ def start_voyage(
     )
     state.world_state.voyage = voyage
     state.world_state.clock.seconds_per_day = balance.time.seconds_per_day_at_sea
+    # Fase 3 C3-12: løp-telling for score-overlay. Inkrementeres kun
+    # ved suksessfull atomisk commit (etter gull-trekk + voyage-state).
+    state.player_state.total_voyages += 1
     log.info(
         "Voyage startet: %s → %s, dag %d → %d (rute=%d dager, kost=%d gull)",
         from_port, to_port, depart_day, voyage.arrival_day,

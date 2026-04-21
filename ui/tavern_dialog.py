@@ -433,6 +433,8 @@ class TavernDialog(DialogOverlay):
             self._state,
             bal.actions.cost_hours_per_action.get("order_sabotage", 2.0),
         )
+        # Fase 3 C3-12: løp-telling for score-overlay.
+        self._state.player_state.total_sabotages += 1
         port_name = port_config.get(port_id).name
         commodity_name = _COMMODITY_NORWEGIAN.get(commodity_id, commodity_id)
         self._push_toast(
@@ -481,6 +483,8 @@ class TavernDialog(DialogOverlay):
             self._state,
             bal.actions.cost_hours_per_action.get("spread_false_rumor", 2.0),
         )
+        # Fase 3 C3-12: løp-telling for score-overlay.
+        self._state.player_state.total_false_rumors += 1
         port_name = port_config.get(port_id).name
         commodity_name = _COMMODITY_NORWEGIAN.get(commodity_id, commodity_id)
         self._push_toast(

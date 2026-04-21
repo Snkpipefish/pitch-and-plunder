@@ -249,6 +249,27 @@ def _handle_balance_reload(
     return pending_session_sync
 
 
+def _apply_restart(game_state: "GameState") -> None:
+    """Erstatt game_state-felt in-place med en fersk new_game_state.
+
+    Fase 3 C3-12 restart-flyt. Scene-factoriene i SceneManager har
+    allerede fanget game_state via closure — hvis vi bare re-binder
+    den lokale variabelen her ville nye scener fortsette å se den
+    gamle instansen. Vi muterer derfor hvert felt in-place slik at
+    alle referanser automatisk ser den ferske state.
+
+    Autosaver den ferske state slik at spilleren ikke mister restart-
+    tilstanden hvis de umiddelbart lukker vinduet.
+    """
+    from dataclasses import fields
+
+    fresh = save_module.new_game_state()
+    for f in fields(game_state):
+        setattr(game_state, f.name, getattr(fresh, f.name))
+    save_module.save(game_state)
+    log.info("Nytt løp startet via C3-12 restart")
+
+
 def run() -> int:
     """Start hovedløkken. Returnerer exit-kode."""
     logging.basicConfig(
@@ -386,6 +407,16 @@ def run() -> int:
         if needs_manual_scale:
             pygame.transform.scale(render_surface, window.get_size(), window)
         pygame.display.flip()
+
+        # Fase 3 C3-12: scene ber om nytt løp. Erstatt game_state-felt
+        # in-place (scene-factoriene holder referansen via closure),
+        # autosave den ferske state, og scene-switch til port_village
+        # i Tortuga. must skje FØR maybe_switch() slik at scene-factoryen
+        # leser oppdatert current_port.
+        if manager.current.want_restart:
+            manager.current.want_restart = False
+            _apply_restart(game_state)
+            manager.current.next_scene = "port_village"
 
         manager.maybe_switch()
 

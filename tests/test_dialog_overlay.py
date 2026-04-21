@@ -457,31 +457,32 @@ class TestCacheSubDialog:
 
 
 class TestScoreOverlay:
-    def test_instantiates_with_default_cause(self, font, game_state):
-        d = ScoreOverlay(font, game_state)
+    def test_instantiates_with_reason(self, font, game_state):
+        """C3-12: ScoreOverlay krever `reason` — stub-default er fjernet."""
+        d = ScoreOverlay(font, game_state, reason="completed")
         assert d is not None
-        assert d._cause == "day_100"
+        assert d._reason == "completed"
 
-    def test_instantiates_with_custom_cause(self, font, game_state):
-        d = ScoreOverlay(font, game_state, cause="arrest")
-        assert d._cause == "arrest"
+    def test_instantiates_with_arrested_reason(self, font, game_state):
+        d = ScoreOverlay(font, game_state, reason="arrested")
+        assert d._reason == "arrested"
 
     def test_build_entries_empty(self, font, game_state):
-        d = ScoreOverlay(font, game_state)
+        d = ScoreOverlay(font, game_state, reason="completed")
         assert d._build_entries() == []
 
     def test_draw_no_crash(self, font, game_state):
-        d = ScoreOverlay(font, game_state)
+        d = ScoreOverlay(font, game_state, reason="completed")
         surf = pygame.Surface((640, 360), pygame.SRCALPHA)
         d.draw(surf)
 
     def test_esc_sets_want_close(self, font, game_state):
-        d = ScoreOverlay(font, game_state)
+        d = ScoreOverlay(font, game_state, reason="completed")
         d.handle_event(_keydown(pygame.K_ESCAPE))
         assert d.want_close is True
 
     def test_enter_sets_want_close(self, font, game_state):
         """Score-overlay har ingen navigerbare entries; Enter avslutter."""
-        d = ScoreOverlay(font, game_state)
+        d = ScoreOverlay(font, game_state, reason="completed")
         d.handle_event(_keydown(pygame.K_RETURN))
         assert d.want_close is True

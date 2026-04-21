@@ -40,10 +40,14 @@ class BaseScene:
     next_scene: str | None
     #: Satt til True når spillet skal avsluttes.
     want_quit: bool
+    #: Fase 3 C3-12: scene ber main-loop om å starte nytt løp. Main
+    #: bytter ut game_state in-place og scene-switcher til port_village.
+    want_restart: bool
 
     def __init__(self) -> None:
         self.next_scene = None
         self.want_quit = False
+        self.want_restart = False
 
     def on_enter(
         self,
