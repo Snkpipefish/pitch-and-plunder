@@ -5,6 +5,12 @@ Krysning mellom *Sid Meier's Pirates!* (PSP), et life-sim, og et skjult
 økonomi-krigførings-spill der spilleren manipulerer en lokal børs gjennom
 ulovlig piratvirksomhet.
 
+![Tortuga om natten – børshuset lyser, månen står over havet](docs/screenshots/village_night.png)
+
+| Børs-overlay | Verdenskart | Reise mellom havner |
+|:---:|:---:|:---:|
+| ![Børs-overlay i Tortuga](docs/screenshots/exchange.png) | ![Verdenskartet over Karibia](docs/screenshots/world_map.png) | ![Reise fra Tortuga mot Port Royal](docs/screenshots/voyage.png) |
+
 Se `PROSJEKT.md` for full designspesifikasjon, `ASSETS.md` for assets, og
 `BENCHMARKS.md` for ytelsesmålinger per fase.
 
