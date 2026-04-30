@@ -217,8 +217,14 @@ class PortVillageRenderer:
         batch: list[tuple[pygame.Surface, tuple[int, int]]] = []
         for sil in silhouettes:
             batch.append((sil.sprite, (int(sil.x) - cx, int(sil.y))))
+        # NPC-er får en subtil idle-bob (1 px sinus) for å unngå at
+        # de virker statiske ved siden av animert player. Fasen
+        # spres per NPC via id-hash slik at flokken ikke synker i takt.
+        import math as _math
         for npc in npcs:
-            batch.append((npc.sprite, (int(npc.x) - cx, int(npc.y))))
+            phase = (hash(npc.id) % 100) / 100.0 * _math.tau
+            bob = int(round(_math.sin(elapsed * 1.4 + phase)))
+            batch.append((npc.sprite, (int(npc.x) - cx, int(npc.y) + bob)))
         batch.append(
             (player.sprite, (int(player.x) - cx, int(player.y)))
         )

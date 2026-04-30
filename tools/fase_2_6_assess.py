@@ -55,8 +55,8 @@ def render_village(force_day: bool):
     surf = pygame.Surface((constants.RENDER_WIDTH, constants.RENDER_HEIGHT)).convert()
     for _ in range(120):
         scene.update(0.0166)
-    # Sentrer over Børshuset for å se klokke + trapp + dør-detaljer.
-    scene._camera.set_x(1240.0)
+    # Sentrer over taverna for å se hengende skilt + skorsteinsrøyk.
+    scene._camera.set_x(0.0)
     try:
         scene.draw(surf)
     except Exception as exc:

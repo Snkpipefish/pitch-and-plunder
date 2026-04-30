@@ -235,13 +235,60 @@ def _bake_tavern(
         (x + 14, y - 4, 2, 1),
     )
 
-    # Skilt mellom vinduene
-    sign_x, sign_y, sign_w, sign_h = x + w // 2 - 26, y + 16, 52, 10
+    # Hengende skilt mellom vinduene (Fase 2.6 polish): jern-brakett
+    # ut fra taket, kjede ned til selve skiltet, skiltet svinger ikke
+    # men har varm tone som leder oeyet til doera.
+    sign_w, sign_h = 52, 14
+    sign_x = x + w // 2 - sign_w // 2
+    bracket_y = y - 1
+    bracket_w = sign_w + 6
+    # Jern-brakett (horisontal stang under tak-overheng)
     pygame.draw.rect(
-        surface, constants.COLOR_WOOD_LIGHT, (sign_x, sign_y, sign_w, sign_h)
+        surface, constants.COLOR_WOOD_DARKEST,
+        (sign_x - 3, bracket_y, bracket_w, 1),
+    )
+    # Hengende kjeder (to vertikale stripper ned til skiltet)
+    chain_top_y = bracket_y + 1
+    chain_h = 3
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (sign_x + 4, chain_top_y, 1, chain_h),
     )
     pygame.draw.rect(
-        surface, constants.COLOR_WOOD_MID, (sign_x + 1, sign_y + 1, sign_w - 2, sign_h - 2)
+        surface, constants.COLOR_WOOD_DARKEST,
+        (sign_x + sign_w - 5, chain_top_y, 1, chain_h),
+    )
+    # Selve skiltet — bredt, varmt tre med innskreven ramme
+    sign_y = chain_top_y + chain_h
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (sign_x, sign_y, sign_w, sign_h),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_LIGHT,
+        (sign_x + 1, sign_y + 1, sign_w - 2, sign_h - 2),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID,
+        (sign_x + 2, sign_y + 2, sign_w - 4, sign_h - 4),
+    )
+    # "Krus"-ikon til venstre (lanterne-gull antydning)
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN,
+        (sign_x + 5, sign_y + 4, 6, 6),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_LANTERN_BRIGHT,
+        (sign_x + 6, sign_y + 5, 4, 4),
+    )
+    # Tekst-stripper (ulesbare paa avstand, men antyder skrift)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (sign_x + 14, sign_y + 5, 32, 1),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (sign_x + 14, sign_y + 8, 28, 1),
     )
 
     # Dør (natt: varm glød fra innsiden; dag: lukket, bare mørk åpning)
@@ -528,14 +575,28 @@ def _bake_customs_house(
         surface, constants.COLOR_STONE_DARKEST,
         (door_x + door_w // 2 - 1, door_y + 3, 2, door_h - 6),
     )
-    # Trapp-antydning
+    # Sølv-haandtak paa hver flоy (Fase 2.6 polish — match Tortuga)
     pygame.draw.rect(
-        surface, constants.COLOR_STONE_LIGHT,
-        (door_x - 6, ground_top_y, door_w + 12, 3),
+        surface, constants.COLOR_STONE_BRIGHT,
+        (door_x + door_w // 2 - 6, door_y + door_h // 2, 1, 2),
     )
     pygame.draw.rect(
         surface, constants.COLOR_STONE_BRIGHT,
-        (door_x - 6, ground_top_y, door_w + 12, 1),
+        (door_x + door_w // 2 + 5, door_y + door_h // 2, 1, 2),
+    )
+    # 3-trinns trapp (smal->bred->bredere — kolonial autoritet)
+    step_y = ground_top_y
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_BRIGHT,
+        (door_x - 6, step_y, door_w + 12, 1),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_LIGHT,
+        (door_x - 10, step_y + 1, door_w + 20, 1),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_MID,
+        (door_x - 14, step_y + 2, door_w + 28, 1),
     )
 
 
