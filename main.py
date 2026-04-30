@@ -134,17 +134,45 @@ class SceneManager:
         self._current.on_enter(self._game_state, from_scene=prev_name)
 
 
-def _create_display(fullscreen: bool) -> pygame.Surface:
-    """Opprett pygame display.
+def _create_display(
+    fullscreen: bool,
+    preset: str = constants.DEFAULT_GRAPHICS_PRESET,
+):
+    """Opprett pygame display + valgfri ModernGL post-FX-pipeline.
 
-    Vi bruker `pygame.SCALED` slik at vi kan tegne direkte i logisk 640x360-
-    oppløsning, og lar SDL skalere opp til ønsket vindusstørrelse med
-    nearest-neighbor. Hvis SCALED ikke er tilgjengelig (f.eks. gamle SDL-
-    byggd eller rare driver-kombinasjoner), fallbacker vi til et større
-    software-vindu og skalerer manuelt.
+    Returnerer (render_surface, window, pipeline) der pipeline er None når
+    `low`-preset brukes eller GL-init feiler. Render_surface er alltid en
+    640x360 surface som scenene tegner på.
 
-    Returnerer surface som scenen skal tegne på (alltid 640x360).
+    `high`-preset: lager OPENGL-vindu og en PostFXPipeline. Render_surface
+    er en separat in-memory Surface som lastes som tekstur hvert frame.
+    `low`-preset: pygame.SCALED som før — render_surface == window.
     """
+    if preset == constants.GRAPHICS_PRESET_HIGH:
+        from systems import post_fx
+        # Bruk en større GL-vindu-oppløsning og la shaderen skalere/filtrere.
+        window_size = constants.DEFAULT_WINDOW_SIZE
+        flags = pygame.OPENGL | pygame.DOUBLEBUF
+        if fullscreen:
+            flags |= pygame.FULLSCREEN
+        try:
+            window = pygame.display.set_mode(window_size, flags)
+        except pygame.error as exc:
+            log.warning("OPENGL set_mode feilet (%s) — faller tilbake til low-preset", exc)
+            return _create_display(fullscreen, preset=constants.GRAPHICS_PRESET_LOW)
+        pipeline = post_fx.PostFXPipeline.try_create(window_size=window_size)
+        if pipeline is None:
+            log.warning("PostFX init feilet — faller tilbake til low-preset")
+            pygame.display.quit()
+            pygame.display.init()
+            return _create_display(fullscreen, preset=constants.GRAPHICS_PRESET_LOW)
+        render_surface = pygame.Surface(
+            (constants.RENDER_WIDTH, constants.RENDER_HEIGHT)
+        ).convert_alpha()
+        log.info("Display: OPENGL %dx%d (high-preset, ModernGL post-FX)", *window_size)
+        return render_surface, window, pipeline
+
+    # low-preset (eller fallback): pygame.SCALED som før.
     flags = pygame.SCALED
     if fullscreen:
         flags |= pygame.FULLSCREEN
@@ -154,15 +182,15 @@ def _create_display(fullscreen: bool) -> pygame.Surface:
         )
         log.info("Display: pygame.SCALED %dx%d fullscreen=%s",
                  constants.RENDER_WIDTH, constants.RENDER_HEIGHT, fullscreen)
-        return window
+        return window, window, None
     except pygame.error as exc:
         log.warning("SCALED feilet (%s) – bruker software fallback", exc)
         flags = pygame.FULLSCREEN if fullscreen else 0
-        pygame.display.set_mode(constants.DEFAULT_WINDOW_SIZE, flags)
-        # Returner en intern render-surface; main-løkken skalerer manuelt
-        return pygame.Surface(
+        window = pygame.display.set_mode(constants.DEFAULT_WINDOW_SIZE, flags)
+        render_surface = pygame.Surface(
             (constants.RENDER_WIDTH, constants.RENDER_HEIGHT)
         ).convert()
+        return render_surface, window, None
 
 
 def _load_font(size: int) -> pygame.font.Font:
@@ -249,6 +277,18 @@ def _handle_balance_reload(
     return pending_session_sync
 
 
+def _parse_preset_arg() -> str:
+    """Les --preset=high|low fra argv. Default: constants.DEFAULT_GRAPHICS_PRESET."""
+    import sys
+    for arg in sys.argv[1:]:
+        if arg.startswith("--preset="):
+            value = arg.split("=", 1)[1].strip().lower()
+            if value in (constants.GRAPHICS_PRESET_HIGH, constants.GRAPHICS_PRESET_LOW):
+                return value
+            log.warning("Ukjent --preset=%s, bruker default", value)
+    return constants.DEFAULT_GRAPHICS_PRESET
+
+
 def _apply_restart(game_state: "GameState") -> None:
     """Erstatt game_state-felt in-place med en fersk new_game_state.
 
@@ -283,12 +323,13 @@ def run() -> int:
     pygame.display.set_caption("Pitch & Plunder")
 
     fullscreen = False
-    render_surface = _create_display(fullscreen)
-    # Når SCALED fungerer er render_surface == window, og pygame håndterer
-    # skaleringen. I software-fallback er render_surface en separat surface
-    # og vi må blit-e + skalere manuelt til display-vinduet.
-    window = pygame.display.get_surface()
-    needs_manual_scale = render_surface is not window
+    preset = _parse_preset_arg()
+    render_surface, window, post_fx_pipeline = _create_display(fullscreen, preset)
+    # Tre tilfeller:
+    #   1. low-preset + SCALED OK → render_surface == window, ingen scale, ingen pipeline
+    #   2. low-preset + software fallback → render_surface != window, manuell scale, ingen pipeline
+    #   3. high-preset → render_surface != window (in-memory), pipeline overtar visning
+    needs_manual_scale = post_fx_pipeline is None and render_surface is not window
 
     font_small = _load_font(8)
 
@@ -363,9 +404,10 @@ def run() -> int:
                 break
             if event.type == pygame.KEYDOWN and event.key in constants.KEY_FULLSCREEN:
                 fullscreen = not fullscreen
-                render_surface = _create_display(fullscreen)
-                window = pygame.display.get_surface()
-                needs_manual_scale = render_surface is not window
+                if post_fx_pipeline is not None:
+                    post_fx_pipeline.release()
+                render_surface, window, post_fx_pipeline = _create_display(fullscreen, preset)
+                needs_manual_scale = post_fx_pipeline is None and render_surface is not window
                 continue
             if (
                 dev_active
@@ -404,9 +446,12 @@ def run() -> int:
         manager.current.update(dt)
         manager.current.draw(render_surface)
 
-        if needs_manual_scale:
-            pygame.transform.scale(render_surface, window.get_size(), window)
-        pygame.display.flip()
+        if post_fx_pipeline is not None:
+            post_fx_pipeline.present(render_surface)
+        else:
+            if needs_manual_scale:
+                pygame.transform.scale(render_surface, window.get_size(), window)
+            pygame.display.flip()
 
         # Fase 3 C3-12: scene ber om nytt løp. Erstatt game_state-felt
         # in-place (scene-factoriene holder referansen via closure),
