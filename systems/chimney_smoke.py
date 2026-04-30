@@ -103,32 +103,38 @@ def _make_default_sources_for_port(port_id: str) -> list[SmokeSource]:
     - Havana: bakeri/tavernpipe rundt x=400, katedral-røkelse rundt x=900
     - Nassau: bål rundt x=650 (varm)
     """
+    # Fase 2.6: posisjoner re-kalibrert mot faktiske bygnings-koordinater
+    # i data/ports.json (etter Y-skalering 360→270). Hver kilde plasseres
+    # ved chimney/skorstein-toppen til den respektive bygningen.
     if port_id == "tortuga":
+        # Tavern: x=20, w=200 (chimney på høyre side). y_top=194 etter
+        # migrering; røyk-kilde rett over taket.
+        # Smithy: x=890, w=70, h=42 (esse i midten). y_top=ground-h=255-42=213.
         return [
-            SmokeSource(x=302, y=222, kind="warm", period=0.32,
-                        drift_x=4.0, rise_speed=18.0),  # smie
-            SmokeSource(x=215, y=205, kind="cool", period=0.55,
+            SmokeSource(x=920, y=210, kind="warm", period=0.32,
+                        drift_x=4.0, rise_speed=18.0),  # smie-esse
+            SmokeSource(x=185, y=190, kind="cool", period=0.55,
                         drift_x=3.0, rise_speed=14.0),  # tavern-pipe
         ]
     if port_id == "port_royal":
         return [
-            SmokeSource(x=560, y=200, kind="cool", period=0.50,
+            SmokeSource(x=420, y=150, kind="cool", period=0.50,
                         drift_x=2.5, rise_speed=15.0),  # customs
-            SmokeSource(x=820, y=210, kind="cool", period=0.65,
+            SmokeSource(x=620, y=160, kind="cool", period=0.65,
                         drift_x=2.0, rise_speed=13.0),  # exchange-pipe
         ]
     if port_id == "havana":
         return [
-            SmokeSource(x=400, y=210, kind="warm", period=0.45,
+            SmokeSource(x=300, y=160, kind="warm", period=0.45,
                         drift_x=3.0, rise_speed=15.0),  # bakeri
-            SmokeSource(x=900, y=190, kind="cool", period=0.80,
-                        drift_x=1.5, rise_speed=10.0),  # katedral-røkelse (lett)
+            SmokeSource(x=680, y=145, kind="cool", period=0.80,
+                        drift_x=1.5, rise_speed=10.0),  # katedral-røkelse
         ]
     if port_id == "nassau":
         return [
-            SmokeSource(x=650, y=240, kind="warm", period=0.30,
+            SmokeSource(x=490, y=185, kind="warm", period=0.30,
                         drift_x=5.0, rise_speed=20.0),  # bål
-            SmokeSource(x=320, y=220, kind="cool", period=0.55,
+            SmokeSource(x=240, y=170, kind="cool", period=0.55,
                         drift_x=3.5, rise_speed=14.0),  # shack-pipe
         ]
     return []
