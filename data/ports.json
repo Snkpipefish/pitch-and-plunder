@@ -3,7 +3,7 @@
   "ports": {
     "tortuga": {
       "name": "Tortuga",
-      "world_map_position": [410, 230],
+      "world_map_position": [340, 175],
       "scene_class": "scenes.port_village:PortVillageScene",
       "world_width": 1600,
       "celestial": {
@@ -86,7 +86,7 @@
     },
     "port_royal": {
       "name": "Port Royal",
-      "world_map_position": [180, 260],
+      "world_map_position": [125, 195],
       "scene_class": "scenes.port_village:PortVillageScene",
       "world_width": 1200,
       "celestial": {
@@ -172,7 +172,7 @@
     },
     "havana": {
       "name": "Havana",
-      "world_map_position": [140, 140],
+      "world_map_position": [95, 95],
       "scene_class": "scenes.port_village:PortVillageScene",
       "world_width": 1400,
       "celestial": {
@@ -272,7 +272,7 @@
     },
     "nassau": {
       "name": "Nassau",
-      "world_map_position": [420, 110],
+      "world_map_position": [350, 80],
       "scene_class": "scenes.port_village:PortVillageScene",
       "world_width": 1200,
       "celestial": {

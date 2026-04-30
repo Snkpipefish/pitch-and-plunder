@@ -321,7 +321,9 @@ class TestTooltipDraw:
         rendret med den fargen er en pålitelig signatur."""
         market_state = _market_with_history()
         tooltip = WorldMapTooltip(_font())
-        surf = pygame.Surface((640, 360))
+        # Bruk samme oppløsning som spillet for at clamp-logikken skal
+        # plassere tooltipen i samme region testen scanner i (Fase 2.6).
+        surf = pygame.Surface((constants.RENDER_WIDTH, constants.RENDER_HEIGHT))
 
         lines = build_tooltip_lines(
             port_name="Tortuga",
@@ -331,15 +333,18 @@ class TestTooltipDraw:
             catalog_names=_CATALOG_NAMES,
             current_day=5, stale_threshold=5, is_current_port=True,
         )
-        anchor = (320, 180)
+        # Anker midt på skjermen så tooltip ikke trenger flip-clamp.
+        anchor = (constants.RENDER_WIDTH // 2, constants.RENDER_HEIGHT // 3)
         tooltip.draw(surf, lines, anchor)
 
-        # Tooltip ligger under anchor; sampler vertikal stripe
-        # nedover for COLOR_MOON_CORE-piksler.
+        # Tooltip ligger normalt under anchor, men kan flippe over ved
+        # bunn-clamp. Skann ±100 px vertikalt for COLOR_MOON_CORE.
         target = constants.COLOR_MOON_CORE
         found = False
-        for y in range(anchor[1], min(360, anchor[1] + 80)):
-            for x in range(max(0, anchor[0] - 80), min(640, anchor[0] + 80)):
+        h_max = constants.RENDER_HEIGHT
+        w_max = constants.RENDER_WIDTH
+        for y in range(max(0, anchor[1] - 100), min(h_max, anchor[1] + 100)):
+            for x in range(max(0, anchor[0] - 80), min(w_max, anchor[0] + 80)):
                 pix = surf.get_at((x, y))
                 if (pix[0], pix[1], pix[2]) == target:
                     found = True

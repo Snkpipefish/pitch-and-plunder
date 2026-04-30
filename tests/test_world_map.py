@@ -17,6 +17,7 @@ import random
 import pygame
 import pytest
 
+import constants
 from config import port_config
 from state import GameState
 
@@ -167,7 +168,8 @@ class TestWorldMapBuilder:
         a = build_world_map_background(ports, phase="noon", rng=random.Random(42))
         b = build_world_map_background(ports, phase="noon", rng=random.Random(42))
         # Sjekk noen prøve-piksler i hav-regionen
-        for x, y in [(100, 50), (300, 150), (500, 250)]:
+        # Prøvepunkter innenfor 480×270 (Fase 2.6 sub-steg 2).
+        for x, y in [(100, 50), (240, 150), (400, 200)]:
             assert a.get_at((x, y)) == b.get_at((x, y))
 
     def test_noon_and_dawn_phases_build_without_error(self):
@@ -289,7 +291,7 @@ class TestWorldMapSceneRendering:
     def test_draw_does_not_crash(self):
         from scenes.world_map import WorldMapScene
         scene = WorldMapScene(_font(), _state())
-        surf = pygame.Surface((640, 360))
+        surf = pygame.Surface((constants.RENDER_WIDTH, constants.RENDER_HEIGHT))
         scene.draw(surf)
 
     def test_elapsed_advances_on_update(self):
@@ -310,7 +312,7 @@ class TestWorldMapSceneRendering:
         from entities.port_marker import MARKER_SIZE
         from scenes.world_map import WorldMapScene
         scene = WorldMapScene(_font(), _state())
-        surf = pygame.Surface((640, 360))
+        surf = pygame.Surface((constants.RENDER_WIDTH, constants.RENDER_HEIGHT))
         scene.draw(surf)
 
         ports = port_config.get_all()
@@ -320,11 +322,11 @@ class TestWorldMapSceneRendering:
             found_halo = False
             for dy in range(0, 12):
                 y = label_top_y + dy
-                if not (0 <= y < 360):
+                if not (0 <= y < constants.RENDER_HEIGHT):
                     continue
                 for dx in range(-30, 31):
                     x = cx + dx
-                    if not (0 <= x < 640):
+                    if not (0 <= x < constants.RENDER_WIDTH):
                         continue
                     pix = surf.get_at((x, y))
                     if (pix[0], pix[1], pix[2]) == COLOR_MOON_HALO:
@@ -361,7 +363,7 @@ class TestWorldMapNeverVisitedMarker:
         # state, og de tre andre får "never_visited".
         scene = WorldMapScene(_font(), state)
         scene._focused_port_id = "tortuga"
-        surf = pygame.Surface((640, 360))
+        surf = pygame.Surface((constants.RENDER_WIDTH, constants.RENDER_HEIGHT))
         scene.draw(surf)
 
         ports = port_config.get_all()
@@ -373,7 +375,7 @@ class TestWorldMapNeverVisitedMarker:
             for dy in range(-half, half + 1):
                 for dx in range(-half, half + 1):
                     x, y = cx + dx, cy + dy
-                    if not (0 <= x < 640 and 0 <= y < 360):
+                    if not (0 <= x < constants.RENDER_WIDTH and 0 <= y < constants.RENDER_HEIGHT):
                         continue
                     pix = surf.get_at((x, y))
                     if (pix[0], pix[1], pix[2]) == COLOR_FOG:
@@ -399,7 +401,7 @@ class TestWorldMapNeverVisitedMarker:
 
         scene = WorldMapScene(_font(), state)
         scene._focused_port_id = "tortuga"  # tortuga = focused, ikke port_royal
-        surf = pygame.Surface((640, 360))
+        surf = pygame.Surface((constants.RENDER_WIDTH, constants.RENDER_HEIGHT))
         scene.draw(surf)
 
         ports = port_config.get_all()
@@ -428,18 +430,26 @@ class TestWorldMapTooltipOnFocus:
         """Tooltip for fokusert havn skal tegne MOON_CORE-piksler
         (havn-navn) under markøren når dialog er lukket.
         """
+        import constants
         from constants import COLOR_MOON_CORE
         from scenes.world_map import WorldMapScene
         scene = WorldMapScene(_font(), _state())
         scene._focused_port_id = "tortuga"
-        surf = pygame.Surface((640, 360))
+        surf = pygame.Surface((constants.RENDER_WIDTH, constants.RENDER_HEIGHT))
         scene.draw(surf)
 
-        # Tooltip ligger under fokusert markør (Tortuga ved 410, 230)
-        anchor = (410, 230)
+        # Tooltip ligger under eller over fokusert markør (flip-clamp ved
+        # bunn-edge). Les havn-posisjon fra scene-state slik at testen
+        # tåler oppløsnings-/koordinat-endringer i data/ports.json
+        # (Fase 2.6 sub-steg 2).
+        anchor = scene._port_positions[scene._focused_port_id]
+        h_max = constants.RENDER_HEIGHT
+        w_max = constants.RENDER_WIDTH
+        # Skann ±100 px vertikalt rundt markøren — tooltip kan være over
+        # eller under avhengig av plass.
         found_navn = False
-        for y in range(anchor[1] + 10, min(360, anchor[1] + 90)):
-            for x in range(max(0, anchor[0] - 80), min(640, anchor[0] + 80)):
+        for y in range(max(0, anchor[1] - 100), min(h_max, anchor[1] + 100)):
+            for x in range(max(0, anchor[0] - 80), min(w_max, anchor[0] + 80)):
                 pix = surf.get_at((x, y))
                 if (pix[0], pix[1], pix[2]) == COLOR_MOON_CORE:
                     found_navn = True
@@ -457,7 +467,7 @@ class TestWorldMapTooltipOnFocus:
         scene = WorldMapScene(_font(), _state())
         scene._focused_port_id = "havana"
         scene._dialog = _VoyageConfirmDialog(_font(), "Havana", 3, 15)
-        surf = pygame.Surface((640, 360))
+        surf = pygame.Surface((constants.RENDER_WIDTH, constants.RENDER_HEIGHT))
         scene.draw(surf)  # skal ikke krasje
         # Implisitt: ingen kontroll på tooltip — hvis koden var feil
         # ville surf-pixel-state vært udefinert. Test passerer hvis

@@ -1,7 +1,7 @@
 """Bake-funksjoner for verdenskart-bakgrunn (Fase 2B C5, utvidet i C5.1).
 
-Bygger 4 fase-varianter (noon/dawn/dusk/night) av 640×360 kart-
-bakgrunnen. Hver variant inkluderer:
+Bygger 4 fase-varianter (noon/dawn/dusk/night) av 480×270 kart-
+bakgrunnen (Fase 2.6 sub-steg 2; tidligere 640×360). Hver variant inkluderer:
 - Himmel-band topp (fase-avhengig gradient)
 - Hav-gradient (3 striper)
 - §8.4 skyggedybde — lysere SEA_MID i coastal_radius rundt hver øy
@@ -317,7 +317,7 @@ def build_world_map_background(
     phase: str = "noon",
     rng: random.Random | None = None,
 ) -> pygame.Surface:
-    """Bygg 640×360 kart-bakgrunn for gitt fase.
+    """Bygg 480×270 kart-bakgrunn for gitt fase (Fase 2.6).
 
     Render-rekkefølge (viktig — senere lag tegnes OVER tidligere):
     1. Himmel-band (noon-gradient for alle faser i C5.1)
