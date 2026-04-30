@@ -295,24 +295,28 @@ def bake_lantern_post(
     x: int,
     ground_top_y: int,
     *,
-    height: int = 40,
+    height: int = 52,
 ) -> None:
     """Jernstolpe med lanterne på toppen.
 
-    Glødet er BAKT (statisk), ikke dynamisk lys — dette holder oss
-    innenfor 4-lys-budsjettet (taverna-lanterne + taverna-dør +
-    børs-vindu = 3 eksisterende dynamiske lys). Alpha-pulsering
-    vurderes i C2.5-6.
+    Fase 2.6: bumpet fra 40→52 px høyde og 5×5→7×8 lanterne for å
+    matche ny 24×40 sprite-skala (480×270 oppløsning). Tydeligere
+    silhuett mot natthimmel; ekstra hengende-arm-detalj.
 
-    Form (bredde 7, høyde `height` inkl. lanterne):
-    - Stolpe: 1×(height-6) vertikal stripe, sentrert på `x`
+    Glødet er BAKT (statisk), ikke dynamisk lys — dette holder oss
+    innenfor 12-lys-budsjettet i v2.7. Alpha-pulsering vurderes
+    senere.
+
+    Form:
+    - Stolpe: 1×(height-7) vertikal stripe, sentrert på `x`
     - Base: 3×1 ved bakken
-    - Lanterne: 5×5 boks på toppen med LANTERN_BRIGHT-kjerne
-    - Statisk halo: 7×7 EMBER-ring med én pixel transparent hjørne-dropoff
+    - Hengende arm: 5×1 sideveis (krullet jern-arm-antydning)
+    - Lanterne: 7×8 boks på toppen med LANTERN_BRIGHT-kjerne
+    - Statisk halo: 5 EMBER-piksler rundt lanterne
     """
     post_w = 1
-    post_h = height - 6
-    lantern_w, lantern_h = 5, 5
+    lantern_w, lantern_h = 7, 8
+    post_h = height - lantern_h - 1
     cx = x  # Stolpens vertikale akse
     # Base (fot på bakken)
     pygame.draw.rect(
@@ -326,21 +330,31 @@ def bake_lantern_post(
         constants.COLOR_STONE_DARKEST,
         (cx, ground_top_y - post_h, post_w, post_h),
     )
-    # Arm (tverrstag rett under lanterna)
     top_y = ground_top_y - height
+    # Krullet hengende-arm (jern-ornament som holder lanterne)
     pygame.draw.rect(
         surface,
         constants.COLOR_STONE_DARKEST,
-        (cx - 1, top_y + lantern_h, 3, 1),
+        (cx - 2, top_y + lantern_h, 5, 1),
     )
-    # Lanterne-boks
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_STONE_DARKEST,
+        (cx - 2, top_y + lantern_h - 1, 1, 1),
+    )
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_STONE_DARKEST,
+        (cx + 2, top_y + lantern_h - 1, 1, 1),
+    )
+    # Lanterne-boks (bredere boks, mørk ramme)
     lbox_x = cx - lantern_w // 2
     pygame.draw.rect(
         surface,
         constants.COLOR_WOOD_DARKEST,
         (lbox_x, top_y, lantern_w, lantern_h),
     )
-    # Lanterne-flamme (varm kjerne)
+    # Lanterne-flamme: 3 lag for dybde (LANTERN → LANTERN_BRIGHT kjerne)
     pygame.draw.rect(
         surface,
         constants.COLOR_LANTERN,
@@ -351,11 +365,25 @@ def bake_lantern_post(
         constants.COLOR_LANTERN_BRIGHT,
         (lbox_x + 2, top_y + 2, lantern_w - 4, lantern_h - 4),
     )
-    # Statisk halo: 3 EMBER-prikker rundt lanterne (antyder glød-spredning)
+    # Mørke topp-/bunn-aksenter (ramme-detalj)
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_WOOD_DARKEST,
+        (lbox_x + 1, top_y + lantern_h - 2, lantern_w - 2, 1),
+    )
+    # Krone-topp på lanterne (liten dekorativ stikk)
+    pygame.draw.rect(
+        surface,
+        constants.COLOR_STONE_DARKEST,
+        (cx, top_y - 1, 1, 1),
+    )
+    # Statisk halo: 5 EMBER-piksler i kors-mønster rundt lanterne
     halo = [
-        (lbox_x - 1, top_y + 2),
-        (lbox_x + lantern_w, top_y + 2),
-        (lbox_x + lantern_w // 2, top_y - 1),
+        (lbox_x - 1, top_y + 3),                  # venstre
+        (lbox_x + lantern_w, top_y + 3),          # høyre
+        (lbox_x + lantern_w // 2, top_y - 1),     # over
+        (lbox_x + 1, top_y + lantern_h),          # under-venstre
+        (lbox_x + lantern_w - 2, top_y + lantern_h),  # under-høyre
     ]
     for hx, hy in halo:
         pygame.draw.rect(surface, constants.COLOR_EMBER, (hx, hy, 1, 1))
