@@ -22,7 +22,7 @@ import pygame  # noqa: E402  (må komme etter env-vars)
 # i alle havner er fortsatt 640-koordinater og må regenereres i sub-steg 2-9.
 RENDER_WIDTH = 480
 RENDER_HEIGHT = 270
-DEFAULT_SCALE = 3  # 3 × 480 = 1440 (komfortabelt vindus-størrelse)
+DEFAULT_SCALE = 2  # 2 × 480 = 960 wide × 540 tall — passer på alle skjermer.
 DEFAULT_WINDOW_SIZE = (RENDER_WIDTH * DEFAULT_SCALE, RENDER_HEIGHT * DEFAULT_SCALE)
 TARGET_FPS = 60  # v2.7: heves fra 30 da T4200-støtte droppes.
 
