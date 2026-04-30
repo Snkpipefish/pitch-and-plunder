@@ -69,7 +69,8 @@ class TestPortRoyalRendering:
         port_royal = pc.get("port_royal")
         _, surf = build_port_gameplay_layer(port_royal)  # night-variant
         assert surf.get_width() == port_royal.world_width
-        assert surf.get_height() == 360
+        # Fase 2.6: RENDER_HEIGHT skalert fra 360 til 270.
+        assert surf.get_height() == 270
 
     def test_port_royal_uses_customs_house_baker(self):
         """Exchange-bbox bakes med _bake_customs_house, ikke _bake_exchange.

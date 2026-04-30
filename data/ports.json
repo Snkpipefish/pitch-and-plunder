@@ -3,7 +3,10 @@
   "ports": {
     "tortuga": {
       "name": "Tortuga",
-      "world_map_position": [340, 175],
+      "world_map_position": [
+        340,
+        175
+      ],
       "scene_class": "scenes.port_village:PortVillageScene",
       "world_width": 1600,
       "celestial": {
@@ -11,82 +14,243 @@
         "sun_worldx_dawn": 1500,
         "sun_worldx_dusk": 100
       },
-      "price_bias": {"sugar": 1.10, "rum": 1.10, "tobacco": 1.05, "pitch": 1.15},
+      "price_bias": {
+        "sugar": 1.1,
+        "rum": 1.1,
+        "tobacco": 1.05,
+        "pitch": 1.15
+      },
       "regime_weights": {
-        "sugar":   {"rising": 0.33, "stable": 0.34, "falling": 0.33},
-        "rum":     {"rising": 0.33, "stable": 0.34, "falling": 0.33},
-        "tobacco": {"rising": 0.33, "stable": 0.34, "falling": 0.33},
-        "pitch":   {"rising": 0.40, "stable": 0.35, "falling": 0.25}
+        "sugar": {
+          "rising": 0.33,
+          "stable": 0.34,
+          "falling": 0.33
+        },
+        "rum": {
+          "rising": 0.33,
+          "stable": 0.34,
+          "falling": 0.33
+        },
+        "tobacco": {
+          "rising": 0.33,
+          "stable": 0.34,
+          "falling": 0.33
+        },
+        "pitch": {
+          "rising": 0.4,
+          "stable": 0.35,
+          "falling": 0.25
+        }
       },
       "buildings": {
-        "ground_top_y": 340,
+        "ground_top_y": 255,
         "player_start_x": 1340,
-        "tavern":   {"x": 20,   "y": 258, "w": 200, "h": 82},
-        "exchange": {"x": 1380, "y": 248, "w": 200, "h": 92},
-        "harbormaster": {"x": 1240, "y": 268, "w": 60, "h": 72},
-        "npcs": {"hawkins": 1470},
-        "dock_interaction_range": [8, 80],
+        "tavern": {
+          "x": 20,
+          "y": 194,
+          "w": 200,
+          "h": 82
+        },
+        "exchange": {
+          "x": 1380,
+          "y": 186,
+          "w": 200,
+          "h": 92
+        },
+        "harbormaster": {
+          "x": 1240,
+          "y": 201,
+          "w": 60,
+          "h": 72
+        },
+        "npcs": {
+          "hawkins": 1470
+        },
+        "dock_interaction_range": [
+          8,
+          80
+        ],
         "anchored_ships": [
-          {"kind": "smuggler", "x": 110, "y": 232},
-          {"kind": "smuggler", "x": 340, "y": 240, "flipped": true},
-          {"kind": "smuggler", "x": 580, "y": 228}
+          {
+            "kind": "smuggler",
+            "x": 110,
+            "y": 174
+          },
+          {
+            "kind": "smuggler",
+            "x": 340,
+            "y": 180,
+            "flipped": true
+          },
+          {
+            "kind": "smuggler",
+            "x": 580,
+            "y": 171
+          }
         ],
         "fill_buildings": [
-          {"kind": "tortuga_fishers_hut",     "x": 240, "w": 60, "h": 38},
-          {"kind": "tortuga_boarding_house",  "x": 322, "w": 80, "h": 54},
-          {"kind": "tortuga_lumber_warehouse","x": 460, "w": 90, "h": 42},
-          {"kind": "tortuga_field_hospital",  "x": 574, "w": 70, "h": 40},
-          {"kind": "tortuga_smithy",          "x": 890, "w": 70, "h": 42}
+          {
+            "kind": "tortuga_fishers_hut",
+            "x": 240,
+            "w": 60,
+            "h": 38
+          },
+          {
+            "kind": "tortuga_boarding_house",
+            "x": 322,
+            "w": 80,
+            "h": 54
+          },
+          {
+            "kind": "tortuga_lumber_warehouse",
+            "x": 460,
+            "w": 90,
+            "h": 42
+          },
+          {
+            "kind": "tortuga_field_hospital",
+            "x": 574,
+            "w": 70,
+            "h": 40
+          },
+          {
+            "kind": "tortuga_smithy",
+            "x": 890,
+            "w": 70,
+            "h": 42
+          }
         ],
         "alleys": [
-          {"x": 302, "w": 20, "contents": "ropes"},
-          {"x": 552, "w": 22, "contents": "barrels"},
-          {"x": 962, "w": 22, "contents": "ropes"}
+          {
+            "x": 302,
+            "w": 20,
+            "contents": "ropes"
+          },
+          {
+            "x": 552,
+            "w": 22,
+            "contents": "barrels"
+          },
+          {
+            "x": 962,
+            "w": 22,
+            "contents": "ropes"
+          }
         ],
         "nature_elements": [
-          {"kind": "palm_leaning", "x": 410},
-          {"kind": "palm",         "x": 840},
-          {"kind": "seagull",      "x": 110, "y": 220},
-          {"kind": "seagull",      "x": 350, "y": 225},
-          {"kind": "seaweed",      "x": 40}
+          {
+            "kind": "palm_leaning",
+            "x": 410
+          },
+          {
+            "kind": "palm",
+            "x": 840
+          },
+          {
+            "kind": "seagull",
+            "x": 110,
+            "y": 165
+          },
+          {
+            "kind": "seagull",
+            "x": 350,
+            "y": 169
+          },
+          {
+            "kind": "seaweed",
+            "x": 40
+          }
         ],
         "props": {
           "ground_texture": "cobblestone_wet",
           "lanterns": [
-            {"x": 360},
-            {"x": 700},
-            {"x": 1040}
+            {
+              "x": 360
+            },
+            {
+              "x": 700
+            },
+            {
+              "x": 1040
+            }
           ],
           "market_stalls": [
-            {"x": 420, "w": 80},
-            {"x": 760, "w": 80},
-            {"x": 1100, "w": 80}
+            {
+              "x": 420,
+              "w": 80
+            },
+            {
+              "x": 760,
+              "w": 80
+            },
+            {
+              "x": 1100,
+              "w": 80
+            }
           ],
           "barrel_stacks": [
-            {"x": 280, "count": 3},
-            {"x": 1260, "count": 2}
+            {
+              "x": 280,
+              "count": 3
+            },
+            {
+              "x": 1260,
+              "count": 2
+            }
           ],
           "silhouettes": [
-            {"kind": "standing", "x": 500},
-            {"kind": "group",    "x": 830},
-            {"kind": "sitting",  "x": 1180}
+            {
+              "kind": "standing",
+              "x": 500
+            },
+            {
+              "kind": "group",
+              "x": 830
+            },
+            {
+              "kind": "sitting",
+              "x": 1180
+            }
           ]
         },
         "animations": {
           "palette_cycles": [
-            {"x": 944, "y": 335, "w": 6, "h": 2,
-             "palette": ["FLAME", "EMBER", "LANTERN_BRIGHT"],
-             "fps": 6, "permanent": true},
-            {"x": 947, "y": 337, "w": 4, "h": 1,
-             "palette": ["LANTERN_BRIGHT", "FLAME", "EMBER"],
-             "fps": 8, "permanent": true}
+            {
+              "x": 944,
+              "y": 251,
+              "w": 6,
+              "h": 2,
+              "palette": [
+                "FLAME",
+                "EMBER",
+                "LANTERN_BRIGHT"
+              ],
+              "fps": 6,
+              "permanent": true
+            },
+            {
+              "x": 947,
+              "y": 253,
+              "w": 4,
+              "h": 1,
+              "palette": [
+                "LANTERN_BRIGHT",
+                "FLAME",
+                "EMBER"
+              ],
+              "fps": 8,
+              "permanent": true
+            }
           ]
         }
       }
     },
     "port_royal": {
       "name": "Port Royal",
-      "world_map_position": [125, 195],
+      "world_map_position": [
+        125,
+        195
+      ],
       "scene_class": "scenes.port_village:PortVillageScene",
       "world_width": 1200,
       "celestial": {
@@ -94,85 +258,255 @@
         "sun_worldx_dawn": 1100,
         "sun_worldx_dusk": 100
       },
-      "price_bias": {"sugar": 0.80, "rum": 0.85, "tobacco": 1.00, "pitch": 1.05},
+      "price_bias": {
+        "sugar": 0.8,
+        "rum": 0.85,
+        "tobacco": 1.0,
+        "pitch": 1.05
+      },
       "regime_weights": {
-        "sugar":   {"rising": 0.25, "stable": 0.40, "falling": 0.35},
-        "rum":     {"rising": 0.30, "stable": 0.40, "falling": 0.30},
-        "tobacco": {"rising": 0.33, "stable": 0.34, "falling": 0.33},
-        "pitch":   {"rising": 0.35, "stable": 0.35, "falling": 0.30}
+        "sugar": {
+          "rising": 0.25,
+          "stable": 0.4,
+          "falling": 0.35
+        },
+        "rum": {
+          "rising": 0.3,
+          "stable": 0.4,
+          "falling": 0.3
+        },
+        "tobacco": {
+          "rising": 0.33,
+          "stable": 0.34,
+          "falling": 0.33
+        },
+        "pitch": {
+          "rising": 0.35,
+          "stable": 0.35,
+          "falling": 0.3
+        }
       },
       "buildings": {
-        "ground_top_y": 340,
+        "ground_top_y": 255,
         "player_start_x": 940,
-        "tavern":   {"x": 20,  "y": 258, "w": 200, "h": 82},
-        "exchange": {"x": 980, "y": 248, "w": 200, "h": 92},
-        "harbormaster": {"x": 640, "y": 268, "w": 80, "h": 72},
-        "npcs": {"hawkins": 1070},
-        "dock_interaction_range": [8, 80],
+        "tavern": {
+          "x": 20,
+          "y": 194,
+          "w": 200,
+          "h": 82
+        },
+        "exchange": {
+          "x": 980,
+          "y": 186,
+          "w": 200,
+          "h": 92
+        },
+        "harbormaster": {
+          "x": 640,
+          "y": 201,
+          "w": 80,
+          "h": 72
+        },
+        "npcs": {
+          "hawkins": 1070
+        },
+        "dock_interaction_range": [
+          8,
+          80
+        ],
         "anchored_ships": [
-          {"kind": "frigate", "x": 110, "y": 238},
-          {"kind": "frigate", "x": 310, "y": 238},
-          {"kind": "frigate", "x": 510, "y": 238}
+          {
+            "kind": "frigate",
+            "x": 110,
+            "y": 178
+          },
+          {
+            "kind": "frigate",
+            "x": 310,
+            "y": 178
+          },
+          {
+            "kind": "frigate",
+            "x": 510,
+            "y": 178
+          }
         ],
         "fill_buildings": [
-          {"kind": "port_royal_soldier_barracks",   "x": 232, "w": 58, "h": 42},
-          {"kind": "port_royal_officers_residence", "x": 352, "w": 56, "h": 52},
-          {"kind": "port_royal_east_india_company", "x": 440, "w": 72, "h": 52},
-          {"kind": "port_royal_civil_warehouse",    "x": 770, "w": 48, "h": 42},
-          {"kind": "port_royal_merchants_house",    "x": 850, "w": 56, "h": 56},
-          {"kind": "port_royal_apothecary",         "x": 934, "w": 46, "h": 44}
+          {
+            "kind": "port_royal_soldier_barracks",
+            "x": 232,
+            "w": 58,
+            "h": 42
+          },
+          {
+            "kind": "port_royal_officers_residence",
+            "x": 352,
+            "w": 56,
+            "h": 52
+          },
+          {
+            "kind": "port_royal_east_india_company",
+            "x": 440,
+            "w": 72,
+            "h": 52
+          },
+          {
+            "kind": "port_royal_civil_warehouse",
+            "x": 770,
+            "w": 48,
+            "h": 42
+          },
+          {
+            "kind": "port_royal_merchants_house",
+            "x": 850,
+            "w": 56,
+            "h": 56
+          },
+          {
+            "kind": "port_royal_apothecary",
+            "x": 934,
+            "w": 46,
+            "h": 44
+          }
         ],
         "alleys": [
-          {"x": 290, "w": 22, "contents": "weeds"},
-          {"x": 412, "w": 24, "contents": "weeds"},
-          {"x": 822, "w": 24, "contents": "weeds"},
-          {"x": 910, "w": 20, "contents": "weeds"}
+          {
+            "x": 290,
+            "w": 22,
+            "contents": "weeds"
+          },
+          {
+            "x": 412,
+            "w": 24,
+            "contents": "weeds"
+          },
+          {
+            "x": 822,
+            "w": 24,
+            "contents": "weeds"
+          },
+          {
+            "x": 910,
+            "w": 20,
+            "contents": "weeds"
+          }
         ],
         "nature_elements": [
-          {"kind": "palm",         "x": 130},
-          {"kind": "palm",         "x": 1160},
-          {"kind": "moss_patch",   "x": 322, "y": 256},
-          {"kind": "seagull",      "x": 110, "y": 222},
-          {"kind": "seagull",      "x": 310, "y": 222}
+          {
+            "kind": "palm",
+            "x": 130
+          },
+          {
+            "kind": "palm",
+            "x": 1160
+          },
+          {
+            "kind": "moss_patch",
+            "x": 322,
+            "y": 192
+          },
+          {
+            "kind": "seagull",
+            "x": 110,
+            "y": 166
+          },
+          {
+            "kind": "seagull",
+            "x": 310,
+            "y": 166
+          }
         ],
         "signature_buildings": [
-          {"kind": "church_tower",  "x": 320, "y": 234, "w": 24, "h": 106},
-          {"kind": "rum_warehouse", "x": 540, "y": 284, "w": 220, "h": 56}
+          {
+            "kind": "church_tower",
+            "x": 320,
+            "y": 176,
+            "w": 24,
+            "h": 106
+          },
+          {
+            "kind": "rum_warehouse",
+            "x": 540,
+            "y": 213,
+            "w": 220,
+            "h": 56
+          }
         ],
         "props": {
           "ground_texture": "cobblestone_dry",
           "lanterns": [
-            {"x": 280},
-            {"x": 820}
+            {
+              "x": 280
+            },
+            {
+              "x": 820
+            }
           ],
           "market_stalls": [],
           "barrel_stacks": [
-            {"x": 460, "count": 3},
-            {"x": 790, "count": 2}
+            {
+              "x": 460,
+              "count": 3
+            },
+            {
+              "x": 790,
+              "count": 2
+            }
           ],
           "iron_fences": [
-            {"x": 240, "length": 60},
-            {"x": 400, "length": 50},
-            {"x": 860, "length": 80}
+            {
+              "x": 240,
+              "length": 60
+            },
+            {
+              "x": 400,
+              "length": 50
+            },
+            {
+              "x": 860,
+              "length": 80
+            }
           ],
           "silhouettes": [
-            {"kind": "officer",       "x": 260},
-            {"kind": "merchant",      "x": 450},
-            {"kind": "colonial_lady", "x": 900}
+            {
+              "kind": "officer",
+              "x": 260
+            },
+            {
+              "kind": "merchant",
+              "x": 450
+            },
+            {
+              "kind": "colonial_lady",
+              "x": 900
+            }
           ]
         },
         "animations": {
           "palette_cycles": [
-            {"x": 1074, "y": 294, "w": 4, "h": 2,
-             "palette": ["STONE_LIT", "STONE_BRIGHT", "STONE_MID"],
-             "fps": 3, "permanent": false}
+            {
+              "x": 1074,
+              "y": 220,
+              "w": 4,
+              "h": 2,
+              "palette": [
+                "STONE_LIT",
+                "STONE_BRIGHT",
+                "STONE_MID"
+              ],
+              "fps": 3,
+              "permanent": false
+            }
           ]
         }
       }
     },
     "havana": {
       "name": "Havana",
-      "world_map_position": [95, 95],
+      "world_map_position": [
+        95,
+        95
+      ],
       "scene_class": "scenes.port_village:PortVillageScene",
       "world_width": 1400,
       "celestial": {
@@ -180,99 +514,305 @@
         "sun_worldx_dawn": 1300,
         "sun_worldx_dusk": 100
       },
-      "price_bias": {"sugar": 1.05, "rum": 1.05, "tobacco": 0.75, "pitch": 1.10},
+      "price_bias": {
+        "sugar": 1.05,
+        "rum": 1.05,
+        "tobacco": 0.75,
+        "pitch": 1.1
+      },
       "regime_weights": {
-        "sugar":   {"rising": 0.35, "stable": 0.35, "falling": 0.30},
-        "rum":     {"rising": 0.30, "stable": 0.40, "falling": 0.30},
-        "tobacco": {"rising": 0.25, "stable": 0.40, "falling": 0.35},
-        "pitch":   {"rising": 0.35, "stable": 0.40, "falling": 0.25}
+        "sugar": {
+          "rising": 0.35,
+          "stable": 0.35,
+          "falling": 0.3
+        },
+        "rum": {
+          "rising": 0.3,
+          "stable": 0.4,
+          "falling": 0.3
+        },
+        "tobacco": {
+          "rising": 0.25,
+          "stable": 0.4,
+          "falling": 0.35
+        },
+        "pitch": {
+          "rising": 0.35,
+          "stable": 0.4,
+          "falling": 0.25
+        }
       },
       "buildings": {
-        "ground_top_y": 340,
+        "ground_top_y": 255,
         "player_start_x": 1140,
-        "tavern":   {"x": 20,   "y": 258, "w": 200, "h": 82},
-        "exchange": {"x": 1180, "y": 248, "w": 200, "h": 92},
-        "harbormaster": {"x": 680, "y": 268, "w": 80, "h": 72},
-        "npcs": {"hawkins": 1270},
-        "dock_interaction_range": [8, 80],
+        "tavern": {
+          "x": 20,
+          "y": 194,
+          "w": 200,
+          "h": 82
+        },
+        "exchange": {
+          "x": 1180,
+          "y": 186,
+          "w": 200,
+          "h": 92
+        },
+        "harbormaster": {
+          "x": 680,
+          "y": 201,
+          "w": 80,
+          "h": 72
+        },
+        "npcs": {
+          "hawkins": 1270
+        },
+        "dock_interaction_range": [
+          8,
+          80
+        ],
         "anchored_ships": [
-          {"kind": "galleon", "x": 110, "y": 244},
-          {"kind": "galleon", "x": 380, "y": 248, "flipped": true},
-          {"kind": "small",   "x": 600, "y": 232}
+          {
+            "kind": "galleon",
+            "x": 110,
+            "y": 183
+          },
+          {
+            "kind": "galleon",
+            "x": 380,
+            "y": 186,
+            "flipped": true
+          },
+          {
+            "kind": "small",
+            "x": 600,
+            "y": 174
+          }
         ],
         "fill_buildings": [
-          {"kind": "havana_borger_house",       "x": 232, "w": 54, "h": 58},
-          {"kind": "havana_cloister_annex",     "x": 528, "w": 48, "h": 52},
-          {"kind": "havana_merchants_house",    "x": 880, "w": 48, "h": 56},
-          {"kind": "havana_artisans_workshop",  "x": 968, "w": 44, "h": 46},
-          {"kind": "havana_guard_house",        "x": 1016, "w": 42, "h": 44},
-          {"kind": "havana_tobacco_warehouse",  "x": 1062, "w": 40, "h": 42},
-          {"kind": "havana_chapel_small",       "x": 1134, "w": 38, "h": 52}
+          {
+            "kind": "havana_borger_house",
+            "x": 232,
+            "w": 54,
+            "h": 58
+          },
+          {
+            "kind": "havana_cloister_annex",
+            "x": 528,
+            "w": 48,
+            "h": 52
+          },
+          {
+            "kind": "havana_merchants_house",
+            "x": 880,
+            "w": 48,
+            "h": 56
+          },
+          {
+            "kind": "havana_artisans_workshop",
+            "x": 968,
+            "w": 44,
+            "h": 46
+          },
+          {
+            "kind": "havana_guard_house",
+            "x": 1016,
+            "w": 42,
+            "h": 44
+          },
+          {
+            "kind": "havana_tobacco_warehouse",
+            "x": 1062,
+            "w": 40,
+            "h": 42
+          },
+          {
+            "kind": "havana_chapel_small",
+            "x": 1134,
+            "w": 38,
+            "h": 52
+          }
         ],
         "alleys": [
-          {"x": 290, "w": 22, "contents": "flower_pot"},
-          {"x": 848, "w": 28, "contents": "flower_pot"},
-          {"x": 930, "w": 34, "contents": "flower_pot"},
-          {"x": 1104, "w": 28, "contents": "flower_pot"}
+          {
+            "x": 290,
+            "w": 22,
+            "contents": "flower_pot"
+          },
+          {
+            "x": 848,
+            "w": 28,
+            "contents": "flower_pot"
+          },
+          {
+            "x": 930,
+            "w": 34,
+            "contents": "flower_pot"
+          },
+          {
+            "x": 1104,
+            "w": 28,
+            "contents": "flower_pot"
+          }
         ],
         "nature_elements": [
-          {"kind": "palm_tall",     "x": 840},
-          {"kind": "palm_tall",     "x": 870},
-          {"kind": "palm",          "x": 895},
-          {"kind": "bougainvillea", "x": 892, "y": 286},
-          {"kind": "bougainvillea", "x": 920, "y": 286},
-          {"kind": "hanging_plant", "x": 608, "y": 272},
-          {"kind": "hanging_plant", "x": 750, "y": 272},
-          {"kind": "dove",          "x": 348, "y": 218},
-          {"kind": "dove",          "x": 490, "y": 218},
-          {"kind": "dove",          "x": 414, "y": 214}
+          {
+            "kind": "palm_tall",
+            "x": 840
+          },
+          {
+            "kind": "palm_tall",
+            "x": 870
+          },
+          {
+            "kind": "palm",
+            "x": 895
+          },
+          {
+            "kind": "bougainvillea",
+            "x": 892,
+            "y": 214
+          },
+          {
+            "kind": "bougainvillea",
+            "x": 920,
+            "y": 214
+          },
+          {
+            "kind": "hanging_plant",
+            "x": 608,
+            "y": 204
+          },
+          {
+            "kind": "hanging_plant",
+            "x": 750,
+            "y": 204
+          },
+          {
+            "kind": "dove",
+            "x": 348,
+            "y": 164
+          },
+          {
+            "kind": "dove",
+            "x": 490,
+            "y": 164
+          },
+          {
+            "kind": "dove",
+            "x": 414,
+            "y": 160
+          }
         ],
         "signature_buildings": [
-          {"kind": "cathedral",        "x": 320, "y": 232, "w": 200, "h": 108},
-          {"kind": "governor_palace",  "x": 580, "y": 256, "w": 260, "h": 84}
+          {
+            "kind": "cathedral",
+            "x": 320,
+            "y": 174,
+            "w": 200,
+            "h": 108
+          },
+          {
+            "kind": "governor_palace",
+            "x": 580,
+            "y": 192,
+            "w": 260,
+            "h": 84
+          }
         ],
         "props": {
           "ground_texture": "stone_slab",
           "lanterns": [
-            {"x": 280},
-            {"x": 560},
-            {"x": 880},
-            {"x": 1080}
+            {
+              "x": 280
+            },
+            {
+              "x": 560
+            },
+            {
+              "x": 880
+            },
+            {
+              "x": 1080
+            }
           ],
           "market_stalls": [],
           "barrel_stacks": [
-            {"x": 930, "count": 2}
+            {
+              "x": 930,
+              "count": 2
+            }
           ],
           "iron_fences": [],
           "fountains": [
-            {"x": 910}
+            {
+              "x": 910
+            }
           ],
           "planters": [
-            {"x": 860},
-            {"x": 970}
+            {
+              "x": 860
+            },
+            {
+              "x": 970
+            }
           ],
           "silhouettes": [
-            {"kind": "priest",           "x": 430},
-            {"kind": "spanish_officer",  "x": 600},
-            {"kind": "spanish_merchant", "x": 790},
-            {"kind": "mantilla_woman",   "x": 1020}
+            {
+              "kind": "priest",
+              "x": 430
+            },
+            {
+              "kind": "spanish_officer",
+              "x": 600
+            },
+            {
+              "kind": "spanish_merchant",
+              "x": 790
+            },
+            {
+              "kind": "mantilla_woman",
+              "x": 1020
+            }
           ]
         },
         "animations": {
           "palette_cycles": [
-            {"x": 416, "y": 306, "w": 8, "h": 2,
-             "palette": ["FLAME", "EMBER", "LANTERN_BRIGHT"],
-             "fps": 5, "permanent": false},
-            {"x": 998, "y": 330, "w": 4, "h": 1,
-             "palette": ["FLAME", "EMBER", "LANTERN_BRIGHT"],
-             "fps": 7, "permanent": true}
+            {
+              "x": 416,
+              "y": 230,
+              "w": 8,
+              "h": 2,
+              "palette": [
+                "FLAME",
+                "EMBER",
+                "LANTERN_BRIGHT"
+              ],
+              "fps": 5,
+              "permanent": false
+            },
+            {
+              "x": 998,
+              "y": 248,
+              "w": 4,
+              "h": 1,
+              "palette": [
+                "FLAME",
+                "EMBER",
+                "LANTERN_BRIGHT"
+              ],
+              "fps": 7,
+              "permanent": true
+            }
           ]
         }
       }
     },
     "nassau": {
       "name": "Nassau",
-      "world_map_position": [350, 80],
+      "world_map_position": [
+        350,
+        80
+      ],
       "scene_class": "scenes.port_village:PortVillageScene",
       "world_width": 1200,
       "celestial": {
@@ -280,89 +820,274 @@
         "sun_worldx_dawn": 1100,
         "sun_worldx_dusk": 100
       },
-      "price_bias": {"sugar": 1.00, "rum": 0.95, "tobacco": 1.05, "pitch": 0.90},
+      "price_bias": {
+        "sugar": 1.0,
+        "rum": 0.95,
+        "tobacco": 1.05,
+        "pitch": 0.9
+      },
       "regime_weights": {
-        "sugar":   {"rising": 0.33, "stable": 0.34, "falling": 0.33},
-        "rum":     {"rising": 0.30, "stable": 0.40, "falling": 0.30},
-        "tobacco": {"rising": 0.33, "stable": 0.34, "falling": 0.33},
-        "pitch":   {"rising": 0.20, "stable": 0.40, "falling": 0.40}
+        "sugar": {
+          "rising": 0.33,
+          "stable": 0.34,
+          "falling": 0.33
+        },
+        "rum": {
+          "rising": 0.3,
+          "stable": 0.4,
+          "falling": 0.3
+        },
+        "tobacco": {
+          "rising": 0.33,
+          "stable": 0.34,
+          "falling": 0.33
+        },
+        "pitch": {
+          "rising": 0.2,
+          "stable": 0.4,
+          "falling": 0.4
+        }
       },
       "buildings": {
-        "ground_top_y": 340,
+        "ground_top_y": 255,
         "player_start_x": 940,
-        "tavern":   {"x": 20,  "y": 258, "w": 200, "h": 82},
-        "exchange": {"x": 980, "y": 248, "w": 200, "h": 92},
-        "harbormaster": {"x": 720, "y": 268, "w": 80, "h": 72},
-        "npcs": {"hawkins": 1070},
-        "dock_interaction_range": [8, 80],
+        "tavern": {
+          "x": 20,
+          "y": 194,
+          "w": 200,
+          "h": 82
+        },
+        "exchange": {
+          "x": 980,
+          "y": 186,
+          "w": 200,
+          "h": 92
+        },
+        "harbormaster": {
+          "x": 720,
+          "y": 201,
+          "w": 80,
+          "h": 72
+        },
+        "npcs": {
+          "hawkins": 1070
+        },
+        "dock_interaction_range": [
+          8,
+          80
+        ],
         "anchored_ships": [
-          {"kind": "pirate", "x":  90, "y": 228, "tilted": true},
-          {"kind": "pirate", "x": 210, "y": 238},
-          {"kind": "pirate", "x": 320, "y": 224, "flipped": true, "tilted": true},
-          {"kind": "pirate", "x": 470, "y": 242},
-          {"kind": "pirate", "x": 610, "y": 230, "flipped": true}
+          {
+            "kind": "pirate",
+            "x": 90,
+            "y": 171,
+            "tilted": true
+          },
+          {
+            "kind": "pirate",
+            "x": 210,
+            "y": 178
+          },
+          {
+            "kind": "pirate",
+            "x": 320,
+            "y": 168,
+            "flipped": true,
+            "tilted": true
+          },
+          {
+            "kind": "pirate",
+            "x": 470,
+            "y": 182
+          },
+          {
+            "kind": "pirate",
+            "x": 610,
+            "y": 172,
+            "flipped": true
+          }
         ],
         "fill_buildings": [
-          {"kind": "nassau_tavern_small",          "x": 232, "w": 30, "h": 30, "style_variant": 0},
-          {"kind": "nassau_tavern_small",          "x": 266, "w": 30, "h": 30, "style_variant": 1},
-          {"kind": "nassau_patchwork_hut",         "x": 580, "w": 42, "h": 38},
-          {"kind": "nassau_rope_workshop",         "x": 668, "w": 35, "h": 30},
-          {"kind": "nassau_improvised_warehouse",  "x": 716, "w": 48, "h": 36}
+          {
+            "kind": "nassau_tavern_small",
+            "x": 232,
+            "w": 30,
+            "h": 30,
+            "style_variant": 0
+          },
+          {
+            "kind": "nassau_tavern_small",
+            "x": 266,
+            "w": 30,
+            "h": 30,
+            "style_variant": 1
+          },
+          {
+            "kind": "nassau_patchwork_hut",
+            "x": 580,
+            "w": 42,
+            "h": 38
+          },
+          {
+            "kind": "nassau_rope_workshop",
+            "x": 668,
+            "w": 35,
+            "h": 30
+          },
+          {
+            "kind": "nassau_improvised_warehouse",
+            "x": 716,
+            "w": 48,
+            "h": 36
+          }
         ],
         "alleys": [
-          {"x": 300, "w": 20, "contents": "palm"},
-          {"x": 626, "w": 38, "contents": "sand_drift"},
-          {"x": 900, "w": 24, "contents": "palm"}
+          {
+            "x": 300,
+            "w": 20,
+            "contents": "palm"
+          },
+          {
+            "x": 626,
+            "w": 38,
+            "contents": "sand_drift"
+          },
+          {
+            "x": 900,
+            "w": 24,
+            "contents": "palm"
+          }
         ],
         "nature_elements": [
-          {"kind": "palm_leaning", "x": 140},
-          {"kind": "palm",         "x": 530},
-          {"kind": "palm_tall",    "x": 930},
-          {"kind": "palm_leaning", "x": 1140},
-          {"kind": "pelican",      "x": 700, "y": 262},
-          {"kind": "seagull",      "x": 90, "y": 224},
-          {"kind": "seagull",      "x": 470, "y": 238}
+          {
+            "kind": "palm_leaning",
+            "x": 140
+          },
+          {
+            "kind": "palm",
+            "x": 530
+          },
+          {
+            "kind": "palm_tall",
+            "x": 930
+          },
+          {
+            "kind": "palm_leaning",
+            "x": 1140
+          },
+          {
+            "kind": "pelican",
+            "x": 700,
+            "y": 196
+          },
+          {
+            "kind": "seagull",
+            "x": 90,
+            "y": 168
+          },
+          {
+            "kind": "seagull",
+            "x": 470,
+            "y": 178
+          }
         ],
         "signature_buildings": [
-          {"kind": "teachs_house", "x": 320, "y": 252, "w": 180, "h": 88},
-          {"kind": "shipyard",     "x": 560, "y": 282, "w": 320, "h": 58}
+          {
+            "kind": "teachs_house",
+            "x": 320,
+            "y": 189,
+            "w": 180,
+            "h": 88
+          },
+          {
+            "kind": "shipyard",
+            "x": 560,
+            "y": 212,
+            "w": 320,
+            "h": 58
+          }
         ],
         "props": {
           "ground_texture": "sand",
           "lanterns": [],
           "market_stalls": [],
           "barrel_stacks": [
-            {"x": 260, "count": 2}
+            {
+              "x": 260,
+              "count": 2
+            }
           ],
           "iron_fences": [],
           "fountains": [],
           "planters": [],
           "bamboo_lanterns": [
-            {"x": 290},
-            {"x": 540},
-            {"x": 920}
+            {
+              "x": 290
+            },
+            {
+              "x": 540
+            },
+            {
+              "x": 920
+            }
           ],
           "campfires": [
-            {"x": 240},
-            {"x": 900}
+            {
+              "x": 240
+            },
+            {
+              "x": 900
+            }
           ],
           "chest_stacks": [
-            {"x": 510, "count": 3},
-            {"x": 940, "count": 2}
+            {
+              "x": 510,
+              "count": 3
+            },
+            {
+              "x": 940,
+              "count": 2
+            }
           ],
           "silhouettes": [
-            {"kind": "barefoot_sailor",  "x": 270},
-            {"kind": "woman_with_child", "x": 440}
+            {
+              "kind": "barefoot_sailor",
+              "x": 270
+            },
+            {
+              "kind": "woman_with_child",
+              "x": 440
+            }
           ]
         },
         "animations": {
           "palette_cycles": [
-            {"x": 244, "y": 330, "w": 6, "h": 2,
-             "palette": ["FLAME", "EMBER", "LANTERN_BRIGHT"],
-             "fps": 6, "permanent": true},
-            {"x": 904, "y": 330, "w": 6, "h": 2,
-             "palette": ["EMBER", "FLAME", "LANTERN_BRIGHT"],
-             "fps": 5, "permanent": true}
+            {
+              "x": 244,
+              "y": 248,
+              "w": 6,
+              "h": 2,
+              "palette": [
+                "FLAME",
+                "EMBER",
+                "LANTERN_BRIGHT"
+              ],
+              "fps": 6,
+              "permanent": true
+            },
+            {
+              "x": 904,
+              "y": 248,
+              "w": 6,
+              "h": 2,
+              "palette": [
+                "EMBER",
+                "FLAME",
+                "LANTERN_BRIGHT"
+              ],
+              "fps": 5,
+              "permanent": true
+            }
           ]
         }
       }

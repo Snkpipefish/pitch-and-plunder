@@ -250,7 +250,8 @@ class TestBuildingsParsing:
         ports = pc.load_ports(str(REAL_PORTS_PATH))
         tortuga = ports["tortuga"]
         assert tortuga.buildings is not None
-        assert tortuga.buildings.ground_top_y == 340
+        # Fase 2.6: ground_top_y skalert fra 340 til 255 (×270/360).
+        assert tortuga.buildings.ground_top_y == 255
         assert tortuga.buildings.player_start_x == 1340
         assert tortuga.buildings.tavern.x == 20
         assert tortuga.buildings.exchange.x == 1380

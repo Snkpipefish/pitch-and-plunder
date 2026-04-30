@@ -230,10 +230,10 @@ class TestBakePipelineWithNature:
             port = pc.get(pid)
             _, surf = build_port_gameplay_layer(port)  # night-variant
             for i, a in enumerate(port.buildings.alleys):
-                # Sjekk øvre del av smug (y=260, over eventuelt innhold
-                # som er ved bakken y~330-340)
+                # Fase 2.6: ground_top_y=255 så øvre del av smug ligger
+                # rundt y=195 (over alley-innhold som ligger ved bakken).
                 check_x = a.x + a.w // 2
-                check_y = 260
+                check_y = 195
                 px = surf.get_at((check_x, check_y))
                 assert px[:3] == COLORKEY, (
                     f"{pid}/alley[{i}] topp-del skal være transparent "

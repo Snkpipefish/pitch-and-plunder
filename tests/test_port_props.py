@@ -317,7 +317,8 @@ class TestGameplayLayerWithProps:
         tortuga = pc.get("tortuga")
         _, surf = build_port_gameplay_layer(tortuga)  # night-variant
         assert surf.get_width() == tortuga.world_width
-        assert surf.get_height() == 360
+        # Fase 2.6: RENDER_HEIGHT skalert fra 360 til 270.
+        assert surf.get_height() == 270
 
     def test_stub_ports_still_bake_without_props(self):
         """C2.5-1 må ikke knekke ikke-Tortuga-havner som mangler props."""

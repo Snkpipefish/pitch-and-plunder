@@ -209,7 +209,8 @@ class TestGameplayDayNightTuple:
         tavern = tortuga.buildings.tavern
         # Tavern-dør sentralt: tavern.x + tavern.w/2
         door_cx = tavern.x + tavern.w // 2
-        door_check_y = 340 - 18  # inne i dør-gløden
+        # Fase 2.6: ground_top_y=255 (skalert fra 340).
+        door_check_y = 255 - 18  # inne i dør-gløden
         day_pixel = day.get_at((door_cx, door_check_y))
         night_pixel = night.get_at((door_cx, door_check_y))
         # Night skal ha FLAME eller LANTERN_BRIGHT (varm farge)

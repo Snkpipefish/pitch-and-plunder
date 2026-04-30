@@ -77,8 +77,8 @@ if TYPE_CHECKING:
 
 #: Standard panel-dimensjoner fra Exchange (Fase 1). Subklasser kan
 #: overstyre via panel_w/panel_h i __init__.
-DEFAULT_PANEL_W = 480
-DEFAULT_PANEL_H = 240
+DEFAULT_PANEL_W = 360
+DEFAULT_PANEL_H = 180
 
 
 class DialogOverlay:

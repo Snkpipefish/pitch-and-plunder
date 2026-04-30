@@ -300,11 +300,11 @@ class TestGameplayLayerWithFillBuildings:
             port = pc.get(pid)
             _, surf = build_port_gameplay_layer(port)  # night-variant
             for i, a in enumerate(port.buildings.alleys):
-                # Sjekk midten av alley, på bygnings-høyde (y=260 —
-                # over ground_top_y=340 så det er i bygnings-sonen,
-                # ikke i gate-linjen hvor props og gategulv tegnes).
+                # Sjekk midten av alley, på bygnings-høyde (Fase 2.6:
+                # ground_top_y=255 så vi sjekker rundt y=195 — over
+                # gategulv, i bygnings-sonen).
                 check_x = a.x + a.w // 2
-                check_y = 260
+                check_y = 195
                 px = surf.get_at((check_x, check_y))
                 assert px[:3] == COLORKEY, (
                     f"{pid}/alley[{i}] at ({check_x}, {check_y}) "
@@ -330,7 +330,8 @@ class TestGameplayLayerWithFillBuildings:
             _, surf = build_port_gameplay_layer(port)  # night-variant
             for i, a in enumerate(port.buildings.alleys):
                 check_x = a.x + a.w // 2
-                check_y = 260
+                # Fase 2.6: ground_top_y=255 → bygnings-sone rundt y=195.
+                check_y = 195
                 px = surf.get_at((check_x, check_y))
                 assert px[:3] == COLORKEY, (
                     f"{pid}/alley[{i}] at ({check_x}, {check_y}) "

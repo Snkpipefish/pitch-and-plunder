@@ -137,8 +137,8 @@ class TestPortVillageScenePlayerPlacement:
         tortuga = port_config.get("tortuga")
         scene = PortVillageScene(_font(), _state_for_tortuga(), tortuga)
         scene.on_enter(_state_for_tortuga(), from_scene=None)
-        # Tortugas ground_top_y=340, sprite-høyde=20 → y=320
-        assert scene._player.y == 320.0
+        # Fase 2.6: Tortugas ground_top_y=255, sprite-høyde=20 → y=235
+        assert scene._player.y == 235.0
 
 
 class TestPortVillageSceneNPCs:

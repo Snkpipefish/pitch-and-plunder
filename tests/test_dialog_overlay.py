@@ -69,9 +69,10 @@ def _keydown(key: int, mod: int = 0) -> pygame.event.Event:
 class TestPanelConstruction:
     def test_default_panel_size(self, font):
         d = DialogOverlay(font)
-        assert d._panel_w == DEFAULT_PANEL_W == 480
-        assert d._panel_h == DEFAULT_PANEL_H == 240
-        assert d._panel_surface.get_size() == (480, 240)
+        # Fase 2.6: panel skalert fra 480×240 til 360×180 for 480×270-render.
+        assert d._panel_w == DEFAULT_PANEL_W == 360
+        assert d._panel_h == DEFAULT_PANEL_H == 180
+        assert d._panel_surface.get_size() == (360, 180)
 
     def test_custom_panel_size(self, font):
         d = DialogOverlay(font, panel_w=320, panel_h=180)
@@ -81,12 +82,12 @@ class TestPanelConstruction:
 
     def test_panel_centered_on_render_surface(self, font):
         d = DialogOverlay(font)
-        # 640-480 = 160, halv = 80. 360-240 = 120, halv = 60.
-        assert d._panel_x == 80
-        assert d._panel_y == 60
+        # Fase 2.6: 480-360 = 120, halv = 60. 270-180 = 90, halv = 45.
+        assert d._panel_x == 60
+        assert d._panel_y == 45
 
     def test_panel_has_stone_dark_fill(self, font):
-        panel = DialogOverlay.build_panel_surface(480, 240)
+        panel = DialogOverlay.build_panel_surface(360, 180)
         # Innenfor rammen — pixel på (50, 50) skal være stone-dark-rødaktig
         inner_pixel = panel.get_at((50, 50))
         # COLOR_STONE_DARK = (31, 37, 56) med alpha 242
@@ -96,7 +97,7 @@ class TestPanelConstruction:
         assert inner_pixel[3] == 242
 
     def test_panel_has_stone_lit_outer_border(self, font):
-        panel = DialogOverlay.build_panel_surface(480, 240)
+        panel = DialogOverlay.build_panel_surface(360, 180)
         # Pixel på (0, 0) er yttre rammen — COLOR_STONE_LIT = (107, 139, 199)
         border = panel.get_at((0, 0))
         assert border[0] == 107
@@ -105,11 +106,14 @@ class TestPanelConstruction:
 
     def test_draw_panel_blits_at_computed_position(self, font):
         d = DialogOverlay(font)
-        surf = pygame.Surface((640, 360), pygame.SRCALPHA)
+        import constants
+        surf = pygame.Surface(
+            (constants.RENDER_WIDTH, constants.RENDER_HEIGHT), pygame.SRCALPHA,
+        )
         surf.fill((0, 0, 0, 0))
         d._draw_panel(surf)
-        # Panel-hjørne (80, 60) skal nå inneholde stone-lit ramme
-        pixel = surf.get_at((80, 60))
+        # Fase 2.6: panel-hjørne (60, 45) skal nå inneholde stone-lit ramme.
+        pixel = surf.get_at((60, 45))
         assert pixel[0] == 107  # stone_lit
 
 
