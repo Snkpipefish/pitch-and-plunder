@@ -12,22 +12,80 @@ Se `PROSJEKT.md` for full designspesifikasjon, `ASSETS.md` for assets, og
 
 ## Krav
 
-- Python 3.10+
-- Linux (primærmål: Mint 21.3), kan også kjøre på andre OS pygame-ce støtter
+- Python 3.10+ (testet opp til 3.12)
 - pygame-ce 2.5+ (IKKE vanlig `pygame` – Community Edition har API-er vi bruker, bl.a. `Surface.fblits()`)
+- Plattformer:
+  - **Linux** (primærmål: Mint 21.3 / Ubuntu 22.04+)
+  - **macOS** 11 Big Sur eller nyere (Intel + Apple Silicon)
+  - **Windows** 10/11
 
 ## Oppsett
 
+Først: klon repoet og gå inn i mappa.
+
 ```bash
+git clone https://github.com/Snkpipefish/pitch-and-plunder.git
 cd pitch-and-plunder
+```
+
+### Linux (Ubuntu / Mint / Debian)
+
+```bash
+# Sørg for at python3-venv finnes (én gang per maskin)
+sudo apt install python3 python3-venv python3-pip
 
 python3 -m venv venv
-source venv/bin/activate         # Linux/macOS
-# eller: venv\Scripts\activate   # Windows
-
+source venv/bin/activate
 pip install -r requirements.txt
+```
 
-# Verifiser at pygame-CE er korrekt installert
+### macOS
+
+Anbefalt: installer Python via [Homebrew](https://brew.sh/) for å unngå systempythonen.
+
+```bash
+brew install python@3.12
+
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+Hvis du får en advarsel om at terminalen mangler tilgang til mikrofon/skjerm
+(spillet bruker ingen av delene, men macOS spør noen ganger), godkjenn eller
+ignorer — spillet trenger kun et grafisk vindu.
+
+### Windows 10/11
+
+Installer Python fra [python.org](https://www.python.org/downloads/windows/)
+(huk av **"Add Python to PATH"** i installer'n).
+
+Åpne **PowerShell** i prosjektmappa:
+
+```powershell
+py -m venv venv
+venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+Hvis PowerShell blokkerer aktiveringsskriptet (`...cannot be loaded because
+running scripts is disabled...`):
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+I **cmd.exe** bruker du i stedet:
+
+```cmd
+py -m venv venv
+venv\Scripts\activate.bat
+pip install -r requirements.txt
+```
+
+### Verifiser installasjonen (alle plattformer)
+
+```bash
 python -c "import pygame; print('CE:', hasattr(pygame, 'IS_CE'), pygame.version.ver)"
 # Forventet: CE: True 2.5.x
 ```
@@ -41,7 +99,16 @@ pip install --upgrade --force-reinstall pygame-ce
 ## Kjøring
 
 ```bash
+# Linux/macOS
 source venv/bin/activate
+python main.py
+
+# Windows (PowerShell)
+venv\Scripts\Activate.ps1
+python main.py
+
+# Windows (cmd)
+venv\Scripts\activate.bat
 python main.py
 ```
 
