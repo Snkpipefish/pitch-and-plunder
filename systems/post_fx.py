@@ -124,7 +124,7 @@ uniform float u_warm_cool;       // -1..+1: kald → varm split
 uniform vec3  u_warm_tint;
 uniform vec3  u_cool_tint;
 uniform float u_crt;             // 0 = av, 1 = full scanlines
-uniform vec2  u_resolution;      // (640, 360) intern
+uniform vec2  u_resolution;      // (480, 270) intern (Fase 2.6)
 
 void main() {
     vec3 base = texture(u_src, v_uv).rgb;
@@ -184,7 +184,7 @@ class PostFXPipeline:
         self.crt = 0.0  # 0..1; 0 = av (pixel art ser allerede skarp ut uten)
 
     @classmethod
-    def try_create(cls, window_size: tuple, render_size: tuple = (640, 360)) -> Optional["PostFXPipeline"]:
+    def try_create(cls, window_size: tuple, render_size: tuple = (480, 270)) -> Optional["PostFXPipeline"]:
         """Forsøk å lage GL-kontekst og kompilere shaders. Returnerer None
         ved enhver feil — kalleren skal da bruke pygame.SCALED-fallback.
 

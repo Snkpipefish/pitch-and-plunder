@@ -16,9 +16,13 @@ os.environ["SDL_VIDEO_CENTERED"] = "1"
 import pygame  # noqa: E402  (må komme etter env-vars)
 
 # --- Oppløsning og ytelse ---
-RENDER_WIDTH = 640
-RENDER_HEIGHT = 360
-DEFAULT_SCALE = 2
+# v2.7 Fase 2.6 (sub-steg 1): flippet fra 640×360 til 480×270 for å få plass
+# til større, mer detaljerte sprites (32×48 hovedperson). 480×270 × 4 =
+# 1920×1080 (perfekt heltallsskalering på FullHD). Pre-rendrede bakgrunner
+# i alle havner er fortsatt 640-koordinater og må regenereres i sub-steg 2-9.
+RENDER_WIDTH = 480
+RENDER_HEIGHT = 270
+DEFAULT_SCALE = 3  # 3 × 480 = 1440 (komfortabelt vindus-størrelse)
 DEFAULT_WINDOW_SIZE = (RENDER_WIDTH * DEFAULT_SCALE, RENDER_HEIGHT * DEFAULT_SCALE)
 TARGET_FPS = 60  # v2.7: heves fra 30 da T4200-støtte droppes.
 

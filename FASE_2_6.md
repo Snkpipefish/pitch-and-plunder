@@ -56,16 +56,45 @@ arbeid.
 Hvert sub-steg er én commit. Test-pakken må være grønn før neste steg
 starter.
 
-### Sub-steg 1 (TRIVIELL) — Flip konstantene + assess
+### Sub-steg 1 (TRIVIELL) — Flip konstantene + assess [LANDET 2026-04-30]
 
 - `RENDER_WIDTH` 640 → **480**, `RENDER_HEIGHT` 360 → **270** i `constants.py`
+- `DEFAULT_SCALE` 2 → **3** (3 × 480 = 1440 vindus-bredde, behagelig størrelse)
 - `WORLD_WIDTH` 1600 (uendret — havne-verden-bredde er world-coordinate, ikke skjerm)
 - `post_fx` `render_size` default → `(480, 270)`
-- Kjør test-pakken og ta screenshots av alle scener for å dokumentere
-  det visuelle bruddet (forventet: bakgrunner er 640 wide, klipper på
-  høyre kant; world_map blit gir avkutting; Tortuga bygnings-layout går
-  utenfor skjermen).
-- IKKE forsøk å fikse bruddet i denne committen — bare dokumentér.
+
+**Dokumentert visuelt brudd** (se `tools/fase_2_6_*.png`):
+
+1. **Tortuga: bygninger usynlige** — `ground_top_y` ligger på ~280-300 i
+   eksisterende layout, som er under den nye 270 px-grensen. Bygningsraden
+   forsvinner under skjermen. Smoke-kilder spawner i havet (y=222 var
+   nær roof-line, nå er det rett over horizonten).
+2. **Tortuga: hav-andelen er for stor** — fjell-silhuetter ligger fortsatt
+   ved riktig parallax-offset, men siden gameplay-laget er borte ser hele
+   bunnhalvdelen ut som åpent hav.
+3. **World map: klipping på høyre + bunn** — bakgrunnen er pre-rendret
+   640×360, blit på 480×270 viser kun øvre venstre kvadrant. ~25 % av kart-
+   innholdet er utenfor skjermen. Port Royal-markøren er borte, Tortuga
+   sitter i hjørnet, øvrige labels er kuttet eller kollapser med tooltip.
+4. **Voyage: skip + havne-markører delvis synlige** — samme grunn (640-bg
+   blit på 480-skjerm). Skip-trail og fugler tegnes på riktig sted i scene-
+   koordinater, men deres referansepunkt er på 640-kart, ikke 480.
+
+**Test-pakke etter flipp:** 10 tester feiler (1047 grønne):
+
+- `test_dialog_overlay`: Panel-sentrering forutsetter 640-bredde
+- `test_night_factor`: Tavern-vindu-gating-tester forutsetter Y-koordinater
+  fra 360-tall layout
+- `test_per_port_rendering`: Port Royal og Havana-bake-tester forutsetter
+  full-bredde sprites
+- `test_port_props`: Tortuga-gameplay-bake forutsetter ground_top_y i 360
+- `test_world_map[_tooltip]`: Markør-posisjon-assertions
+
+Disse fikses i sub-steg 2-9 etter hvert som tilhørende rendering-vegger
+regenereres. **IKKE fix-forsøk i sub-steg 1.**
+
+**Verktøy:** `tools/fase_2_6_assess.py` — renderer alle scener på ny
+oppløsning og lagrer 4× upskala-PNG for visuell sammenligning.
 
 ### Sub-steg 2 — World map background
 
