@@ -10,7 +10,13 @@ ulovlig piratvirksomhet.
 Se `PROSJEKT.md` for full designspesifikasjon, `ASSETS.md` for assets, og
 `BENCHMARKS.md` for ytelsesmålinger per fase.
 
-**Status:** Fase 3 spillbar (dialoger, rykter, mistanke, sabotasje, tilfeldige hendelser, score-overlay). Se `FASE_3.md` for pågående arbeid og `PHASE_2B_RETROSPECTIVE.md` / `PHASE_2A_RETROSPECTIVE.md` / `PHASE_1_RETROSPECTIVE.md` for tidligere faser.
+**Status:** Fase 3 spillbar (dialoger, rykter, mistanke, sabotasje, tilfeldige hendelser, score-overlay) + Fase 2.6 visual remaster (480×270 intern oppløsning, 24×40 spiller-sprite, ModernGL bloom). Se `FASE_3.md` / `FASE_2_6.md` for pågående arbeid.
+
+## Hovedkarakteren
+
+Pirat med tricorn-hatt og mørk frakk — silhuett-fokus, ingen fargekontrast-aksenter (etter "klovn"-iterasjon ble alle gul-/oransje-detaljer fjernet).
+
+![Hovedkarakteren mellom tavernaen og børshuset i Tortuga om natten](docs/screenshots/player_closeup.png)
 
 ## Krav
 
