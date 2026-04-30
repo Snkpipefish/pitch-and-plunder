@@ -44,7 +44,7 @@ def render_scene(force_day: bool = True) -> pygame.Surface:
     font = pygame.font.SysFont(None, 12)
     scene = PortVillageScene(font, state, port_config.get(state.world_state.current_port))
     scene.on_enter(state, from_scene=None)
-    surf = pygame.Surface((640, 360)).convert()
+    surf = pygame.Surface((constants.RENDER_WIDTH, constants.RENDER_HEIGHT)).convert()
     for _ in range(180):
         scene.update(0.0166)
     scene._camera.set_x(120.0)

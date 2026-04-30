@@ -173,11 +173,12 @@ class PostFXPipeline:
         self.quad = quad
         self.window_size = window_size
         # Justérbare parametre — settes som uniforms hver frame.
-        # Tunet 2026-04-30 mot ekte Tortuga-render: sterkere bloom rundt
-        # lanterner/månen, tydeligere varm/kald split mot tema.
-        self.bloom_threshold = 0.45
-        self.bloom_radius = 2.5
-        self.bloom_strength = 1.10
+        # Re-tunet 2026-04-30 for 480×270 / 24×40-sprites (Fase 2.6 sub-
+        # steg 10): chunkier piksler trenger mindre blur-radius ellers blir
+        # bildet søkkvått; lavere strength bevarer pixel-skarphet.
+        self.bloom_threshold = 0.50
+        self.bloom_radius = 1.8
+        self.bloom_strength = 0.85
         self.warm_cool = 0.55
         self.warm_tint = (1.18, 1.02, 0.86)
         self.cool_tint = (0.88, 0.96, 1.16)
