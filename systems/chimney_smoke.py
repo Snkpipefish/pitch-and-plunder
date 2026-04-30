@@ -107,13 +107,18 @@ def _make_default_sources_for_port(port_id: str) -> list[SmokeSource]:
     # i data/ports.json (etter Y-skalering 360→270). Hver kilde plasseres
     # ved chimney/skorstein-toppen til den respektive bygningen.
     if port_id == "tortuga":
-        # Tavern: x=20, w=200 (chimney på høyre side). y_top=194 etter
-        # migrering; røyk-kilde rett over taket.
-        # Smithy: x=890, w=70, h=42 (esse i midten). y_top=ground-h=255-42=213.
+        # Eksakt match mot pipe-posisjoner i bygnings-bake-funksjoner:
+        # - Smithy (fill_buildings.bake_tortuga_smithy): pipe ved
+        #   building.x + 6 = 896, top-y = building.y_top - 10 = 213-10 = 203.
+        #   Smoke-source senterer over pipe (5px bred): x=898.
+        # - Tavern (port_buildings._bake_tavern): chimney lagt til Fase 2.6
+        #   ved tavern.x + tavern.w - 30 = 20 + 200 - 30 = 190, chimney_top_y
+        #   = tavern.y - 14 = 194 - 14 = 180. Smoke-source senterer over
+        #   chimney (6px bred): x=193.
         return [
-            SmokeSource(x=920, y=210, kind="warm", period=0.32,
+            SmokeSource(x=898, y=203, kind="warm", period=0.32,
                         drift_x=4.0, rise_speed=18.0),  # smie-esse
-            SmokeSource(x=185, y=190, kind="cool", period=0.55,
+            SmokeSource(x=193, y=180, kind="cool", period=0.55,
                         drift_x=3.0, rise_speed=14.0),  # tavern-pipe
         ]
     if port_id == "port_royal":

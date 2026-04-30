@@ -55,8 +55,8 @@ def render_village(force_day: bool):
     surf = pygame.Surface((constants.RENDER_WIDTH, constants.RENDER_HEIGHT)).convert()
     for _ in range(120):
         scene.update(0.0166)
-    # Sentrer kameraet på spilleren slik at vi ser den nye spriten.
-    scene._center_camera_on_player()
+    # Sentrer over taverna for å se røyk fra skorsteinen + spiller.
+    scene._camera.set_x(50.0)
     try:
         scene.draw(surf)
     except Exception as exc:

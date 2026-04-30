@@ -158,6 +158,19 @@ def _bake_tavern(
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_MID, (x - 6, y - 6, w + 12, 1)
     )
+    # Skorstein (Fase 2.6: ChimneySmoke-systemet sender opp røyk fra
+    # akkurat denne posisjonen — eksakt match mot smoke-source x).
+    chimney_x = x + w - 30
+    chimney_top_y = y - 14
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST,
+        (chimney_x, chimney_top_y, 6, 8),
+    )
+    # Brun mursteins-aksent på toppen
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARKEST,
+        (chimney_x - 1, chimney_top_y, 8, 1),
+    )
 
     # To opplyste vinduer (natt: bakt varm glød; dag: mørke rektangler)
     window_w, window_h = 24, 28
