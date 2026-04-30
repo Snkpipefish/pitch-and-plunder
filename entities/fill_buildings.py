@@ -786,6 +786,17 @@ def bake_port_royal_soldier_barracks(
     pygame.draw.rect(
         surface, constants.COLOR_STONE_LIGHT, (x, y_top + 1, w, 1)
     )
+    # Skorstein (Fase 2.6: brakke-stove for soldater).
+    # ChimneySmoke-systemet sender opp røyk fra denne posisjonen.
+    chimney_x = x + w - 12
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST,
+        (chimney_x, y_top - 8, 4, 8),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARK,
+        (chimney_x - 1, y_top - 8, 6, 1),
+    )
     # Identisk vindusrekke — 5 vinduer, jevnt fordelt
     count = 5
     win_w, win_h = 7, 10

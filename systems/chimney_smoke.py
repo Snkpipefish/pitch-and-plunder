@@ -122,25 +122,39 @@ def _make_default_sources_for_port(port_id: str) -> list[SmokeSource]:
                         drift_x=3.0, rise_speed=14.0),  # tavern-pipe
         ]
     if port_id == "port_royal":
+        # Tavern (delt _bake_tavern): chimney ved x=190, smoke senterer
+        # over 6px-bred chimney → x=193, y=180.
+        # Soldier_barracks (Fase 2.6: pipe lagt til): x=232, w=58 →
+        # chimney_x=232+58-12=278, y_top=ground-h=255-42=213, pipe_top=205.
+        # Smoke senterer over 4px pipe: x=280.
         return [
-            SmokeSource(x=420, y=150, kind="cool", period=0.50,
-                        drift_x=2.5, rise_speed=15.0),  # customs
-            SmokeSource(x=620, y=160, kind="cool", period=0.65,
-                        drift_x=2.0, rise_speed=13.0),  # exchange-pipe
+            SmokeSource(x=193, y=180, kind="cool", period=0.55,
+                        drift_x=3.0, rise_speed=14.0),  # tavern-pipe
+            SmokeSource(x=280, y=205, kind="warm", period=0.45,
+                        drift_x=2.5, rise_speed=15.0),  # soldier-barracks
         ]
     if port_id == "havana":
+        # Tavern (delt _bake_tavern): x=193, y=180.
+        # Artisans_workshop: x=968, w=44, h=46 → y_top=255-46=209,
+        # pipe ved x+6=974, y_top-8=201 (4px bred) → smoke x=976.
         return [
-            SmokeSource(x=300, y=160, kind="warm", period=0.45,
-                        drift_x=3.0, rise_speed=15.0),  # bakeri
-            SmokeSource(x=680, y=145, kind="cool", period=0.80,
-                        drift_x=1.5, rise_speed=10.0),  # katedral-røkelse
+            SmokeSource(x=193, y=180, kind="cool", period=0.55,
+                        drift_x=3.0, rise_speed=14.0),  # tavern-pipe
+            SmokeSource(x=976, y=201, kind="warm", period=0.40,
+                        drift_x=3.0, rise_speed=15.0),  # artisans-workshop
         ]
     if port_id == "nassau":
+        # Tavern (delt _bake_tavern): x=193, y=180.
+        # Campfires fra ports.json: x=240, x=900. bake_campfire har
+        # flamme-toppen rundt y=ground_top_y - 8 = 247. Smoke spawner
+        # rett over flammen.
         return [
-            SmokeSource(x=490, y=185, kind="warm", period=0.30,
-                        drift_x=5.0, rise_speed=20.0),  # bål
-            SmokeSource(x=240, y=170, kind="cool", period=0.55,
-                        drift_x=3.5, rise_speed=14.0),  # shack-pipe
+            SmokeSource(x=193, y=180, kind="cool", period=0.55,
+                        drift_x=3.0, rise_speed=14.0),  # tavern-pipe
+            SmokeSource(x=247, y=243, kind="warm", period=0.30,
+                        drift_x=4.0, rise_speed=20.0),  # bål 1
+            SmokeSource(x=907, y=243, kind="warm", period=0.32,
+                        drift_x=5.0, rise_speed=20.0),  # bål 2
         ]
     return []
 
