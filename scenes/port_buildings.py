@@ -298,6 +298,20 @@ def _bake_tavern(
     pygame.draw.rect(
         surface, constants.COLOR_WOOD_DARKEST, (door_x, door_y, door_w, door_h)
     )
+    # Dør-ramme (vertikale stolper på hver side — Fase 2.6 polish)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_LIGHT,
+        (door_x - 2, door_y, 2, door_h),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_LIGHT,
+        (door_x + door_w, door_y, 2, door_h),
+    )
+    # Topp-list (over døra)
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_LIGHT,
+        (door_x - 2, door_y - 2, door_w + 4, 2),
+    )
     if night_lights:
         pygame.draw.rect(
             surface, constants.COLOR_FLAME,
@@ -310,6 +324,32 @@ def _bake_tavern(
         # Svak varm "teppe" av lys på gaten rett foran døren
         glow_rect = pygame.Rect(door_x - 8, ground_top_y, door_w + 16, 4)
         pygame.draw.rect(surface, constants.COLOR_EMBER, glow_rect)
+    # Hestesko over døra (EMBER metall — pirat-overtro for hell).
+    # Tegnes alltid (24/7), ikke bare om natten.
+    horseshoe_y = door_y - 5
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER,
+        (door_x + door_w // 2 - 3, horseshoe_y, 6, 1),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER,
+        (door_x + door_w // 2 - 3, horseshoe_y + 1, 1, 2),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_EMBER,
+        (door_x + door_w // 2 + 2, horseshoe_y + 1, 1, 2),
+    )
+    # 2-trinns tavern-trapp (mindre formell enn børshus' 3 trinn —
+    # tavern er tross alt et drikke-sted, ikke institusjon)
+    step_y = ground_top_y
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_MID,
+        (door_x - 4, step_y, door_w + 8, 1),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_WOOD_DARK,
+        (door_x - 8, step_y + 1, door_w + 16, 1),
+    )
     # (Dag: ingen glød, ingen gulv-teppe — stengt dør)
 
 
