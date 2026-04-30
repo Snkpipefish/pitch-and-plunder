@@ -168,6 +168,127 @@ def capture_voyage() -> None:
     _shoot(scene, "voyage")
 
 
+def capture_tavern_day() -> None:
+    """Tavern-dialog ved dag — viser bek-anlegg-kjøp (kun i Tortuga,
+    før kjøp). Dette er hvordan spilleren får 2 bek per dag."""
+    print("tavern_day (Tortuga, dag-meny med bek-anlegg-kjøp)")
+    state = _new_state(port_id="tortuga", seconds_into_day=0.5 * 180.0)
+    pcfg = port_config.get("tortuga")
+    scene = PortVillageScene(_load_font(8), state, pcfg)
+    scene.on_enter(state, from_scene=None)
+    scene._player.x = 200.0
+    scene._center_camera_on_player()
+    scene._open_tavern()
+    _settle(scene, state, frames=15)
+    _shoot(scene, "tavern_day")
+
+
+def capture_tavern_night() -> None:
+    """Tavern-dialog ved natt — viser rykte-kjøp og rom for hvile."""
+    print("tavern_night (Tortuga, natt-meny med rykter)")
+    state = _new_state(port_id="tortuga", seconds_into_day=0.95 * 180.0)
+    pcfg = port_config.get("tortuga")
+    scene = PortVillageScene(_load_font(8), state, pcfg)
+    scene.on_enter(state, from_scene=None)
+    scene._player.x = 200.0
+    scene._center_camera_on_player()
+    scene._open_tavern()
+    _settle(scene, state, frames=15)
+    _shoot(scene, "tavern_night")
+
+
+def capture_harbormaster() -> None:
+    """Havnekontor-dialog — fast-travel-priser og cache-aksess."""
+    print("harbormaster (Tortuga, havnekontor med reisemål)")
+    state = _new_state(port_id="tortuga", seconds_into_day=0.5 * 180.0)
+    pcfg = port_config.get("tortuga")
+    scene = PortVillageScene(_load_font(8), state, pcfg)
+    scene.on_enter(state, from_scene=None)
+    scene._player.x = 1280.0
+    scene._center_camera_on_player()
+    scene._open_harbormaster()
+    _settle(scene, state, frames=15)
+    _shoot(scene, "harbormaster")
+
+
+def capture_cache() -> None:
+    """Gull-cache-dialog (Tortuga = Gullkiste, andre havner = Cache).
+    Bare Tortuga-cachen teller ved spillets slutt."""
+    print("cache (Tortuga Gullkiste — telles ved spillets slutt)")
+    from ui.cache_dialog import CacheSubDialog
+    state = _new_state(port_id="tortuga", seconds_into_day=0.5 * 180.0)
+    state.player_state.gold = 1200
+    state.player_state.port_caches = {
+        "tortuga": 4500,
+        "port_royal": 800,
+        "havana": 0,
+        "nassau": 250,
+    }
+    pcfg = port_config.get("tortuga")
+    scene = PortVillageScene(_load_font(8), state, pcfg)
+    scene.on_enter(state, from_scene=None)
+    scene._player.x = 1280.0
+    scene._center_camera_on_player()
+    scene._cache_dialog = CacheSubDialog(
+        _load_font(8), state, port_id="tortuga", toasts=scene._toasts,
+    )
+    _settle(scene, state, frames=15)
+    _shoot(scene, "cache")
+
+
+def capture_event() -> None:
+    """Random event-dialog — eksempel: storm under reise."""
+    print("event (storm under reise — random hendelse)")
+    from ui.event_dialog import EventDialog
+    state = _new_state(port_id="tortuga", seconds_into_day=0.5 * 180.0)
+    pcfg = port_config.get("tortuga")
+    scene = PortVillageScene(_load_font(8), state, pcfg)
+    scene.on_enter(state, from_scene=None)
+    scene._player.x = 800.0
+    scene._center_camera_on_player()
+    scene._event_dialog = EventDialog(
+        _load_font(8),
+        title="Storm",
+        body=(
+            "En uventet storm driver dere ut av kurs. "
+            "Reisen forsinkes med én dag."
+        ),
+    )
+    _settle(scene, state, frames=15)
+    _shoot(scene, "event")
+
+
+def capture_rumors() -> None:
+    """Ryker-dialog — viser kjøpte lytte-rykter med TTL."""
+    print("rumors (Tortuga, R-tast – aktive rykter)")
+    from state.rumor_state import ActiveRumor
+    state = _new_state(port_id="tortuga", seconds_into_day=0.5 * 180.0)
+    state.player_state.active_rumors = [
+        ActiveRumor(
+            rumor_type="regime_preview",
+            port_id="port_royal",
+            commodity_id="sugar",
+            days_remaining=3,
+            payload={"predicted_regime": "rising", "days_until_tick": 2},
+        ),
+        ActiveRumor(
+            rumor_type="price_spike_warning",
+            port_id="havana",
+            commodity_id="tobacco",
+            days_remaining=5,
+            payload={"direction": "up", "days_until_tick": 1},
+        ),
+    ]
+    pcfg = port_config.get("tortuga")
+    scene = PortVillageScene(_load_font(8), state, pcfg)
+    scene.on_enter(state, from_scene=None)
+    scene._player.x = 200.0
+    scene._center_camera_on_player()
+    scene._open_rumors_dialog()
+    _settle(scene, state, frames=15)
+    _shoot(scene, "rumors")
+
+
 def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     save_module.save = lambda *a, **kw: True
@@ -189,6 +310,12 @@ def main() -> int:
     capture_exchange()
     capture_world_map()
     capture_voyage()
+    capture_tavern_day()
+    capture_tavern_night()
+    capture_harbormaster()
+    capture_cache()
+    capture_event()
+    capture_rumors()
 
     pygame.display.quit()
     pygame.font.quit()

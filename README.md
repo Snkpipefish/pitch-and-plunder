@@ -7,18 +7,6 @@ ulovlig piratvirksomhet.
 
 ![Tortuga om natten – børshuset lyser, månen står over havet](docs/screenshots/tortuga_night.png)
 
-To havner, samme dag- og natt-syklus — Tortuga er en falleferdig piratrede i tre, Port Royal er en britisk kolonihavn i stein:
-
-| Tortuga om dagen | Port Royal om dagen |
-|:---:|:---:|
-| ![Tortuga med sol over havet og fiskerbrygger](docs/screenshots/tortuga_day.png) | ![Port Royal med kirketårn og steinhus](docs/screenshots/port_royal_day.png) |
-| **Tortuga om natten** *(over)* | **Port Royal om natten** |
-|  | ![Port Royal om natten med stjerner og opplyst børshus](docs/screenshots/port_royal_night.png) |
-
-Børs-mekanikken er lik i alle havner, men prisene drifter uavhengig — det gir arbitrasjen sin verdi:
-
-![Børs-overlay i Tortuga med sukker, rom, tobakk og bek](docs/screenshots/exchange.png)
-
 Se `PROSJEKT.md` for full designspesifikasjon, `ASSETS.md` for assets, og
 `BENCHMARKS.md` for ytelsesmålinger per fase.
 
@@ -126,14 +114,109 @@ venv\Scripts\activate.bat
 python main.py
 ```
 
-Spillet starter i Tortuga-landsbyen. Vandre mellom tavernaen (venstre)
-og Børshuset (høyre). Nær Børshuset kan du trykke **E** for å åpne
-børsen og handle sukker, rom, tobakk og bek. Dag-natt-syklus med sol
-og måne pågår kontinuerlig (3 min reell tid per spilldag i havn,
-1¼ min per dag på sjøen); priser oppdateres én gang per dag ved
-daggry. Gå til venstre verdens-kant og trykk **E** for å åpne
-verdenskartet og seile til Port Royal, Havana eller Nassau — hver
-havn har egne priser og regimer som drifter parallelt under reise.
+## Slik spiller du
+
+Du er en pirat som har 100 dager på å gjøre Tortuga til din permanente
+formuesbase. **Bare gullet du har lagret i Tortuga Gullkiste når dag 100
+løper ut, teller som sluttsum** — gull i lommen, varer i lasten, eller
+gull-cacher i andre havner blir igjen når seilet rives.
+
+Du sjonglerer fire ting samtidig:
+
+### 1. Børs-arbitrasje mellom fire havner
+
+Tortuga, Port Royal, Havana og Nassau har hver sin børs som handler
+sukker, rom, tobakk og bek. Prisene drifter uavhengig — kjøp billig i
+én havn og selg dyrt i en annen. Hver havn har en strukturell skjevhet
+(Port Royal: billig sukker, Havana: billig tobakk, Nassau: billig bek,
+Tortuga: premium på alt).
+
+![Børs-overlay med sukker, rom, tobakk og bek](docs/screenshots/exchange.png)
+
+Markedet ticker hver daggry uavhengig av hvor du er. Trend-pilene
+(↑→↓) er basert på de siste 3 dagene.
+
+### 2. To havner, to ansikter
+
+Tortuga er en falleferdig piratrede i tre; Port Royal er en britisk
+kolonihavn i stein. Samme dag-natt-syklus, helt annen arkitektur og
+folkelynne:
+
+| Tortuga om dagen | Port Royal om dagen |
+|:---:|:---:|
+| ![Tortuga med sol over havet og fiskerbrygger](docs/screenshots/tortuga_day.png) | ![Port Royal med kirketårn og steinhus](docs/screenshots/port_royal_day.png) |
+| **Tortuga om natten** *(hero-bildet over)* | **Port Royal om natten** |
+|  | ![Port Royal om natten med stjerner og opplyst børshus](docs/screenshots/port_royal_night.png) |
+
+### 3. Tavernaen — to forskjellige menyer dag/natt
+
+Trykk **E** ved tavernaen. Hva som er på menyen avhenger av tiden på
+døgnet:
+
+| Tavernaen om dagen | Tavernaen om natten |
+|:---:|:---:|
+| ![Tavern dag-meny: drikke rom, vurder rykte, bek-anlegg](docs/screenshots/tavern_day.png) | ![Tavern natt-meny: rom, lytt rykter, sabotasje, falskt rykte](docs/screenshots/tavern_night.png) |
+
+**Dagens hovedinvestering — bek-anlegget:** Kun i Tortuga, kun én gang
+per spill. Koster 500 gull. Etter kjøp produserer Pitch Lake **2 bek
+per dag passivt** (avgift 8 gull/dag i drift, stopper hvis du går
+tom). Reiser du bort fra Tortuga akkumuleres bek på kaia og hentes
+automatisk når du kommer tilbake.
+
+**Nattens nyttige aktiviteter:** Lytt etter regime-rykter (les hva som
+skjer på en annen havn før du seiler), bestill sabotasje mot en
+konkurrent, eller spre falske rykter for å forskyve markedet til din
+fordel. Mange av disse bygger mistanke (se under).
+
+### 4. Reise — havnekontoret er fast-travel
+
+Trykk **E** på havnekontoret for reisemenyen. Hver rute har en pris
+(gull) og varighet (dager):
+
+![Havnekontor-dialog med reise-priser, gullkiste, kart](docs/screenshots/harbormaster.png)
+
+Under reise tikker klokken raskere (1¼ min per spilldag i stedet for
+3 min i havn). Markedene i alle fire havner driver parallelt mens du
+seiler, så bli ikke for lenge borte.
+
+## Gull-cacher — hvorfor bare Tortuga teller
+
+Hver havn har en gullkiste/cache du kan deponere og hente fra via
+havnekontoret. Tortuga sin heter **"Gullkiste"** og er den eneste som
+tells med i sluttsummen på dag 100:
+
+![Gullkiste-dialog: 1200 på hånden, 4500 i kista](docs/screenshots/cache.png)
+
+Cachene i Port Royal, Havana og Nassau fungerer som mellomlager — de
+gjør at du slipper å frakte all kapital med deg på sjøen (hvor pirater
+kan ta deler av lasta). Men gull du legger igjen utenfor Tortuga er
+verdiløst når regnskapet skrives.
+
+Strategien er derfor: tjen gjennom arbitrasje, transportér til Tortuga
+gjennom mellomlager, og dump i Gullkista før dag 100.
+
+## Mistanke og rykter
+
+Sabotasje, falske rykter, misligheter med myndighetene bygger
+**mistanke** (se HUD øverst venstre). Ved tilstrekkelig høy mistanke
+risikerer du arrest — game over. Mistanke faller med ~1 per dag hvis
+du oppfører deg respektabelt.
+
+Du kan kjøpe **lytte-rykter** i tavernaen om natten. Trykk **R** når
+som helst for å se aktive rykter med antall dager igjen før de
+utløper:
+
+![Aktive rykter: regime-info Port Royal, prisspike Havana](docs/screenshots/rumors.png)
+
+## Tilfeldige hendelser
+
+Under reise og i havn kan det skje uventede ting — storm som forsinker
+deg, pirater som tar 30 % av gullet, et heldig vrakfunn som gir 80
+gull, eller verre ting (forlis kan bety død):
+
+![Event-dialog: 'Storm' — reisen forsinkes med én dag](docs/screenshots/event.png)
+
+Trykk Enter/Space/ESC for å lukke event-meldinger.
 
 ## Kontroller
 
