@@ -119,18 +119,28 @@ oppløsning og lagrer 4× upskala-PNG for visuell sammenligning.
 - NB: dette er **strukturelt** arbeid; sprites for bygninger trenger ikke
   re-tegnes ennå (de blir bare proporsjonalt mindre i scene-rommet).
 
-### Sub-steg 5 — Player- og NPC-sprite-bump
+### Sub-steg 5 — Player- og NPC-sprite-bump [LANDET 2026-04-30]
 
-- `entities/player.py`: 16×16 → 32×48 med ny detalj (ansikt, øyne, skjegg,
-  klesfolder, knapper, belte, støvler — bruk pikselbudsjettet).
-- `entities/npc.py`: tilsvarende bump for alle NPC-er.
-- Player-collision-bbox oppdateres til ny sprite-størrelse.
-- Camera-følge-logikken er allerede generisk.
+- `entities/player.py`: 10×20 → **24×40** (planen sa 32×48; redusert til
+  24×40 for å holde proporsjonene mer i tråd med Kingdom-stil-referansen).
+  Ny detalj: tricorn med plumet, hatt-bånd, ansikt med øyne+nese+skjegg,
+  krage med V-snitt, frakk med 3 knapper, belte med spenne, bukser,
+  støvler med varm aksent. 4.8× pikselbudsjett (200 → 960).
+- `entities/npc.py`: Hawkins tilsvarende bumpet til 24×40 men med stein-
+  paletten (kald, autoritær børsmester) — distinkt fra spillerens varm
+  pirat-tone. Sølv-knapper, hvit krage, snurrebart.
+- NPCSilhouette (background-props) holdt på gammel detaljnivå —
+  protagonist-vs-bakgrunn-kontrast er ønsket.
+- Player-collision-bbox følger sprite-bredde via `Player.width`-property.
+- Camera-følge-logikken er allerede generisk på sprite-bredde.
 
-### Sub-steg 6 — Bygning-sprite-detaljbump (Tortuga)
+### Sub-steg 6 — Bygning-sprite-detaljbump (Tortuga) [UTSATT]
 
 - Re-tegn taverna, børshus, signature buildings, fyll-bygninger med utvidet
   detalj. ~50 % av piksel-arbeidet i fasen.
+- **Status:** UTSATT til incremental work post-merge. Sub-steg 1-5+10 har
+  brakt foundation-en på plass; per-bygning-polish kan landes som separate
+  små commits på main uten å holde merge-en tilbake.
 
 ### Sub-steg 7 — Port Royal remaster
 
@@ -144,16 +154,25 @@ oppløsning og lagrer 4× upskala-PNG for visuell sammenligning.
 
 - Som steg 7.
 
-### Sub-steg 10 — Polish + ModernGL re-tuning
+### Sub-steg 10 — Polish + ModernGL re-tuning [LANDET 2026-04-30]
 
-- HUD-font 8 → 10 eller 12 px.
-- Bloom_radius i post_fx tunes for chunkier piksler (typisk 1.5 nedover —
-  ellers blir bildet søkkvått).
-- Verifiser test-pakke + alle scene-screenshots + `--preset=high` boot.
+- HUD-font 8 → 10 eller 12 px. **UTSATT** — fonten er fortsatt 8 px, og
+  fungerer akseptabelt på 480×270 (vurderes mens vi spiller med ny
+  oppløsning og bygger erfaring).
+- ModernGL-tuning: bloom_radius 2.5 → 1.8, threshold 0.45 → 0.50, strength
+  1.10 → 0.85 i `systems/post_fx.py`. Chunkier piksler trenger mindre blur
+  ellers blir bildet søkkvått.
+- Test-pakken (1057) verifisert grønn etter hver sub-steg.
+- `tools/fase_2_6_*.png` viser alle 4 scener på ny oppløsning.
+- `tools/postfx_high.png` viser shader-pipelinen med ny tuning på Tortuga.
 
 ### Sub-steg 11 — Merge til main
 
-- Squash-merge eller fast-forward avhengig av commit-hygiene.
+- Foundation (sub-steg 1-5+10) merger til main 2026-05-01.
+- Per-bygning-detalj-polish (sub-steg 6-9) blir incremental work direkte
+  på main siden den ikke er foundational.
+- Bruk fast-forward merge — commits er hver for seg meningsfulle og
+  begrunnelser er rene. Ingen squash.
 
 ---
 
