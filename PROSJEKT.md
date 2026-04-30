@@ -1,4 +1,4 @@
-# Pitch & Plunder – Prosjektspesifikasjon (v2.6)
+# Pitch & Plunder – Prosjektspesifikasjon (v2.7)
 
 Et 2D pixel art pirat-spill satt til Karibien under pirattiden (sent 1600-tall / tidlig 1700-tall). Spillet er et **100-dagers pirat-liv med score** (Jones in the Fast Lane-inspirert life-sim) der spilleren veksler mellom respektabelt fasade-liv (handel på børsen, bek-produksjon) og skjult piratvirksomhet (sabotasje, falske rykter) i fire karibiske havner. Score = gull i Tortuga-kista ved dag 100, arrestasjon eller død. Ytterligere inspirasjon fra **Sid Meier's Pirates!** (PSP) for verden og havner, og et planlagt **bek-/tjære-utvinningsspill** (Fase 4, sideview med rør/pumper/vogner) inspirert av Pitch Lake på Trinidad. Visuell stil er en hybrid av Kingdom: Two Crowns (atmosfærisk parallax og volumetrisk lys) og Monkey Island (varm karibisk palett, lesbare karakterer).
 
@@ -6,27 +6,72 @@ Et 2D pixel art pirat-spill satt til Karibien under pirattiden (sent 1600-tall /
 
 ## 0. Målmaskin og ytelsesbudsjett (KRITISK)
 
-Denne spesifikasjonen er skrevet for en spesifikk maskin:
+**Per v2.7 (2026-04-30):** Målmaskinen er oppgradert. Den gamle T4200/GM45-maskinen
+(2008-laptop, OpenGL 2.1) er **ikke lenger støttet** — vi kjører ikke spillet
+på den, og spec-en trenger ikke ta hensyn til den. Se "Historisk kontekst"
+nederst i seksjonen for hvorfor flere optimaliseringer i §3.1 fortsatt
+står — de er fortsatt god praksis, men ikke lenger kritiske.
 
-- **CPU:** Intel Pentium T4200 @ 2.00GHz, 2 kjerner, 2 tråder, INGEN AVX/SSE4
-- **RAM:** 3.8 GB total (~1 GB fritt), swap aktiv
-- **GPU:** Intel GM45, OpenGL 2.1 (fra 2008)
-- **OS:** Linux Mint 21.3
+**Ny målmaskin:**
+
+- **CPU:** AMD A10-5757M APU, 4 kjerner / 4 tråder @ 2.5 GHz, AVX/FMA/SSE4.2/AES
+- **RAM:** 7.2 GB total (~3.7 GB ledig), swap aktiv
+- **GPU:** AMD Radeon HD 8650G (Richland), 512 MB VRAM
+- **OpenGL:** 4.5 (Compatibility), GLSL 4.50, ARB_compute_shader + SSBO + framebuffer_object
+- **OS:** Linux Mint 21.3, Mesa 23.2.1
 - **Python:** 3.10.12
 
 **Ytelsesbudsjett (IKKE overskrid uten godkjenning):**
 
 | Ressurs | Mål | Hard grense |
 |---------|-----|-------------|
-| FPS | 30 | 25 minimum |
-| Minne (heap) | 80 MB | 150 MB |
-| Parallax-lag samtidig | 3 (Fase 1) | 5 |
-| Dynamiske lyskilder | 4 | 6 |
-| Partikler synlige samtidig | 20 | 40 |
+| FPS | 60 | 50 minimum |
+| Minne (heap) | 300 MB | 500 MB |
+| Parallax-lag samtidig | 5 | 7 |
+| Dynamiske lyskilder | 12 | 20 |
+| Partikler synlige samtidig | 150 | 300 |
 | Surfaces allokert i game loop | 0 | 0 |
-| Scene-verden bredde | 1600 px | 2400 px |
+| Scene-verden bredde | 2400 px | 3600 px |
+| GLSL post-FX-passes | 3 (bloom + grading + CRT) | 5 |
 
-**Hvis FPS faller under 25 i noen scene: STOPP og profiler før du legger til mer.**
+**Hvis FPS faller under 50 i noen scene: STOPP og profiler før du legger til mer.**
+
+Intern render-oppløsning forblir 640×360. Den nye maskinen tillater shaders
+på sluttbildet, ikke høyere kildeoppløsning — pixel art-stilen er låst.
+
+### 0.1 Grafikk-presets (high / low)
+
+Spillet skal ha to grafikk-presets, valgbart ved oppstart eller via meny:
+
+- **`high` (standard på ny målmaskin):** ModernGL post-FX-pipeline aktiv
+  (bloom, varm/kald grading, valgfri CRT-scanlines), 5 parallax-lag,
+  12 dynamiske lys, 150 partikler.
+- **`low` (fallback):** Ren pygame-rendering uten GL-pipeline. 3 parallax-lag,
+  4 dynamiske lys, 20 partikler. Brukes hvis ModernGL ikke initialiserer
+  (manglende driver, fjernskjerm uten GL, etc.) eller hvis bruker velger det.
+
+Spill-koden tegner alltid til samme 640×360 surface. `low` viser surfacen
+direkte; `high` sender den gjennom et GL-post-FX-pass før den vises. Ingen
+gameplay-logikk skiller på preset.
+
+### 0.2 Historisk kontekst (T4200-arven)
+
+Frem til v2.6 var målmaskinen en 2008-laptop. Mange optimaliseringer i §3.1
+(`fblits`, `Clock.tick`, blokkerte events, heltallskoordinater, pre-rendrede
+gradients, palette cycling) ble innført for å holde 30 FPS på den maskinen.
+**De fleste er fortsatt god praksis** og blir værende — vi river dem ikke ut
+bare fordi vi har mer å gå på. Men:
+
+- `TARGET_FPS = 30` → **60** (nå standard).
+- `MAX_DYNAMIC_LIGHTS = 4` → **12** (still cap; ikke fjern).
+- `MAX_PARTICLES = 20` → **150**.
+- numpy-forbudet i §3.3 punkt 7 er **opphevet**.
+- Mixer-avslåing i §3.1 punkt F er ikke lenger kritisk; lyd kan tas inn
+  når spec-fasen tilsier det.
+- `tick_busy_loop` er fortsatt unødvendig på 4-kjerners maskin, men ikke
+  katastrofal slik den var på T4200.
+- Surface-allokering i game loop er **fortsatt forbudt** — det er en GC- og
+  memory fragmentation-bekymring uavhengig av maskin.
 
 ---
 
@@ -168,17 +213,21 @@ Maks 20 synlige samtidig. Ingen per-pixel alpha – bruk enkle rektangler eller 
 
 - **Språk:** Python 3.10+
 - **Motor:** pygame-ce (Community Edition)
-- **Avhengigheter Fase 1:** kun `pygame-ce`
+- **Avhengigheter:** `pygame-ce` (kjernen). Fra v2.7: `moderngl` + `numpy` for
+  shader-pipelinen i `high`-preset (valgfri runtime, lazy-imported i
+  `systems/post_fx.py` slik at `low`-preset fortsatt kan kjøre uten dem).
 - **OS:** Linux (Mint 21.3 primært)
 - **Intern render-oppløsning:** 640×360
 - **Skalering:** `pygame.SCALED` med fallback til software nearest-neighcbor
-- **Target FPS:** 30 (ikke 60)
+- **Target FPS:** 60 (oppgradert fra 30 i v2.7)
 - **Fullskjerm:** F11 toggler
 - **Save-system:** Én JSON-fil (`saves/savegame.json`)
 
-### 3.1 Maskin-spesifikke optimaliseringer (OBLIGATORISK)
+### 3.1 Pygame-optimaliseringer (anbefalt, ikke lenger kritiske)
 
-Disse er spesifikt viktige for T4200/GM45 og ikke valgfrie.
+Disse stammer fra v2.0–v2.6 da målmaskinen var T4200/GM45. På den nye
+A10-/HD 8650G-maskinen er de **anbefalt god praksis**, ikke kritiske —
+unntatt der det er eksplisitt markert.
 
 **A. Bruk `Surface.fblits()` for batch-rendering (pygame-CE-spesifikt)**
 
@@ -244,13 +293,31 @@ screen.blit(sprite, (int(self.x), int(self.y)))
 
 **F. Skru av mixer i Fase 1**
 
-Lyd er ikke i Fase 1. Unngå at mixer reserverer ressurser:
+Lyd er ikke i Fase 1. Per v2.7 ikke lenger kritisk for ressurs-bruk, men
+fortsatt ren oppstart. Tas inn når lyd-fasen begynner.
 
 ```python
 pygame.display.init()
 pygame.font.init()
 # IKKE pygame.init() som initialiserer alt
 ```
+
+**G. ModernGL post-FX (v2.7+, kun `high`-preset)**
+
+Når `high`-preset er aktivt, opprettes en GL-kontekst på toppen av
+SDL-vinduet og 640×360-renderingen sendes som tekstur gjennom et 2-3
+shader-passes:
+
+1. **Bloom-pre-pass:** brightpass (luminans > terskel) + 5-tap blur. Forsterker
+   måne-glød og lanterner uten å vaske ut paletten.
+2. **Color grading:** varm/kald split etter spillets dobbeltliv-tema —
+   varm-shift på taverna-side, kald-shift på børshus-side. Implementeres
+   som LUT eller direkte fragment-uniform.
+3. **CRT (valgfri):** subtile scanlines + barrel distortion. På/av i meny.
+
+Pipeline må kunne skrus av runtime hvis init feiler — i praksis: prøv å lage
+GL-kontekst, fang `moderngl.Error` / `pygame.error`, fall tilbake til ren
+`pygame.display.flip()`. Spillet skal aldri krasje pga. GL-init.
 
 ### 3.2 Environment-variabler (settes før pygame.init)
 
@@ -272,7 +339,8 @@ import pygame
 4. **Pre-render parallax-bakgrunn én gang ved scene-innlasting.**
 5. **Unngå `pygame.Surface.fill()` med alpha** – fyll én gang ved init, ikke per frame.
 6. **Bruk colorkey i stedet for per-pixel alpha** der mulig (sprites uten gjennomsiktighet-gradering).
-7. **Ingen numpy i Fase 1-3.**
+7. ~~Ingen numpy i Fase 1-3.~~ **Opphevet i v2.7** — numpy er tillatt; brukes
+   for å laste piksel-data inn i GL-teksturer i ModernGL-pipelinen.
 8. **Bruk `pygame.transform.scale()`** (nearest-neighbor), aldri `smoothscale()` – smoothscale er 5-10x tregere og ødelegger pixel art uansett.
 
 ### 3.4 Ytelses-benchmark (obligatorisk Commit 2)
@@ -413,6 +481,40 @@ og investere i bek-anlegg (500 gull i tavern-dag-meny i Tortuga).
 Mistanke-meter + arrestasjon, random events (voyage + port), tre
 game-over-årsaker (dag 100, arrest, død). Score = gull i Tortuga-
 cachen ved slutt. Se `FASE_3.md` for full spesifikasjon.
+
+### Fase 2.6 – Visual remaster (NESTE etter Fase 3)
+
+**Status:** Planlagt 2026-04-30 i v2.7. Sequencing: kan kjøres parallelt med
+Fase 3 (mekanikk-arbeid berører ikke sprite-/oppløsning-laget) eller som
+egen fokusert fase.
+
+Pivot fra 640×360 + 16×16-sprites til **480×270 + 32×48 hovedsprite**
+(vei B etter side-ved-side-sammenligning, se `tools/size_compare.py`).
+Eksisterende moody Kingdom/Monkey Island-stemning og 30-farger-paletten er
+**uendret** — kun pikselskala og sprite-detaljnivå endres.
+
+**Begrunnelse:** Spilletest-tilbakemelding: "alt er litt smått og
+upersonlig". 16×16 = 256 piksler å fordele over hatt+frakk+hud+skjorte —
+for lite til ansiktsdetaljer. 32×48 = 1536 piksler (6× budsjett) gir plass
+til ansikt med øyne+skjegg, klesfolder, hatt-silhuett, knapper, belte,
+støvler. 480×270 × 4 = 1920×1080 (perfekt heltallsskala på FullHD).
+
+**Omfang:**
+
+1. `RENDER_WIDTH/HEIGHT` 640×360 → 480×270 i [constants.py](constants.py).
+2. Re-tegne ALLE sprites med utvidet pikselbudsjett — ikke nearest-upskala.
+   Bruk de ekstra pikslene til ekte detaljer.
+3. Re-rendre ALLE pre-rendrede parallax-bakgrunner per havn på ny
+   oppløsning. Tortuga først (signaturscene, stress-test), deretter Port
+   Royal, Havana, Nassau på samme mal.
+4. HUD-fonten Public Pixel 8 px → 10-12 px for lesbarhet.
+5. ModernGL post-FX: render_size-parameter til `(480, 270)`. Bloom-radius
+   tunes ned (chunkier piksler ⇒ mindre blur ellers blir bildet søkkvått).
+6. Alle scene-tester må re-baseline-es for ny oppløsning.
+
+**Eksplisitt utenfor scope:** Bytte til lyse/mettede farger (Seablip-stil)
+ble vurdert og forkastet — brukeren vil beholde stemning. Master-paletten
+er låst.
 
 ### Fase 4 – Bek-utvinning (sideview mini-game)
 ### Fase 5 – Dyp simulering + hendelser
@@ -777,7 +879,7 @@ Deretter, én commit per logisk enhet:
 - **Scope creep** – Fase 1 skal være MVP, ikke alt
 - **Hardkoding** – JSON for alt data
 - **For mange farger** – master-palett er låst
-- **numpy i Fase 1-3** – unødvendig avhengighet
+- ~~**numpy i Fase 1-3** – unødvendig avhengighet~~ — opphevet i v2.7
 - **Tapt save ved krasj** – autosave ved QUIT
 
 ---
@@ -794,6 +896,47 @@ Deretter, én commit per logisk enhet:
 
 ## CHANGELOG
 
+- **v2.7** (2026-04-30) – Målmaskin oppgradert: AMD A10-5757M / Radeon HD 8650G
+  / OpenGL 4.5 erstatter T4200 / GM45 / OpenGL 2.1. T4200-støtte droppet
+  (brukeren kjører ikke lenger på 2008-laptopen). Nytt budsjett: 60 FPS,
+  300 MB heap, 5 parallax-lag, 12 dynamiske lys, 150 partikler, 3 GLSL
+  post-FX-passes. To grafikk-presets innført (`high` med ModernGL post-FX,
+  `low` som ren pygame-fallback). numpy-forbudet opphevet. ModernGL-pipeline
+  spesifisert i §3.1.G: bloom + color grading + valgfri CRT. Pipeline init
+  må alltid kunne fall tilbake til ren pygame ved GL-feil. **Fase 2.6
+  Visual remaster planlagt:** 480×270 intern + 32×48 hovedsprites, paletten
+  uendret (vei B etter side-ved-side-sammenligning av tre alternativer).
+  **FlyingBirds-system landet** i `systems/flying_birds.py` — adresserer
+  "fugler frosset i lufta" ved å legge til animerte flokker som flyr over
+  himmelen (per-havn-konfig: måker på Tortuga, pelikaner på Nassau, duer på
+  Havana, måker på Port Royal). Sove om natten via night_factor-gating.
+  Render BAK gameplay-laget slik at bygnings-silhuetter okkluderer fugler
+  ved tårn-passering. Frame-time-impact: ~0 (innenfor måle-støy).
+  **ChimneySmoke-system landet** i `systems/chimney_smoke.py` — drivende røyk
+  fra warm/cool-kilder per havn (Tortuga: smie + tavern-pipe; Port Royal:
+  customs + exchange-pipe; Havana: bakeri + katedral; Nassau: bål + shack-
+  pipe). Pool av 5 partikler per kilde, additiv blending, sprite-størrelse
+  vokser med alder. Tegnes ETTER bygninger men FØR dynamiske lys slik at
+  varme lyskilder farger røyken naturlig. Frame-time: 3.25 ms (vs 3.27 ms
+  baseline) — innenfor støy. **ModernGL post-FX verifisert end-to-end** mot
+  ekte Tortuga-render; parametre tunet (bloom_threshold 0.45, radius 2.5,
+  strength 1.10, warm_cool 0.55) for synlig glød rundt lanterner og varm/
+  kald split mellom taverna-side og børshus-side. `present()` har nå `flip`-
+  flag for å støtte offscreen-readback i tester.
+  **VoyageScene fikk også fugler** — 4 stk drifter sakte over havet med
+  bredt høyde-bånd (18-300) og uten night-gating (`sleep_threshold=2.0`)
+  siden voyage-scenen er kart-form, ikke sideview-natt. Frame-time 0.75 ms
+  (vs 0.69 baseline). **Test-pakken (1121 tester) grønn etter passet.**
+  **`python main.py --preset=low` boot+exit verifisert** under headless
+  dummy-driver — autosave ved QUIT fungerer.
+  **`python main.py --preset=high` boot+exit verifisert** under x11 —
+  ModernGL-kontekst opprettes, pipeline kompilerer, full hovedløkke kjører
+  med shader-rendering aktiv, autosave ved QUIT fungerer.
+  **WorldMapScene fikk fugler** (4 stk, sakte drift) og **VoyageScene fikk
+  skip-røyk-trail** (én dynamisk røyk-kilde som flyttes til skipets
+  posisjon hvert frame, 12-partikkel pool, cool-tonet, kort lifetime).
+  ChimneySmoke har nå `set_source_position()` for dynamiske kilder.
+  Test-pakken (1057 tester) grønn etter hele v2.7-passet.
 - **v2.6** (2026-04-20) – Fase 3-planlegging komplett, C3-0 landet.
   Designpilarer omformet: "Dobbeltliv + markedsmanipulasjon" blir
   "100-dagers score-løp + handlings-drevet tid + offensiv

@@ -2,7 +2,8 @@
 
 Importér denne modulen FØRST i ethvert entry point. Den setter nødvendige
 SDL/pygame env vars før pygame lastes, slik at skalering, støyfri oppstart
-og sentrert vindu oppfører seg forutsigbart på målmaskinen (GM45 / T4200).
+og sentrert vindu oppfører seg forutsigbart på målmaskinen (per v2.7:
+AMD A10-5757M / Radeon HD 8650G / OpenGL 4.5).
 """
 
 import os
@@ -19,13 +20,32 @@ RENDER_WIDTH = 640
 RENDER_HEIGHT = 360
 DEFAULT_SCALE = 2
 DEFAULT_WINDOW_SIZE = (RENDER_WIDTH * DEFAULT_SCALE, RENDER_HEIGHT * DEFAULT_SCALE)
-TARGET_FPS = 30  # 30, ikke 60 – målmaskin krever dette.
+TARGET_FPS = 60  # v2.7: heves fra 30 da T4200-støtte droppes.
 
-# --- Ytelsesgrenser ---
-MAX_DYNAMIC_LIGHTS = 4
-MAX_PARTICLES = 20
-MAX_PARALLAX_LAYERS_PHASE_1 = 3
+# --- Grafikk-presets (v2.7) ---
+# "high": ModernGL post-FX (bloom, color grading, valgfri CRT). Standard.
+# "low":  Ren pygame-rendering. Fallback ved GL-init-feil eller bruker-valg.
+GRAPHICS_PRESET_HIGH = "high"
+GRAPHICS_PRESET_LOW = "low"
+DEFAULT_GRAPHICS_PRESET = GRAPHICS_PRESET_HIGH
+
+# --- Ytelsesgrenser (per v2.7-budsjett) ---
+# Verdiene under er for "high"-preset. "low"-preset bruker de gamle T4200-tallene
+# (4 lights, 20 particles, 3 parallax-lag) og leses fra _LOW_PRESET_BUDGETS.
+MAX_DYNAMIC_LIGHTS = 12
+MAX_PARTICLES = 150
+MAX_PARALLAX_LAYERS_PHASE_1 = 5
+# WORLD_WIDTH er fortsatt 1600 selv om v2.7-spec-cap er 2400. Eksisterende
+# scener (Tortuga, Port Royal, Havana, Nassau) er bygget for 1600. Heves
+# per scene når de ombygges, ikke globalt.
 WORLD_WIDTH = 1600
+
+_LOW_PRESET_BUDGETS = {
+    "max_dynamic_lights": 4,
+    "max_particles": 20,
+    "max_parallax_layers": 3,
+    "target_fps": 30,
+}
 
 # --- Events som skal blokkeres (reduserer event-kø-trykk) ---
 BLOCKED_EVENTS = [

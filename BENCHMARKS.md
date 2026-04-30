@@ -7,14 +7,77 @@ compute frame time), ikke display-raten som alltid er capped på
 
 Mål (fra `PROSJEKT.md` seksjon 0):
 
-- FPS: ≥30 stabilt, ≥25 minimum
-- Peak RSS (heap-indikasjon): mål 80 MB, hard grense 150 MB
-- Frame-allokering av Surfaces: 0
+- **v2.7+ (2026-04-30, ny målmaskin):** FPS ≥60 stabilt, ≥50 minimum,
+  Peak RSS mål 300 MB / hard grense 500 MB, Frame-allokering av Surfaces: 0.
+- v2.0–v2.6 (T4200): FPS ≥30, RSS ≤150 MB. **Ikke lenger gjeldende.**
 
-> **Målmaskin:** Målingene under er tatt direkte på målmaskinen (Pentium
-> T4200 @ 2.00 GHz, 2 kjerner, GM45, 3.8 GB RAM, Linux Mint 21.3). Claude
-> Code kjører i samme shell som benchmarken, så tallene er autentiske for
-> den hardware vi designer mot.
+> **Målmaskin (v2.7+):** AMD A10-5757M APU (4c/4t @ 2.5 GHz, AVX/FMA),
+> Radeon HD 8650G (OpenGL 4.5 / GLSL 4.50 / 512 MB VRAM), 7.2 GB RAM,
+> Linux Mint 21.3, Mesa 23.2.1, pygame-ce 2.5.7, Python 3.10.12.
+> Den gamle T4200/GM45-maskinen er ikke lenger støttet — eldre målinger
+> beholdes nedenfor som historisk referanse.
+
+---
+
+## v2.7 baseline – ny målmaskin (2026-04-30)
+
+Kjørt: 2026-04-30 på A10-5757M / HD 8650G. Kommando varierer per scene
+(`--duration 6` for hver). `low`-preset; `high`-preset (ModernGL) ikke målt
+ennå — venter på pipeline-stabilisering og første scene-kjøring i spillet.
+
+| Scene | Frame ms | FPS avg | FPS 1% | Peak RSS |
+|---|---|---|---|---|
+| village (Tortuga, kamera-drift) | 3.27 | 314 | 227 | 123 MB |
+| village + exchange overlay | 3.67 | 278 | 185 | 124 MB |
+| world_map | 0.62 | 1658 | 1080 | 104 MB |
+| voyage (aktiv reise) | 0.69 | 1470 | 1152 | 100 MB |
+| parallax_test | 1.82 | 564 | 413 | 106 MB |
+
+**Vurdering:** Alle scener langt over 60 FPS-målet. Frame-time-headroom på
+village-scenen er ~13 ms (60 FPS = 16.7 ms budsjett, vi bruker 3.3 ms),
+nok til en 3-pass shader-pipeline med margin. RSS godt under 300 MB-mål.
+Pipeline-aktivering forventes å koste ~1-2 ms per frame på den nye GPU-en.
+
+**Smoketest av PostFX-pipeline (2026-04-30):** GL-kontekst opprettes,
+shaders kompilerer, ett render-pass går gjennom uten feil. Ingen full
+spill-loop kjørt med pipeline aktiv ennå.
+
+**End-to-end PostFX mot ekte Tortuga (2026-04-30):** `tools/postfx_screenshot.py`
+renderer Tortuga-village i pygame, kjører den gjennom ModernGL-pipelinen
+(brightpass + 9-tap blur × 2 + composite med bloom/grading), leser tilbake
+default framebuffer og lagrer som PNG. Visuell verifikasjon: bloom synlig
+rundt lanterne-vinduer, varm/kald-grading mellom venstre og høyre halvdel,
+ingen artefakter. Pipeline-overhead ikke målt under in-game-loop ennå.
+
+**Livfullhet-pass (2026-04-30):** FlyingBirds + ChimneySmoke aktive på
+Tortuga-village; FlyingBirds også på voyage-scenen.
+
+| Konfig | Frame ms | FPS avg | Peak RSS |
+|---|---|---|---|
+| village baseline (før v2.7-livfullhet) | 3.27 | 314 | 123 MB |
+| village + 9 fugler | 3.10 | 330 | 124 MB |
+| village + fugler + 2 røyk-kilder × 5 partikler | 3.25 | 317 | 124 MB |
+| voyage baseline | 0.69 | 1470 | 100 MB |
+| voyage + 4 fugler | 0.75 | 1373 | 100 MB |
+| voyage + 4 fugler + 12-partikkel skip-røyk | 1.04 | 999 | 100 MB |
+| world_map baseline | 0.62 | 1658 | 104 MB |
+| world_map + 4 fugler | 0.73 | 1411 | 104 MB |
+
+Effektivt gratis innenfor måle-støy. 60-FPS-budsjett (16.7 ms) har ~13 ms
+headroom igjen for village.
+
+**Test-pakke (2026-04-30):** alle 1057 tester PASS etter livfullhet-passet
++ shader-pipeline + voyage/world_map-fugler + skip-røyk-trail.
+`python -m pytest tests/` fra samme commit.
+
+**main.py-launch verifisert (2026-04-30):**
+- `--preset=low` (dummy-driver): booter, kjører hovedloop, fanger QUIT,
+  autosaver, exit 0.
+- `--preset=high` (x11): GL-kontekst opprettet (Mesa / AMD ARUBA),
+  ModernGL-pipeline aktiv, full hovedloop kjørt med shader-rendering,
+  autosave ved QUIT, exit 0.
+
+---
 
 ---
 
