@@ -5,11 +5,19 @@ Krysning mellom *Sid Meier's Pirates!* (PSP), et life-sim, og et skjult
 økonomi-krigførings-spill der spilleren manipulerer en lokal børs gjennom
 ulovlig piratvirksomhet.
 
-![Tortuga om natten – børshuset lyser, månen står over havet](docs/screenshots/village_night.png)
+![Tortuga om natten – børshuset lyser, månen står over havet](docs/screenshots/tortuga_night.png)
 
-| Børs-overlay | Verdenskart | Reise mellom havner |
-|:---:|:---:|:---:|
-| ![Børs-overlay i Tortuga](docs/screenshots/exchange.png) | ![Verdenskartet over Karibia](docs/screenshots/world_map.png) | ![Reise fra Tortuga mot Port Royal](docs/screenshots/voyage.png) |
+To havner, samme dag- og natt-syklus — Tortuga er en falleferdig piratrede i tre, Port Royal er en britisk kolonihavn i stein:
+
+| Tortuga om dagen | Port Royal om dagen |
+|:---:|:---:|
+| ![Tortuga med sol over havet og fiskerbrygger](docs/screenshots/tortuga_day.png) | ![Port Royal med kirketårn og steinhus](docs/screenshots/port_royal_day.png) |
+| **Tortuga om natten** *(over)* | **Port Royal om natten** |
+|  | ![Port Royal om natten med stjerner og opplyst børshus](docs/screenshots/port_royal_night.png) |
+
+Børs-mekanikken er lik i alle havner, men prisene drifter uavhengig — det gir arbitrasjen sin verdi:
+
+![Børs-overlay i Tortuga med sukker, rom, tobakk og bek](docs/screenshots/exchange.png)
 
 Se `PROSJEKT.md` for full designspesifikasjon, `ASSETS.md` for assets, og
 `BENCHMARKS.md` for ytelsesmålinger per fase.

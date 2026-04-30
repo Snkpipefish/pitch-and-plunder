@@ -61,38 +61,79 @@ def _shoot(scene, name: str, scale: int = 3) -> Path:
     return path
 
 
-def _new_state(seconds_into_day: float = 0.4 * 180.0) -> GameState:
-    """Fersk GameState med litt gull og spesifisert tidspunkt på dagen."""
+def _new_state(
+    port_id: str = "tortuga",
+    seconds_into_day: float = 0.4 * 180.0,
+) -> GameState:
+    """Fersk GameState med litt gull, valgt havn og tidspunkt på dagen."""
     state = GameState()
     state.player_state.gold = 500
+    state.world_state.current_port = port_id
     state.world_state.clock.seconds_into_day = seconds_into_day
     return state
 
 
-def capture_village_day() -> None:
-    print("village_day (Tortuga, midt på dagen)")
-    state = _new_state(seconds_into_day=0.45 * 180.0)
-    scene = PortVillageScene(
-        _load_font(8), state, port_config.get(state.world_state.current_port)
-    )
+def _capture_port(
+    name: str,
+    port_id: str,
+    seconds_into_day: float,
+    settle: int = 60,
+    player_x: float | None = None,
+) -> None:
+    """Render en havn. Hvis player_x er satt, flyttes spilleren dit
+    slik at kameraet sentreres rundt sola/månen for det aktuelle
+    tidspunktet (port-scenens kamera følger spilleren)."""
+    pcfg = port_config.get(port_id)
+    print(f"{name} ({pcfg.name}, {seconds_into_day:.0f}s av 180s i døgnet)")
+    state = _new_state(port_id=port_id, seconds_into_day=seconds_into_day)
+    scene = PortVillageScene(_load_font(8), state, pcfg)
     scene.on_enter(state, from_scene=None)
-    _settle(scene, state, frames=30)
-    _shoot(scene, "village_day")
+    if player_x is not None:
+        scene._player.x = player_x
+        scene._center_camera_on_player()
+    _settle(scene, state, frames=settle)
+    _shoot(scene, name)
 
 
-def capture_village_night() -> None:
-    print("village_night (Tortuga, natt med lanterner)")
-    state = _new_state(seconds_into_day=0.95 * 180.0)
-    scene = PortVillageScene(
-        _load_font(8), state, port_config.get(state.world_state.current_port)
+def capture_tortuga_day() -> None:
+    # Sola ved t=0.5 ligger ca x=800 i Tortuga (lineær 1500→100); sentrer
+    # kameraet der så sola er synlig.
+    _capture_port(
+        "tortuga_day", "tortuga",
+        seconds_into_day=0.5 * 180.0,
+        settle=30, player_x=800.0,
     )
-    scene.on_enter(state, from_scene=None)
-    _settle(scene, state, frames=60)
-    _shoot(scene, "village_night")
+
+
+def capture_tortuga_night() -> None:
+    # Månen forankret over børshuset (worldx 1350) — spilleren der.
+    _capture_port(
+        "tortuga_night", "tortuga",
+        seconds_into_day=0.95 * 180.0,
+        settle=60, player_x=1340.0,
+    )
+
+
+def capture_port_royal_day() -> None:
+    # Sola ved t=0.5 i Port Royal: 1100→100, midt = 600.
+    _capture_port(
+        "port_royal_day", "port_royal",
+        seconds_into_day=0.5 * 180.0,
+        settle=30, player_x=600.0,
+    )
+
+
+def capture_port_royal_night() -> None:
+    # Månen forankret ved worldx 950.
+    _capture_port(
+        "port_royal_night", "port_royal",
+        seconds_into_day=0.95 * 180.0,
+        settle=60, player_x=950.0,
+    )
 
 
 def capture_exchange() -> None:
-    print("exchange (børs-overlay over Tortuga)")
+    print("exchange (børs-overlay i Tortuga)")
     state = _new_state(seconds_into_day=0.5 * 180.0)
     scene = PortVillageScene(
         _load_font(8), state, port_config.get(state.world_state.current_port)
@@ -141,8 +182,10 @@ def main() -> int:
         (constants.RENDER_WIDTH, constants.RENDER_HEIGHT), pygame.HIDDEN
     )
 
-    capture_village_day()
-    capture_village_night()
+    capture_tortuga_day()
+    capture_tortuga_night()
+    capture_port_royal_day()
+    capture_port_royal_night()
     capture_exchange()
     capture_world_map()
     capture_voyage()
