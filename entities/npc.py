@@ -14,25 +14,55 @@ import constants
 
 
 def _make_hawkins_sprite() -> pygame.Surface:
-    """Placeholder for Hawkins: tricorn + steingrå frakk (respektabel)."""
-    w, h = 10, 20
+    """Hawkins (Børsmester): tricorn + stein-grå frakk (respektabel autoritet).
+
+    Fase 2.6 sub-steg 5: 24×40 med utvidet pikselbudsjett. Hawkins skiller
+    seg fra spilleren via stein-paletten (kald, autoritær) i stedet for
+    den varme COAT-fiolette frakken — visuell match til Børshusets kalde
+    blå-grå tematikk.
+    """
+    w, h = 24, 40
     surf = pygame.Surface((w, h)).convert()
     ck = (255, 0, 255)
     surf.fill(ck)
 
-    # Hatt
-    pygame.draw.rect(surf, constants.COLOR_HAT, (0, 0, w, 3))
-    pygame.draw.rect(surf, constants.COLOR_HAT, (2, 1, w - 4, 2))
-    # Ansikt
-    pygame.draw.rect(surf, constants.COLOR_SKIN, (3, 3, w - 6, 4))
-    # Krage
-    pygame.draw.rect(surf, constants.COLOR_SHIRT, (3, 7, w - 6, 1))
-    # Frakk – steingrå i stedet for mørk fiolett
-    pygame.draw.rect(surf, constants.COLOR_STONE_MID, (2, 8, w - 4, 7))
-    pygame.draw.rect(surf, constants.COLOR_STONE_LIGHT, (2, 8, 1, 7))
-    # Ben
-    pygame.draw.rect(surf, constants.COLOR_HAT, (3, 15, 2, 5))
-    pygame.draw.rect(surf, constants.COLOR_HAT, (5, 15, 2, 5))
+    # ---- Hatt ----
+    pygame.draw.rect(surf, constants.COLOR_HAT, (0, 5, w, 3))
+    pygame.draw.rect(surf, constants.COLOR_HAT, (5, 1, w - 10, 4))
+    # Hatt-bånd (lysere stone for kontrast — matcher frakken)
+    pygame.draw.rect(surf, constants.COLOR_STONE_LIT, (5, 4, w - 10, 1))
+
+    # ---- Ansikt ----
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (5, 8, w - 10, 8))
+    pygame.draw.rect(surf, constants.COLOR_HAT, (5, 8, w - 10, 1))
+    # Øyne
+    pygame.draw.rect(surf, constants.COLOR_HAT, (8, 11, 1, 1))
+    pygame.draw.rect(surf, constants.COLOR_HAT, (15, 11, 1, 1))
+    # Snurrebart (Hawkins-signatur)
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (8, 14, 8, 1))
+
+    # ---- Krage og skjorte (hvit krage er børsmester-uniform) ----
+    pygame.draw.rect(surf, constants.COLOR_SHIRT, (3, 16, w - 6, 2))
+    pygame.draw.rect(surf, constants.COLOR_SHIRT, (10, 18, 4, 1))
+
+    # ---- Frakk (stein-grå — kald respektabel) ----
+    pygame.draw.rect(surf, constants.COLOR_STONE_MID, (3, 19, w - 6, 11))
+    pygame.draw.rect(surf, constants.COLOR_STONE_LIGHT, (3, 19, 1, 11))
+    # Sølv-knapper (lys stone i stedet for varm gull)
+    for ky in (21, 24, 27):
+        pygame.draw.rect(surf, constants.COLOR_STONE_BRIGHT, (11, ky, 2, 2))
+    # Belte
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARKEST, (3, 28, w - 6, 1))
+
+    # ---- Bukser (sorte bukser, autoritær) ----
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARK, (5, 30, 6, 5))
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARK, (13, 30, 6, 5))
+
+    # ---- Sko (svarte, blanke — sølv-spenne) ----
+    pygame.draw.rect(surf, constants.COLOR_HAT, (4, 35, 8, 5))
+    pygame.draw.rect(surf, constants.COLOR_HAT, (12, 35, 8, 5))
+    pygame.draw.rect(surf, constants.COLOR_STONE_BRIGHT, (6, 36, 1, 1))
+    pygame.draw.rect(surf, constants.COLOR_STONE_BRIGHT, (16, 36, 1, 1))
 
     surf.set_colorkey(ck)
     return surf
