@@ -132,6 +132,43 @@ class VoyageScene(BaseScene):
         # Skip-sprite (gjenbrukt fra C5).
         self._ship = ShipIcon()
 
+        # Skip-røyk-trail (v2.7 livfullhet-pass): én dynamisk røyk-kilde
+        # som flyttes til skipets posisjon hvert frame. Liten cool-tonet
+        # røykfane med kort lifetime — gir skipet et levende trail uten
+        # å distrahere fra det fjerne kart-perspektivet.
+        from systems import chimney_smoke as _chimney_smoke  # lazy
+        self._ship_smoke = _chimney_smoke.ChimneySmoke(
+            sources=[_chimney_smoke.SmokeSource(
+                x=0.0, y=0.0, kind="cool",
+                period=0.18, pool_size=12,
+                drift_x=0.0, rise_speed=8.0,
+            )],
+            seed=27,
+        )
+
+        # Flygende fugler over havet (v2.7 livfullhet-pass på voyage-scenen).
+        # Topp-down 640x360 — fuglene drifter langsomt over hele kart-bredden.
+        # Brukes uten night-gating (havet er alltid synlig i kart-form,
+        # også om natten — havne-fasene endres ikke i C7c).
+        from systems import flying_birds as _flying_birds  # lazy
+        self._flying_birds = _flying_birds.FlyingBirds(
+            world_width=constants.RENDER_WIDTH,
+            config=_flying_birds.FlyingBirdsConfig(
+                count=4,
+                color=constants.COLOR_MOON_HALO,
+                altitude_min=18,
+                altitude_max=300,
+                speed_min=18.0,
+                speed_max=30.0,
+                sin_amp_min=0.5,
+                sin_amp_max=2.0,
+                flock_burst_count=2,
+                flock_burst_min_sec=20.0,
+                flock_burst_max_sec=40.0,
+                sleep_threshold=2.0,  # 2.0 = aldri sove (havet er vannskill)
+            ),
+        )
+
         # Dawn-tikk-infrastruktur — samme mønster som PortVillageScene.
         # Market er stateless katalog; samme instans opererer på alle
         # havners MarketState via parameter.
@@ -265,6 +302,21 @@ class VoyageScene(BaseScene):
         # Klokken oppdateres av main.run() (felles for alle scener);
         # VoyageScene må kun reagere på dag-skift og ankomst.
         self._toasts.update(dt)
+        self._flying_birds.update(dt, night_factor=0.0)
+        # Oppdater skip-røyk-kilden til skipets aktuelle posisjon før
+        # smoke.update så nye partikler spawner ved riktig sted.
+        voyage_active = self._state.world_state.voyage
+        if voyage_active is not None:
+            bal2 = _balance.get()
+            progress2 = _voyage.compute_progress(
+                voyage_active, self._state.world_state.clock, bal2,
+            )
+            sx, sy = _voyage.interpolate_position(
+                self._from_pos, self._to_pos, progress2,
+            )
+            # Skip-skorstein litt over senter av skip-icon (3 px over).
+            self._ship_smoke.set_source_position(0, sx, sy - 3)
+        self._ship_smoke.update(dt, night_factor=0.0)
         clock = self._state.world_state.clock
         curr_day = clock.day
 
@@ -383,6 +435,15 @@ class VoyageScene(BaseScene):
                 self._from_pos, self._to_pos, progress,
             )
             self._ship.draw(surface, ship_pos, heading=self._heading)
+
+        # Skip-røyk-trail tegnes ETTER skipet (over master/seil) slik at
+        # røyken stiger naturlig fra skorsteinen og ikke skjules av icon-
+        # silhuetten.
+        self._ship_smoke.draw(surface, camera_x=0.0)
+
+        # Flygende fugler over havet — tegnes etter røyk og skip slik at
+        # nærliggende silhuetter overlapper skipets master.
+        self._flying_birds.draw(surface, camera_x=0.0, night_factor=0.0)
 
         # HUD-tekst (statisk per scene-init)
         surface.blit(self._title_surf, (8, 4))

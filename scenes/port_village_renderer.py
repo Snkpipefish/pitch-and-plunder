@@ -178,6 +178,8 @@ class PortVillageRenderer:
         hint_state: "bool | str" = False,
         silhouettes: Sequence["NPCSilhouette"] = (),
         night_factor: float = 1.0,
+        flying_birds: "FlyingBirds | None" = None,
+        chimney_smoke: "ChimneySmoke | None" = None,
     ) -> None:
         # 1) Himmel-lag (cross-fade mellom to nærmeste varianter)
         self._draw_backdrop(surface, cam_x, snapshot)
@@ -191,6 +193,13 @@ class PortVillageRenderer:
         # (Commit 7.2) slik at fjell-silhuetter og hav okkluderer solen
         # og månen ved horisont-passering.
         self._draw_foreground_backdrop(surface, cam_x, snapshot)
+
+        # 3.5) Flygende fugler (v2.7 livfullhet-pass). Rendres BAK gameplay-
+        # laget slik at bygnings-silhuetter okkluderer fugler som flyr forbi
+        # tårn/master. Skip hvis None eller hvis night-factor signaliserer
+        # sove-tid (intern sjekk i FlyingBirds.draw).
+        if flying_birds is not None:
+            flying_birds.draw(surface, cam_x, night_factor=night_factor)
 
         # 4) Gameplay-lag (index 0 i denne parallax-renderen)
         self._parallax.draw(surface, cam_x, start=0, stop=1)
@@ -214,6 +223,14 @@ class PortVillageRenderer:
             (player.sprite, (int(player.x) - cx, int(player.y)))
         )
         surface.fblits(batch)
+
+        # 5.5) Skorstein/bål-røyk. Tegnes ETTER bygninger og entiteter men
+        # FØR lys slik at lys-gradients legger seg oppå røyken (gir varm-
+        # gradering der røyken passerer foran lanterner/bål). Additiv
+        # blending stables naturlig med tåke- og firefly-batchene som
+        # følger i particles.draw.
+        if chimney_smoke is not None:
+            chimney_smoke.draw(surface, cam_x)
 
         # 6) Dynamiske lys (BLEND_RGB_ADD) – legger seg over bygninger og
         # entiteter slik at lyset "faller på" spilleren.

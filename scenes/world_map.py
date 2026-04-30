@@ -226,6 +226,27 @@ class WorldMapScene(BaseScene):
         # Markør- og skip-sprites (pre-rendret inne i egne klasser)
         self._marker = PortMarker()
         self._ship = ShipIcon()
+
+        # Flygende fugler over kartet (v2.7 livfullhet-pass) — sakte drift,
+        # samme stil som voyage-scenen siden begge er top-down kart-form.
+        from systems import flying_birds as _flying_birds  # lazy
+        self._flying_birds = _flying_birds.FlyingBirds(
+            world_width=constants.RENDER_WIDTH,
+            config=_flying_birds.FlyingBirdsConfig(
+                count=4,
+                color=constants.COLOR_MOON_HALO,
+                altitude_min=20,
+                altitude_max=300,
+                speed_min=14.0,
+                speed_max=24.0,
+                sin_amp_min=0.5,
+                sin_amp_max=1.5,
+                flock_burst_count=2,
+                flock_burst_min_sec=25.0,
+                flock_burst_max_sec=45.0,
+                sleep_threshold=2.0,
+            ),
+        )
         # Verifiser at flip-sprites er korrekte. Logging hvis ikke — men
         # kaster ikke: fall-back ville være å pre-rendre 4 separate
         # sprites, men dette bygges kun hvis verifisering feiler.
@@ -414,6 +435,7 @@ class WorldMapScene(BaseScene):
     def update(self, dt: float) -> None:
         self._elapsed += dt
         self._toasts.update(dt)
+        self._flying_birds.update(dt, night_factor=0.0)
 
     # --- Rendering ---
 
@@ -459,6 +481,10 @@ class WorldMapScene(BaseScene):
         current_pos = self._port_positions[self._current_port_id]
         ship_pos = (current_pos[0] + 10, current_pos[1] - 8)
         self._ship.draw(surface, ship_pos, heading="N")
+
+        # Flygende fugler — over markører og skip men under tooltip og
+        # hint-linjen (de er rene UI-elementer som skal være øverst).
+        self._flying_birds.draw(surface, camera_x=0.0, night_factor=0.0)
 
         # Hint-linje nederst
         surface.blit(

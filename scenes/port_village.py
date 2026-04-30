@@ -47,6 +47,8 @@ from scenes.port_buildings import build_port_gameplay_layer
 from scenes.port_village_renderer import PortVillageRenderer
 from state import GameState
 from state.market_state import MarketState
+from systems import chimney_smoke
+from systems import flying_birds
 from systems import save as save_module
 from systems.animations import PaletteCycleSource, apply_palette_cycles
 from systems.day_cycle import DayCycle, compute_night_factor
@@ -303,6 +305,23 @@ class PortVillageScene(BaseScene):
             ),
             world_width=port.world_width,
         )
+
+        # Flygende fugler (v2.7 livfullhet-pass). Adresserer "fugler frosset
+        # i lufta" — de baked-in silhuettene blir kun perched-detaljer; disse
+        # er en separat dynamisk flokk som driver over himmelen. Per-havn-
+        # konfig matcher havnens karakter (måker på Tortuga, pelikaner på
+        # Nassau, osv.). Sove om natten via night_factor-gating.
+        self._flying_birds = flying_birds.FlyingBirds(
+            world_width=port.world_width,
+            config=flying_birds.make_default_config_for_port(port.id),
+        )
+
+        # Skorstein/bål-røyk (v2.7 livfullhet-pass). Per-havn-kilder med
+        # warm/cool-varianter — Tortuga-essen, Nassau-bål osv. Brenner
+        # 24/7 med svak natt-demping. Tegnes ETTER bygnings-laget men FØR
+        # dynamiske lys, slik at varme lyskilder bak røyken farger den
+        # naturlig via additiv blending.
+        self._chimney_smoke = chimney_smoke.make_default_for_port(port.id)
 
         # Overlay (børs) — None naar lukket
         self._overlay: ExchangeOverlay | None = None
@@ -722,6 +741,18 @@ class PortVillageScene(BaseScene):
         self._elapsed += dt
         self._particles.update(dt)
         self._toasts.update(dt)
+        # Flygende fugler — sove om natten via night_factor (beregnes i draw,
+        # men vi kan re-bruke siste verdien lagret av draw-pathen). For
+        # update-fasen leser vi snapshot direkte; rimelig billig.
+        celestial_cfg = port_config.get(
+            self._state.world_state.current_port
+        ).celestial
+        snapshot_for_birds = DayCycle.compute_snapshot(
+            self._state.world_state.clock, celestial_cfg
+        )
+        bird_night_factor = compute_night_factor(snapshot_for_birds.day_fraction)
+        self._flying_birds.update(dt, bird_night_factor)
+        self._chimney_smoke.update(dt, bird_night_factor)
 
         # HUD – settere er no-ops hvis verdien ikke har endret seg
         self._hud.set_gold(self._state.player_state.gold)
@@ -960,6 +991,8 @@ class PortVillageScene(BaseScene):
             hint_state=self._compute_hint_state(),
             silhouettes=self._silhouettes,
             night_factor=night_factor,
+            flying_birds=self._flying_birds,
+            chimney_smoke=self._chimney_smoke,
         )
         # HUD (oeverst venstre) og toasts (bunn-sentrert) tegnes over
         # verden men under bors-overlay.
