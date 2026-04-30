@@ -8,7 +8,7 @@ ulovlig piratvirksomhet.
 Se `PROSJEKT.md` for full designspesifikasjon, `ASSETS.md` for assets, og
 `BENCHMARKS.md` for ytelsesmålinger per fase.
 
-**Status:** Fase 2B ferdig. Se `PHASE_2B_RETROSPECTIVE.md` (og `PHASE_2A_RETROSPECTIVE.md` / `PHASE_1_RETROSPECTIVE.md` for tidligere faser).
+**Status:** Fase 3 spillbar (dialoger, rykter, mistanke, sabotasje, tilfeldige hendelser, score-overlay). Se `FASE_3.md` for pågående arbeid og `PHASE_2B_RETROSPECTIVE.md` / `PHASE_2A_RETROSPECTIVE.md` / `PHASE_1_RETROSPECTIVE.md` for tidligere faser.
 
 ## Krav
 
@@ -62,8 +62,9 @@ havn har egne priser og regimer som drifter parallelt under reise.
 | D / → | Gå høyre | Naviger øst | – | – | Kjøp 1 (Shift: 10) |
 | W / ↑ | – | Naviger nord | – | – | Velg vare opp |
 | S / ↓ | – | Naviger sør | – | – | Velg vare ned |
-| E | Åpne børs / kart | Bekreft fokus / åpne reise-dialog | Bekreft reise | – | – |
-| ESC | Avslutt | Tilbake til havn | Avbryt | – | Lukk overlay |
+| E | Åpne børs / kart / dialog (taverna, havnekontor) | Bekreft fokus / åpne reise-dialog | Bekreft reise | – | – |
+| R | Åpne ryktedialog | – | – | – | – |
+| ESC | Pause-meny | Tilbake til havn | Avbryt | – | Lukk overlay |
 | Enter | Bekreft | – | – | – | – |
 | F11 | Veksle fullskjerm | Veksle fullskjerm | – | Veksle fullskjerm | Veksle fullskjerm |
 
