@@ -26,72 +26,82 @@ PLAYER_SPRITE_WIDTH = 24
 def _make_player_sprite(walk_frame: int = 0) -> pygame.Surface:
     """Tegn placeholder-sprite for spilleren (Fase 2.6 — 24×40).
 
-    walk_frame:
-      0 = stående (bena rett ned)
-      1 = venstre fram (venstre ben litt frem, høyre litt tilbake)
-      2 = høyre fram (motsatt)
+    Re-design 2026-05-01: tonet ned alle gul-/oransje-aksenter etter
+    "ser ut som klovn"-tilbakemelding. Beholder kun mørk pirat-tone
+    inspirert av Sid Meier's Pirates! / Monkey Island sin Guybrush —
+    silhuett-fokus, ikke fargekontrast-fokus.
 
-    Pikselbudsjett 960. Master-palett.
+    walk_frame:
+      0 = stående
+      1 = venstre fram
+      2 = høyre fram
     """
     w, h = PLAYER_SPRITE_WIDTH, PLAYER_SPRITE_HEIGHT
     surf = pygame.Surface((w, h)).convert()
     ck = (255, 0, 255)
     surf.fill(ck)
 
-    # ---- Hatt ----
+    # ---- Hatt: solid tricorn, ingen gul plumet eller lyse bånd ----
+    # Brem (bred, definerer silhuetten)
     pygame.draw.rect(surf, constants.COLOR_HAT, (0, 5, w, 3))
-    pygame.draw.rect(surf, constants.COLOR_HAT, (5, 1, w - 10, 4))
-    pygame.draw.rect(surf, constants.COLOR_SHIRT, (5, 4, w - 10, 1))
-    pygame.draw.rect(surf, constants.COLOR_LANTERN, (8, 0, 1, 2))
+    # Krone (smalere pyramide) — rakere enn før, færre hatt-bånd-distraksjoner
+    pygame.draw.rect(surf, constants.COLOR_HAT, (6, 0, w - 12, 5))
+    # Subtil mørk skygge i krone (gir dybde uten å innføre ny farge)
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARKEST, (6, 0, w - 12, 1))
+    # Brem-skygge under (gir rim av lys)
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARKEST, (0, 7, w, 1))
 
     # ---- Ansikt ----
-    pygame.draw.rect(surf, constants.COLOR_SKIN, (5, 8, w - 10, 8))
-    pygame.draw.rect(surf, constants.COLOR_HAT, (5, 8, w - 10, 1))
-    pygame.draw.rect(surf, constants.COLOR_HAT, (8, 11, 1, 1))
-    pygame.draw.rect(surf, constants.COLOR_HAT, (15, 11, 1, 1))
-    pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (11, 12, 2, 2))
-    pygame.draw.rect(surf, constants.COLOR_HAT, (8, 14, 8, 2))
+    # Hud
+    pygame.draw.rect(surf, constants.COLOR_SKIN, (6, 8, w - 12, 7))
+    # Skygge under hattebrem
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (6, 8, w - 12, 1))
+    # Øyne (2x1, mer definert enn 1px-prikker)
+    pygame.draw.rect(surf, constants.COLOR_HAT, (8, 11, 2, 1))
+    pygame.draw.rect(surf, constants.COLOR_HAT, (14, 11, 2, 1))
+    # Subtil nese-skygge (smalere enn før, mindre dramatisk)
+    pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (11, 13, 2, 1))
+    # Skjegg (mørk under-ansikt, fyller bunnen av ansiktet)
+    pygame.draw.rect(surf, constants.COLOR_HAT, (7, 14, w - 14, 2))
 
-    # ---- Krage og skjorte ----
-    pygame.draw.rect(surf, constants.COLOR_SHIRT, (4, 16, w - 8, 2))
-    pygame.draw.rect(surf, constants.COLOR_SHIRT, (10, 18, 4, 1))
+    # ---- Krage (kun smal V-form, ikke full hvit krage) ----
+    # Mørk frakk-skulder først (uten lys-bånd)
+    pygame.draw.rect(surf, constants.COLOR_COAT, (3, 16, w - 6, 2))
+    # Liten skjorte-V (kun 4 px bred, mindre påfallende)
+    pygame.draw.rect(surf, constants.COLOR_SHIRT, (10, 16, 4, 2))
+    pygame.draw.rect(surf, constants.COLOR_SHIRT, (11, 18, 2, 1))
 
     # ---- Frakk ----
-    pygame.draw.rect(surf, constants.COLOR_COAT, (3, 19, w - 6, 11))
-    pygame.draw.rect(surf, (92, 78, 104), (3, 19, 1, 11))
-    for ky in (21, 24, 27):
-        pygame.draw.rect(surf, constants.COLOR_LANTERN, (11, ky, 2, 2))
+    pygame.draw.rect(surf, constants.COLOR_COAT, (3, 18, w - 6, 12))
+    # Lysere venstre side (rim-light fra månen) — beholder, gir 3D-form
+    pygame.draw.rect(surf, (92, 78, 104), (3, 18, 1, 12))
+    # Frakk-knapper: 2 stk, små stein-grå (sølv) i stedet for 3 store gull.
+    # Mindre påfallende, tematisk match til pirat-grovhet
+    pygame.draw.rect(surf, constants.COLOR_STONE_LIGHT, (12, 22, 1, 1))
+    pygame.draw.rect(surf, constants.COLOR_STONE_LIGHT, (12, 26, 1, 1))
+    # Belte — mørk stripe (ingen gull-spenne lenger)
     pygame.draw.rect(surf, constants.COLOR_WOOD_DARKEST, (3, 28, w - 6, 1))
-    pygame.draw.rect(surf, constants.COLOR_LANTERN_BRIGHT, (11, 28, 2, 1))
+    # Belte-detail: liten mørk stein-spenne i stedet for varm gull
+    pygame.draw.rect(surf, constants.COLOR_STONE_DARK, (11, 28, 2, 1))
 
-    # ---- Bukser + støvler — varierer med walk-frame ----
-    # Standard frame 0: bena ved siden av hverandre.
-    # Frame 1: venstre ben fram (vises lengre ned, smalere), høyre tilbake (kortere).
-    # Frame 2: omvendt.
+    # ---- Bukser + støvler — alle varianter mørke, ingen orange aksenter ----
     if walk_frame == 0:
         # Stående: bena symmetrisk
         pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (5, 30, 6, 5))
         pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (13, 30, 6, 5))
-        pygame.draw.rect(surf, constants.COLOR_WOOD_DARKEST, (4, 35, 8, 5))
-        pygame.draw.rect(surf, constants.COLOR_WOOD_DARKEST, (12, 35, 8, 5))
-        pygame.draw.rect(surf, constants.COLOR_EMBER, (6, 36, 1, 1))
-        pygame.draw.rect(surf, constants.COLOR_EMBER, (16, 36, 1, 1))
+        # Støvler — kun mørk, ingen EMBER-aksent
+        pygame.draw.rect(surf, constants.COLOR_HAT, (4, 35, 8, 5))
+        pygame.draw.rect(surf, constants.COLOR_HAT, (12, 35, 8, 5))
     elif walk_frame == 1:
-        # Venstre ben fram (litt utover venstre + lavere), høyre tilbake (rett)
-        pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (4, 30, 6, 6))   # venstre ben
-        pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (14, 30, 6, 4))  # høyre ben (kortere = lengre tilbake)
-        pygame.draw.rect(surf, constants.COLOR_WOOD_DARKEST, (3, 36, 8, 4))  # venstre støvel
-        pygame.draw.rect(surf, constants.COLOR_WOOD_DARKEST, (13, 34, 8, 4))  # høyre støvel
-        pygame.draw.rect(surf, constants.COLOR_EMBER, (5, 37, 1, 1))
-        pygame.draw.rect(surf, constants.COLOR_EMBER, (17, 35, 1, 1))
+        pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (4, 30, 6, 6))
+        pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (14, 30, 6, 4))
+        pygame.draw.rect(surf, constants.COLOR_HAT, (3, 36, 8, 4))
+        pygame.draw.rect(surf, constants.COLOR_HAT, (13, 34, 8, 4))
     else:  # walk_frame == 2
-        # Høyre ben fram, venstre tilbake (speilvendt 1)
-        pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (4, 30, 6, 4))   # venstre ben (tilbake)
-        pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (14, 30, 6, 6))  # høyre ben (fram)
-        pygame.draw.rect(surf, constants.COLOR_WOOD_DARKEST, (3, 34, 8, 4))  # venstre støvel (bak)
-        pygame.draw.rect(surf, constants.COLOR_WOOD_DARKEST, (13, 36, 8, 4))  # høyre støvel (fram)
-        pygame.draw.rect(surf, constants.COLOR_EMBER, (5, 35, 1, 1))
-        pygame.draw.rect(surf, constants.COLOR_EMBER, (17, 37, 1, 1))
+        pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (4, 30, 6, 4))
+        pygame.draw.rect(surf, constants.COLOR_WOOD_DARK, (14, 30, 6, 6))
+        pygame.draw.rect(surf, constants.COLOR_HAT, (3, 34, 8, 4))
+        pygame.draw.rect(surf, constants.COLOR_HAT, (13, 36, 8, 4))
 
     surf.set_colorkey(ck)
     return surf
