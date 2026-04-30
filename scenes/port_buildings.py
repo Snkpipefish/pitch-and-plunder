@@ -335,17 +335,57 @@ def _bake_exchange(
             (wx0 + window_w // 2 - 1, window_y, 2, window_h),
         )
 
-    # Stor dør (midtstilt)
+    # Stor dør (midtstilt) med dobbelt-fløy + håndtak (Fase 2.6 polish).
     door_w, door_h = 26, 40
     door_x = x + w // 2 - door_w // 2
     door_y = ground_top_y - door_h
     pygame.draw.rect(surface, constants.COLOR_STONE_DARKEST, (door_x, door_y, door_w, door_h))
     pygame.draw.rect(surface, constants.COLOR_STONE_MID, (door_x + 3, door_y + 3, door_w - 6, door_h - 6))
+    # Vertikal midt-skille som markerer dobbelt-fløy
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST,
+        (door_x + door_w // 2 - 1, door_y + 3, 2, door_h - 6),
+    )
+    # Håndtak (sølv, ett på hver fløy)
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_BRIGHT,
+        (door_x + door_w // 2 - 5, door_y + door_h // 2, 1, 2),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_BRIGHT,
+        (door_x + door_w // 2 + 4, door_y + door_h // 2, 1, 2),
+    )
+    # Trapp opp til døra (3 trinn, smal-bred-bredere) — autoritær approach
+    step_y = ground_top_y
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_MID,
+        (door_x - 4, step_y, door_w + 8, 1),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARK,
+        (door_x - 8, step_y + 1, door_w + 16, 1),
+    )
+    pygame.draw.rect(
+        surface, constants.COLOR_STONE_DARKEST,
+        (door_x - 12, step_y + 2, door_w + 24, 1),
+    )
+    # Klokke i gavl (kald STONE_LIT urskiver med STONE_BRIGHT-ramme).
+    # Sentrert på pediment-toppen rett under apex.
+    clock_cx = x + w // 2
+    clock_cy = y - 1   # litt ned fra apex
+    clock_r = 5
+    pygame.draw.circle(surface, constants.COLOR_STONE_BRIGHT, (clock_cx, clock_cy), clock_r)
+    pygame.draw.circle(surface, constants.COLOR_STONE_DARK, (clock_cx, clock_cy), clock_r - 2)
+    # Klokke-visere (12 og 3)
+    pygame.draw.rect(surface, constants.COLOR_STONE_BRIGHT,
+                     (clock_cx, clock_cy - 2, 1, 2))  # tim-viser opp
+    pygame.draw.rect(surface, constants.COLOR_STONE_BRIGHT,
+                     (clock_cx, clock_cy, 3, 1))      # min-viser høyre
     # Svak kald "spill-over"-glød på trapp — kun ved natt
     if night_lights:
         pygame.draw.rect(
             surface, constants.COLOR_STONE_LIGHT,
-            (door_x - 4, ground_top_y, door_w + 8, 3),
+            (door_x - 4, ground_top_y - 1, door_w + 8, 1),
         )
 
 
